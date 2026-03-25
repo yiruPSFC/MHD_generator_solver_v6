@@ -1,0 +1,6 @@
+__pycache__/
+*.py[cod]
+*.nbc
+*.nbi
+.DS_Store
+_tmp_sweep.jsonl

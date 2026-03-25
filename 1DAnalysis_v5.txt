@@ -1,0 +1,120 @@
+脚本目的: 求解Jeffrey Freidberg的部分电离等离子体MHD方程组, 用来模拟掺碱金属Argon气体的MHD generator/Hall effect thruster能否产生足够接近的高Te/Tp参数空间。
+核心升级(V5架构): 通过将PDE的状态变量从 (n_p, T_p) 替换为 (n_p, T_e), 并利用质量守恒(m_0)和横向电流守恒(J_{x0}), 将原本极耗时的嵌套求根(brentq/fsolve)彻底降维为100%纯显式代数方程。
+
+Variables: 
+State variables: n_p, T_e
+Conserved constants: m_0, J_{x0}
+Derived variables: n_e, v_p, eta, beta, Z, T_p
+
+Original Equations to be solved (Jeffrey's Theory):
+(1) partial_x J_x = 0, where: J_x = beta^2/(beta^2+1+Z) * e n_e v_p
+(2) partial_x n_p v_p = 0
+(3) m_p n_p v_p partial_x v_p = J_y B - partial_x (n_p k T_p)
+(4) 3/2 partial_x (v_p n_p k T_p) + (n_p k T_p) partial_x v_p = 3/2 nu_E ne (k T_e - k T_p)
+    where nu_E = eta * 2 e^2 n_e/m_p
+(5) beta = B/ (e n_e eta)
+(5') beta= e B / (m_e n_p sigma_ep sqrt(2 kT_e/m_e))
+(6) eta= m_e n_p sigma_ep v_te/ (e^2 n_e)
+    where v_te =sqrt(2 kT_e/m_e), and sigma_ep = 3.94257e-21 m^2 (Fixed for Ar)
+(7) n_e^2/(n_s - n_e) = (2 pi m_e k T_e /h^2) ^3/2 exp(- E_I/(k T_e)),
+    where n_s = seed_fraction * n_p, E_I = 4.3407 eV (Potassium/K equivalent for Ar seed)
+(8) T_e/T_p - 1 = 5M^2/9 *beta^2 * (beta^2+(1+Z)^2)/(beta^2 + 1 + Z)^2
+    where M = sqrt(3/5* m_p v_p^2/kT_p)
+(8‘) T_p = T_e - (m_p * v_p^2 / (3 * k_B)) * F(beta, Z)
+    where F(beta, Z) = beta^2 * (beta^2 + (1+Z)^2) / (beta^2 + 1 + Z)^2
+
+Velikhov Instability Criterion (Equation 5.13):
+beta^2 <= 4 * alpha * (2 + 1/delta_T) * (1 + alpha * (1 + 1/delta_T))
+where:
+    delta_T = T_e/T_p - 1
+    alpha = (k * T_e / (2 * E_I)) * (2 - f_I) / (1 - f_I)
+    f_I = n_e / n_s (ionization fraction)
+
+状态方程(衍生量):
+J_y = -beta (1+Z)/(beta^2 + 1 + Z ) * e n_e v_p
+E_x = - beta^2 Z /(beta^2 + 1 + Z ) * eta e n_e v_p 
+E_y = 0
+
+
+================ 核心执行思路 (V5 纯代数架构) ================
+
+Step 1: 建立纯显式局部闭合模块 (local_algebraic_closure.py)
+废弃旧版的 project_Z_solver 和 brentq 求根逻辑。
+输入: n_p, T_e (当前PDE状态), m_0 (质量通量), J_{x0} (入口横向电流)
+输出: v_p, n_e, beta, eta, Z, T_p
+解析映射序列:
+    1. v_p = m_0 / n_p
+    2. 由 n_p, T_e 通过方程(7)直接计算 n_e (使用求根公式的稳定形式)
+    3. 由 n_p, T_e 通过方程(5')直接计算 beta
+    4. 由 n_e, T_e 通过方程(6)直接计算 eta
+    5. 由方程(1)反解 Z:
+       Z = beta^2 * [ (e * n_e * v_p) / J_{x0} - 1 ] - 1
+    6. 由方程(8')反解 T_p
+要求: 核心计算函数必须使用 @numba.njit 装饰器编译为底层机器码。
+
+Step 2: 建立 PDE 导数转换逻辑 (Analytical Jacobian Transformation)
+原方程(3)(4)解出的是 dn_p/dx 和 dT_p/dx。
+为了让 PDE Solver 能够直接推进状态变量 [n_p, T_e], 需要通过全微分链式法则转换:
+    dT_e/dx = (dT_p/dx - (partial T_p / partial n_p) * dn_p/dx) / (partial T_p / partial T_e)
+
+要求: 彻底废弃数值有限差分微扰法，改用**纯解析偏导数 (Analytical Jacobian)** 计算偏导项。这保证了模型在声速奇异点附近的物理保真度与绝对精度，且完美支持底层向量化和 Numba JIT 编译。
+
+解析偏导数推导路线 (需要在代码中直接硬编码为显式代数式):
+已知 T_p = T_e - (m_p * v_p^2 / (3 * k_B)) * F(beta, Z)，其中 v_p = m_0 / n_p
+以及 F(beta, Z) = beta^2 * (beta^2 + (1+Z)^2) / (beta^2 + 1 + Z)^2
+
+1. 计算对 T_e 的偏导 (partial T_p / partial T_e) [此项推导中 n_p 视为常数]:
+   - partial beta / partial T_e = - beta / (2 * T_e)
+   - partial n_e / partial T_e = (根据Saha方程平衡常数 K_s 对 T_e 的导数直接写出代数式)
+   - partial Z / partial T_e = 结合 beta 和 n_e 对 T_e 导数的链式法则代数展开
+   - 最终组装: partial T_p / partial T_e = 1 - (m_p * v_p^2 / (3 * k_B)) * [ (partial F / partial beta) * (partial beta / partial T_e) + (partial F / partial Z) * (partial Z / partial T_e) ]
+
+2. 计算对 n_p 的偏导 (partial T_p / partial n_p) [此项推导中 T_e 视为常数]:
+   - 包含流速对密度的依赖: partial (v_p^2) / partial n_p = - 2 * v_p^2 / n_p
+   - partial beta / partial n_p = - beta / n_p
+   - partial n_e / partial n_p = (根据Saha方程对 n_p 的显式求导)
+   - partial Z / partial n_p = 结合 beta 和 n_e 对 n_p 导数的链式法则代数展开
+   - 最终组装: partial T_p / partial n_p = (2 * m_p * v_p^2) / (3 * k_B * n_p) * F(beta, Z) - (m_p * v_p^2 / (3 * k_B)) * [ (partial F / partial beta) * (partial beta / partial n_p) + (partial F / partial Z) * (partial Z / partial n_p) ]
+
+优势: 所有的 partial 变量均为明确的、不包含任何隐函数或黑盒调用的纯代数多项式。将其全部展开后，这是一个 O(1) 复杂度的极速显式计算过程。
+
+Step 3: 建立主积分器 (pde_solver_v6.py)
+输入: 入口参数 (n_pin, Z_in, T_pin, T_ein)
+    - 首先显式公式算出常数 vp, 然后得出来 m_0 = n_pin * v_pin 和 J_{x0}。
+    - 将初始状态设为 y0 = [n_pin, T_ein] (T_ein 由入口参数获得)。
+核心: 使用 scipy.integrate.solve_ivp 进行前向积分,执行step2的任务.
+    - method 优先选择 'LSODA' (实测最快最稳)。
+    - rtol=1e-6, atol=1e-8
+    - 设置 event 函数: 追踪 Mach 物理奇异点, 当 M 达到 0.99 或 1.01 时触发 terminate=True 截断积分。
+
+Step 4: 建立高吞吐量的集群扫描 Worker (cluster_sweep_worker.py)
+    - 基于拉丁超立方抽样 (scipy.stats.qmc.LatinHypercube) 生成数百万个候选入口点。
+    - 利用极速的 V6 solver 对高价值区域进行快速前向积分。
+    - 提交batch到engaging cluster并且进行分析.
+
+装置几何参数:
+L=0.039m
+
+物理常数:
+B=0.02 Tesla
+E_I = 4.3407 * 1.602176634e-19 (J) # Ar气掺杂K的电离能
+e_charge = 1.602176634e-19
+k_B = 1.380649e-23
+h_P = 6.62607015e-34
+m_e = 9.10938356e-31
+m_p = m_Ar = 39.948 * 1.66053906660e-27
+sigma_ep = 3.94257e-21 m^2 (采用jeffrey论文校对过的数据)
+
+注意事项:
+1. 彻底废弃任何基于 brentq / fsolve 的求根调用。
+2. 确保在 .venv_jit 环境下运行 (numpy <= 2.0.0 以兼容 numba 0.64.0)。
+3. 在处理除法 (例如 J_{x0} 作为分母，或计算 beta 时) 加入 np.maximum(..., 1e-300) 防止除零崩溃。
+4. 代码必须保持极高的向量化或 JIT 友好性，避免在内层循环创建大字典或复杂对象。
+5. 重点参考文件是:../mhd_generator_solver_v5下面的:
+    local_solver_v4.py; local_solver_v4_JIT.py;project_Z_solver.py; pde_solver_v5_JIT.py;
+    以及: ../mhd_generator_solver_v5/feasibility_search下面的:
+        search_high_te_ratio.py
+        physical_stageA_filter.py
+        engaging里面的各个scripts
+
+希望能够建立一个完整的workflow.
