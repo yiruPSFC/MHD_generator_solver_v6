@@ -3,4 +3,5 @@ __pycache__/
 *.nbc
 *.nbi
 .DS_Store
-_tmp_sweep.jsonl
+_tmp_sweep*.jsonl
+.venv_jit/

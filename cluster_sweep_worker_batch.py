@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from dataclasses import asdict
 from pathlib import Path
-from typing import List
+from typing import Dict, List
 
 import numpy as np
 from scipy.stats.qmc import LatinHypercube
@@ -19,6 +19,67 @@ from cluster_sweep_worker import (
     _velikhov_margin,
 )
 from pde_solver_v6_batch import ForwardPDESolverV6Batch, event_name_from_code
+
+
+def _apply_inlet_prefilter(
+    solver: ForwardPDESolverV6Batch,
+    chunk: List[Candidate],
+    dte_rel_min: float | None,
+    mach_inlet_min: float | None,
+    check_inlet_velikhov: bool,
+) -> tuple[List[Candidate], Dict[str, int]]:
+    stats: Dict[str, int] = {
+        "total": len(chunk),
+        "kept": 0,
+        "rejected": 0,
+        "rejected_inlet_error": 0,
+        "rejected_invalid_state": 0,
+        "rejected_low_mach_inlet": 0,
+        "rejected_inlet_unstable": 0,
+        "rejected_low_dte_rel_grad": 0,
+    }
+    if not chunk:
+        return [], stats
+
+    metrics = solver.evaluate_inlet_batch(
+        n_p_in=np.array([c.n_p_in for c in chunk], dtype=float),
+        Z_in=np.array([c.Z_in for c in chunk], dtype=float),
+        T_p_in=np.array([c.T_p_in for c in chunk], dtype=float),
+        T_e_in=np.array([c.T_e_in for c in chunk], dtype=float),
+        seed_fraction=np.array([c.seed_fraction for c in chunk], dtype=float),
+        parallel=True,
+    )
+
+    kept: List[Candidate] = []
+    for i, cand in enumerate(chunk):
+        if not bool(metrics.success[i]):
+            code = int(metrics.event_code[i])
+            if code == 4:
+                stats["rejected_inlet_error"] += 1
+            else:
+                stats["rejected_invalid_state"] += 1
+            stats["rejected"] += 1
+            continue
+
+        if mach_inlet_min is not None and float(metrics.mach[i]) < mach_inlet_min:
+            stats["rejected_low_mach_inlet"] += 1
+            stats["rejected"] += 1
+            continue
+
+        if check_inlet_velikhov and float(metrics.inlet_velikhov_margin[i]) < 0.0:
+            stats["rejected_inlet_unstable"] += 1
+            stats["rejected"] += 1
+            continue
+
+        if dte_rel_min is not None and float(metrics.dTe_rel_grad[i]) < dte_rel_min:
+            stats["rejected_low_dte_rel_grad"] += 1
+            stats["rejected"] += 1
+            continue
+
+        kept.append(cand)
+        stats["kept"] += 1
+
+    return kept, stats
 
 
 def _evaluate_chunk(
@@ -97,6 +158,28 @@ def main() -> int:
     p.description = "V6 cluster sweep worker (batch fixed-step)"
     p.add_argument("--batch-size", type=int, default=64, help="number of candidates per batch solve")
     p.add_argument("--dx", type=float, default=2e-5, help="fixed spatial step for batch RK4")
+    p.add_argument(
+        "--prefilter-dte-rel-min",
+        type=float,
+        default=None,
+        help="minimum inlet (dTe/dx)/Te_in [1/m] for batch prefilter; default is 0.01/L unless disabled",
+    )
+    p.add_argument(
+        "--no-prefilter-dte-rel",
+        action="store_true",
+        help="disable the inlet normalized-Te-growth prefilter",
+    )
+    p.add_argument(
+        "--prefilter-mach-inlet-min",
+        type=float,
+        default=None,
+        help="optional minimum inlet Mach for cheap prefilter",
+    )
+    p.add_argument(
+        "--prefilter-check-inlet-velikhov",
+        action="store_true",
+        help="also reject candidates with negative inlet Velikhov margin in the cheap prefilter",
+    )
     args = p.parse_args()
 
     bounds = {
@@ -119,6 +202,24 @@ def main() -> int:
     solver = ForwardPDESolverV6Batch(B=float(args.B), length=float(args.L))
     batch_size = max(1, int(args.batch_size))
     rows: List[EvalSummary] = []
+    dte_rel_min = None if args.no_prefilter_dte_rel else (
+        float(args.prefilter_dte_rel_min) if args.prefilter_dte_rel_min is not None else (0.01 / float(args.L))
+    )
+    prefilter_stats: Dict[str, int] = {
+        "total": 0,
+        "kept": 0,
+        "rejected": 0,
+        "rejected_inlet_error": 0,
+        "rejected_invalid_state": 0,
+        "rejected_low_mach_inlet": 0,
+        "rejected_inlet_unstable": 0,
+        "rejected_low_dte_rel_grad": 0,
+    }
+    use_prefilter = (
+        dte_rel_min is not None
+        or args.prefilter_mach_inlet_min is not None
+        or bool(args.prefilter_check_inlet_velikhov)
+    )
 
     for offset in range(0, U.shape[0], batch_size):
         block = U[offset : offset + batch_size]
@@ -126,6 +227,25 @@ def main() -> int:
             _candidate_from_unit(block[i], bounds=bounds, T_p_in=float(args.tp_in), B=float(args.B))
             for i in range(block.shape[0])
         ]
+        if use_prefilter:
+            chunk, chunk_stats = _apply_inlet_prefilter(
+                solver=solver,
+                chunk=chunk,
+                dte_rel_min=dte_rel_min,
+                mach_inlet_min=(
+                    None if args.prefilter_mach_inlet_min is None else float(args.prefilter_mach_inlet_min)
+                ),
+                check_inlet_velikhov=bool(args.prefilter_check_inlet_velikhov),
+            )
+            for key, value in chunk_stats.items():
+                prefilter_stats[key] += int(value)
+        else:
+            prefilter_stats["total"] += len(chunk)
+            prefilter_stats["kept"] += len(chunk)
+
+        if not chunk:
+            continue
+
         rows.extend(
             _evaluate_chunk(
                 solver=solver,
@@ -160,6 +280,13 @@ def main() -> int:
                 "output": str(out_path),
                 "batch_size": batch_size,
                 "dx": float(args.dx),
+                "prefilter_enabled": bool(use_prefilter),
+                "prefilter_dte_rel_min": (None if dte_rel_min is None else float(dte_rel_min)),
+                "prefilter_mach_inlet_min": (
+                    None if args.prefilter_mach_inlet_min is None else float(args.prefilter_mach_inlet_min)
+                ),
+                "prefilter_check_inlet_velikhov": bool(args.prefilter_check_inlet_velikhov),
+                "prefilter_stats": {k: int(v) for k, v in prefilter_stats.items()},
             },
             ensure_ascii=False,
         )

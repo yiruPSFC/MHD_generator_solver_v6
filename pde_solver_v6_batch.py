@@ -20,6 +20,7 @@ except Exception:  # pragma: no cover
 from local_algebraic_closure import (
     B_FIELD,
     E_CHARGE,
+    E_I,
     K_B,
     M_P,
     SIGMA_EP,
@@ -90,6 +91,31 @@ class BatchTerminalResultV6:
         return [event_name_from_code(int(code)) for code in self.event_code]
 
 
+@dataclass
+class BatchInletMetricsV6:
+    success: np.ndarray
+    event_code: np.ndarray
+    dn_dx: np.ndarray
+    dTe_dx: np.ndarray
+    dTe_rel_grad: np.ndarray
+    n_p: np.ndarray
+    T_e: np.ndarray
+    T_p: np.ndarray
+    v_p: np.ndarray
+    n_e: np.ndarray
+    beta: np.ndarray
+    eta: np.ndarray
+    Z: np.ndarray
+    J_x: np.ndarray
+    J_y: np.ndarray
+    E_x: np.ndarray
+    mach: np.ndarray
+    inlet_velikhov_margin: np.ndarray
+
+    def event_names(self) -> List[Optional[str]]:
+        return [event_name_from_code(int(code)) for code in self.event_code]
+
+
 def event_name_from_code(code: int) -> Optional[str]:
     if code == EVENT_MACH_LOW:
         return "mach_0p99"
@@ -131,6 +157,62 @@ def _inlet_velocity_from_eq8_prime(T_e_in: float, T_p_in: float, n_p_in: float, 
     if vp2 <= 0.0 or (not math.isfinite(vp2)):
         return 0.0, EVENT_INLET_ERROR
     return math.sqrt(vp2), EVENT_NONE
+
+
+@njit(cache=True)
+def _prepare_inlet_constants(
+    n_p_in: float,
+    Z_in: float,
+    T_p_in: float,
+    T_e_in: float,
+    seed_fraction: float,
+    B: float,
+):
+    if seed_fraction <= 0.0 or seed_fraction > 1.0:
+        return EVENT_INLET_ERROR, 0.0, 0.0
+
+    v_in, inlet_status = _inlet_velocity_from_eq8_prime(T_e_in, T_p_in, n_p_in, Z_in, B)
+    if inlet_status != EVENT_NONE:
+        return inlet_status, 0.0, 0.0
+
+    n_e_in = ne_from_np_te(n_p_in, T_e_in, seed_fraction)
+    beta_in = beta_from_np_te(n_p_in, T_e_in, B=B, sigma_ep=SIGMA_EP)
+    b2 = beta_in * beta_in
+    den = b2 + 1.0 + Z_in
+    if abs(den) < _EPS:
+        den = _EPS if den >= 0.0 else -_EPS
+    Jx0 = b2 / den * E_CHARGE * n_e_in * v_in
+    m0 = n_p_in * v_in
+    return EVENT_NONE, m0, Jx0
+
+
+@njit(cache=True)
+def _velikhov_margin_one(
+    beta: float,
+    T_e: float,
+    T_p: float,
+    n_e: float,
+    n_p: float,
+    seed_fraction: float,
+):
+    n_s = seed_fraction * n_p
+    if n_s <= 0.0 or T_p <= 0.0:
+        return -math.inf
+
+    fI = n_e / _safe_pos(n_s)
+    if fI < 1e-12:
+        fI = 1e-12
+    if fI > 1.0 - 1e-12:
+        fI = 1.0 - 1e-12
+
+    delta = T_e / _safe_pos(T_p) - 1.0
+    if delta < 1e-12:
+        delta = 1e-12
+
+    alpha = (K_B * T_e / (2.0 * E_I)) * (2.0 - fI) / _safe_pos(1.0 - fI)
+    rhs = 4.0 * alpha * (2.0 + 1.0 / delta) * (1.0 + alpha * (1.0 + 1.0 / delta))
+    lhs = beta * beta
+    return rhs - lhs
 
 
 @njit(cache=True)
@@ -280,28 +362,14 @@ def _solve_one_final(
     E_x_final = np.nan
     mach_final = np.nan
 
-    if seed_fraction <= 0.0 or seed_fraction > 1.0:
-        return (
-            x_end,
-            valid_points,
-            success,
-            reached_end,
-            event_code,
-            n_p_final,
-            T_e_final,
-            T_p_final,
-            v_p_final,
-            n_e_final,
-            beta_final,
-            eta_final,
-            Z_final,
-            J_x_final,
-            J_y_final,
-            E_x_final,
-            mach_final,
-        )
-
-    v_in, inlet_status = _inlet_velocity_from_eq8_prime(T_e_in, T_p_in, n_p_in, Z_in, B)
+    inlet_status, m0, Jx0 = _prepare_inlet_constants(
+        n_p_in,
+        Z_in,
+        T_p_in,
+        T_e_in,
+        seed_fraction,
+        B,
+    )
     if inlet_status != EVENT_NONE:
         return (
             x_end,
@@ -322,15 +390,6 @@ def _solve_one_final(
             E_x_final,
             mach_final,
         )
-
-    n_e_in = ne_from_np_te(n_p_in, T_e_in, seed_fraction)
-    beta_in = beta_from_np_te(n_p_in, T_e_in, B=B, sigma_ep=SIGMA_EP)
-    b2 = beta_in * beta_in
-    den = b2 + 1.0 + Z_in
-    if abs(den) < _EPS:
-        den = _EPS if den >= 0.0 else -_EPS
-    Jx0 = b2 / den * E_CHARGE * n_e_in * v_in
-    m0 = n_p_in * v_in
 
     n_cur = n_p_in
     te_cur = T_e_in
@@ -614,21 +673,16 @@ def _solve_batch_profiles_kernel(
     mach = np.full((n_batch, n_points), np.nan, dtype=np.float64)
 
     for i in prange(n_batch):
-        if seed_fraction[i] <= 0.0 or seed_fraction[i] > 1.0:
-            continue
-
-        v_in, inlet_status = _inlet_velocity_from_eq8_prime(T_e_in[i], T_p_in[i], n_p_in[i], Z_in[i], B)
+        inlet_status, m0, Jx0 = _prepare_inlet_constants(
+            n_p_in[i],
+            Z_in[i],
+            T_p_in[i],
+            T_e_in[i],
+            seed_fraction[i],
+            B,
+        )
         if inlet_status != EVENT_NONE:
             continue
-
-        n_e_in_i = ne_from_np_te(n_p_in[i], T_e_in[i], seed_fraction[i])
-        beta_in_i = beta_from_np_te(n_p_in[i], T_e_in[i], B=B, sigma_ep=SIGMA_EP)
-        b2 = beta_in_i * beta_in_i
-        den = b2 + 1.0 + Z_in[i]
-        if abs(den) < _EPS:
-            den = _EPS if den >= 0.0 else -_EPS
-        Jx0 = b2 / den * E_CHARGE * n_e_in_i * v_in
-        m0 = n_p_in[i] * v_in
 
         n_cur = n_p_in[i]
         te_cur = T_e_in[i]
@@ -707,6 +761,196 @@ def _solve_batch_profiles_kernel(
             reached_end[i] = True
 
     return valid_points, success, reached_end, event_code, n_p, T_e, T_p, v_p, n_e, beta, eta, Z, J_x, J_y, E_x, mach
+
+
+@njit(cache=True, parallel=True)
+def _evaluate_batch_inlet_metrics_kernel(
+    n_p_in: np.ndarray,
+    Z_in: np.ndarray,
+    T_p_in: np.ndarray,
+    T_e_in: np.ndarray,
+    seed_fraction: np.ndarray,
+    B: float,
+):
+    n_batch = n_p_in.shape[0]
+
+    success = np.zeros(n_batch, dtype=np.bool_)
+    event_code = np.full(n_batch, EVENT_INLET_ERROR, dtype=np.int64)
+    dn_dx = np.full(n_batch, np.nan, dtype=np.float64)
+    dTe_dx = np.full(n_batch, np.nan, dtype=np.float64)
+    dTe_rel_grad = np.full(n_batch, np.nan, dtype=np.float64)
+    n_p = np.full(n_batch, np.nan, dtype=np.float64)
+    T_e = np.full(n_batch, np.nan, dtype=np.float64)
+    T_p = np.full(n_batch, np.nan, dtype=np.float64)
+    v_p = np.full(n_batch, np.nan, dtype=np.float64)
+    n_e = np.full(n_batch, np.nan, dtype=np.float64)
+    beta = np.full(n_batch, np.nan, dtype=np.float64)
+    eta = np.full(n_batch, np.nan, dtype=np.float64)
+    Z = np.full(n_batch, np.nan, dtype=np.float64)
+    J_x = np.full(n_batch, np.nan, dtype=np.float64)
+    J_y = np.full(n_batch, np.nan, dtype=np.float64)
+    E_x = np.full(n_batch, np.nan, dtype=np.float64)
+    mach = np.full(n_batch, np.nan, dtype=np.float64)
+    inlet_velikhov_margin = np.full(n_batch, np.nan, dtype=np.float64)
+
+    for i in prange(n_batch):
+        inlet_status, m0, Jx0 = _prepare_inlet_constants(
+            n_p_in[i],
+            Z_in[i],
+            T_p_in[i],
+            T_e_in[i],
+            seed_fraction[i],
+            B,
+        )
+        if inlet_status != EVENT_NONE:
+            event_code[i] = inlet_status
+            continue
+
+        state = _evaluate_state(n_p_in[i], T_e_in[i], m0, Jx0, seed_fraction[i], B, SIGMA_EP)
+        event_code[i] = state[12]
+        if state[12] != EVENT_NONE:
+            continue
+
+        success[i] = True
+        dn_dx[i] = state[0]
+        dTe_dx[i] = state[1]
+        dTe_rel_grad[i] = state[1] / _safe_pos(T_e_in[i], _TMIN)
+        n_p[i] = n_p_in[i]
+        T_e[i] = T_e_in[i]
+        T_p[i] = state[2]
+        v_p[i] = state[3]
+        n_e[i] = state[4]
+        beta[i] = state[5]
+        eta[i] = state[6]
+        Z[i] = state[7]
+        J_x[i] = state[8]
+        J_y[i] = state[9]
+        E_x[i] = state[10]
+        mach[i] = state[11]
+        inlet_velikhov_margin[i] = _velikhov_margin_one(
+            state[5],
+            T_e_in[i],
+            state[2],
+            state[4],
+            n_p_in[i],
+            seed_fraction[i],
+        )
+
+    return (
+        success,
+        event_code,
+        dn_dx,
+        dTe_dx,
+        dTe_rel_grad,
+        n_p,
+        T_e,
+        T_p,
+        v_p,
+        n_e,
+        beta,
+        eta,
+        Z,
+        J_x,
+        J_y,
+        E_x,
+        mach,
+        inlet_velikhov_margin,
+    )
+
+
+@njit(cache=True)
+def _evaluate_serial_inlet_metrics_kernel(
+    n_p_in: np.ndarray,
+    Z_in: np.ndarray,
+    T_p_in: np.ndarray,
+    T_e_in: np.ndarray,
+    seed_fraction: np.ndarray,
+    B: float,
+):
+    n_batch = n_p_in.shape[0]
+
+    success = np.zeros(n_batch, dtype=np.bool_)
+    event_code = np.full(n_batch, EVENT_INLET_ERROR, dtype=np.int64)
+    dn_dx = np.full(n_batch, np.nan, dtype=np.float64)
+    dTe_dx = np.full(n_batch, np.nan, dtype=np.float64)
+    dTe_rel_grad = np.full(n_batch, np.nan, dtype=np.float64)
+    n_p = np.full(n_batch, np.nan, dtype=np.float64)
+    T_e = np.full(n_batch, np.nan, dtype=np.float64)
+    T_p = np.full(n_batch, np.nan, dtype=np.float64)
+    v_p = np.full(n_batch, np.nan, dtype=np.float64)
+    n_e = np.full(n_batch, np.nan, dtype=np.float64)
+    beta = np.full(n_batch, np.nan, dtype=np.float64)
+    eta = np.full(n_batch, np.nan, dtype=np.float64)
+    Z = np.full(n_batch, np.nan, dtype=np.float64)
+    J_x = np.full(n_batch, np.nan, dtype=np.float64)
+    J_y = np.full(n_batch, np.nan, dtype=np.float64)
+    E_x = np.full(n_batch, np.nan, dtype=np.float64)
+    mach = np.full(n_batch, np.nan, dtype=np.float64)
+    inlet_velikhov_margin = np.full(n_batch, np.nan, dtype=np.float64)
+
+    for i in range(n_batch):
+        inlet_status, m0, Jx0 = _prepare_inlet_constants(
+            n_p_in[i],
+            Z_in[i],
+            T_p_in[i],
+            T_e_in[i],
+            seed_fraction[i],
+            B,
+        )
+        if inlet_status != EVENT_NONE:
+            event_code[i] = inlet_status
+            continue
+
+        state = _evaluate_state(n_p_in[i], T_e_in[i], m0, Jx0, seed_fraction[i], B, SIGMA_EP)
+        event_code[i] = state[12]
+        if state[12] != EVENT_NONE:
+            continue
+
+        success[i] = True
+        dn_dx[i] = state[0]
+        dTe_dx[i] = state[1]
+        dTe_rel_grad[i] = state[1] / _safe_pos(T_e_in[i], _TMIN)
+        n_p[i] = n_p_in[i]
+        T_e[i] = T_e_in[i]
+        T_p[i] = state[2]
+        v_p[i] = state[3]
+        n_e[i] = state[4]
+        beta[i] = state[5]
+        eta[i] = state[6]
+        Z[i] = state[7]
+        J_x[i] = state[8]
+        J_y[i] = state[9]
+        E_x[i] = state[10]
+        mach[i] = state[11]
+        inlet_velikhov_margin[i] = _velikhov_margin_one(
+            state[5],
+            T_e_in[i],
+            state[2],
+            state[4],
+            n_p_in[i],
+            seed_fraction[i],
+        )
+
+    return (
+        success,
+        event_code,
+        dn_dx,
+        dTe_dx,
+        dTe_rel_grad,
+        n_p,
+        T_e,
+        T_p,
+        v_p,
+        n_e,
+        beta,
+        eta,
+        Z,
+        J_x,
+        J_y,
+        E_x,
+        mach,
+        inlet_velikhov_margin,
+    )
 
 
 def _as_1d_array(name: str, value) -> np.ndarray:
@@ -858,4 +1102,55 @@ class ForwardPDESolverV6Batch:
             E_x=out[15],
             mach=out[16],
             step_size=dx_eff,
+        )
+
+    def evaluate_inlet_batch(
+        self,
+        n_p_in,
+        Z_in,
+        T_p_in,
+        T_e_in,
+        seed_fraction,
+        parallel: bool = True,
+    ) -> BatchInletMetricsV6:
+        arrays = _broadcast_batch_inputs(n_p_in, Z_in, T_p_in, T_e_in, seed_fraction)
+
+        if parallel:
+            out = _evaluate_batch_inlet_metrics_kernel(
+                arrays["n_p_in"],
+                arrays["Z_in"],
+                arrays["T_p_in"],
+                arrays["T_e_in"],
+                arrays["seed_fraction"],
+                self.B,
+            )
+        else:
+            out = _evaluate_serial_inlet_metrics_kernel(
+                arrays["n_p_in"],
+                arrays["Z_in"],
+                arrays["T_p_in"],
+                arrays["T_e_in"],
+                arrays["seed_fraction"],
+                self.B,
+            )
+
+        return BatchInletMetricsV6(
+            success=out[0],
+            event_code=out[1],
+            dn_dx=out[2],
+            dTe_dx=out[3],
+            dTe_rel_grad=out[4],
+            n_p=out[5],
+            T_e=out[6],
+            T_p=out[7],
+            v_p=out[8],
+            n_e=out[9],
+            beta=out[10],
+            eta=out[11],
+            Z=out[12],
+            J_x=out[13],
+            J_y=out[14],
+            E_x=out[15],
+            mach=out[16],
+            inlet_velikhov_margin=out[17],
         )
