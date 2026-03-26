@@ -2,6 +2,12 @@
 
 This note records how the V6 environment should be set up on the cluster and what was inherited from V5.
 
+Important repo fact:
+
+- `./.venv_jit` is intentionally local-only and is ignored by git.
+- After `git clone`, it is normal for `./.venv_jit` to be missing.
+- If Codex or a shell session says the environment is missing, the correct action is to create `./.venv_jit` for this repo, not to mutate some unrelated global env by default.
+
 ## What V5 was using
 
 V5 had two Python environment patterns:
@@ -32,16 +38,16 @@ For V6, use a repo-local virtual environment:
   - keeps numba compatibility pinned for this repo
   - is easy to point Slurm jobs at with `PYTHON_BIN=./.venv_jit/bin/python`
 
-Verified working versions in this repo:
+Verified working versions in this repo at the time of the latest smoke test:
 
-- Python `3.10.8`
+- Python `3.12.7`
 - `numpy==2.0.2`
 - `scipy==1.15.3`
 - `numba==0.61.2`
 
 ## Local setup
 
-From repo root:
+From repo root after cloning:
 
 ```bash
 cd /home/yiruxiao/MHD_generator_solver/MHD_generator_solver_v6
@@ -56,6 +62,10 @@ Quick version check:
 ./.venv_jit/bin/python -c "import numpy, scipy, numba; print(numpy.__version__, scipy.__version__, numba.__version__)"
 ```
 
+Expected output:
+
+- `2.0.2 1.15.3 0.61.2`
+
 ## Local verification
 
 Smoke test used for this setup:
@@ -67,6 +77,7 @@ Smoke test used for this setup:
 Expected result:
 
 - `SMOKE TEST PASSED`
+- The run may also print an OpenMP info line from the runtime before the smoke test output. That line is not a failure.
 
 ## How to run on cluster next time
 
@@ -121,6 +132,8 @@ So it is not the recommended V6 JIT environment unless you deliberately add numb
 
 - `ModuleNotFoundError: No module named 'numpy'`
   - You are using the wrong interpreter. Use `./.venv_jit/bin/python`.
+- `./.venv_jit/bin/python: No such file or directory`
+  - This is expected immediately after cloning because `.venv_jit` is not committed. Create it with the setup commands above.
 - `Python interpreter not found: ./.venv/bin/python`
   - Old V5 Slurm default. Override with `PYTHON_BIN=./.venv_jit/bin/python`.
 - Numba import/version issues
