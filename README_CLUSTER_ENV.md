@@ -95,21 +95,99 @@ For direct script runs:
 
 ```bash
 PYTHON_BIN=./.venv_jit/bin/python
-$PYTHON_BIN benchmark_batch_vs_lsoda.py --mode both
+$PYTHON_BIN non_batch/cluster_sweep_worker.py --n-total 1000 --top-k 50 --out sweep_results_scalar.jsonl
 $PYTHON_BIN cluster_sweep_worker_batch.py --n-total 1000 --top-k 50 --out sweep_results.jsonl
 ```
 
-If V6 later gets Slurm scripts, keep the same pattern as V5 and export:
+Current layout note:
+
+- non-batch pipeline lives under `non_batch/`
+
+For Slurm jobs on this cluster, avoid `sbatch --export=VAR1=...` style submissions. We observed `user env retrieval failed -> held` around Slurm's get-user-env path, and explicit `--export=...` submissions are the pattern that repeatedly correlated with those failures.
+
+Preferred V6 submission pattern:
 
 ```bash
-PYTHON_BIN=./.venv_jit/bin/python
+./submit_v6_batch_array.sh
 ```
 
-Example Slurm invocation pattern:
+The wrapper now exports run variables in the submit shell, then calls `sbatch` without any `--export` flag (default environment propagation).
+
+Default scheduler mode is now pull-based worker pool:
+
+- `PULL_POOL_MODE=1`
+- `SHARD_COUNT=100` (physics shards)
+- `WORKER_COUNT=115` (redundant workers to absorb node loss)
+- `ARRAY_CONCURRENCY=96`
+- task pool root: `${OUT_DIR}/todo|processing|done` (or override via `TASK_POOL_ROOT`)
+
+Workers atomically claim `todo/shard_*.task` using rename, write `sweep_shard_<i>.jsonl`, mark `done/`, and idle workers can requeue stale `processing/` tasks after `TASK_STALE_TIMEOUT_S` to recover from node kills.
+
+That `--no-requeue` default is intentional on this cluster. The observed `user env retrieval failed requeued held` failures only appeared after Slurm requeued array tasks (`Restarts=1`). Disabling requeue avoids that failure mode. The tradeoff is that if a shard is interrupted by the scheduler or node issues, it will stay failed and should be resubmitted explicitly instead of being silently retried.
+
+If you want to override run parameters, set them explicitly:
 
 ```bash
-sbatch --export=ALL,PYTHON_BIN=./.venv_jit/bin/python your_job.sbatch
+N_TOTAL=100000000 \
+OUT_DIR=results/run_1e8_example \
+TIME_LIMIT=04:00:00 \
+./submit_v6_batch_array.sh
 ```
+
+To tune pull-pool redundancy:
+
+```bash
+SHARD_COUNT=100 \
+WORKER_COUNT=130 \
+ARRAY_CONCURRENCY=96 \
+TASK_STALE_TIMEOUT_S=1200 \
+./submit_v6_batch_array.sh
+```
+
+If you identify flaky nodes, exclude them at submit time:
+
+```bash
+EXCLUDE_NODES=node1618,node2705 ./submit_v6_batch_array.sh
+```
+
+If you need to call `sbatch` directly, set variables in your shell first, then submit without `--export`:
+
+```bash
+export PYTHON_BIN=./.venv_jit/bin/python
+export N_TOTAL=100000000
+export TOP_K=100
+export OUT_DIR=results/run_1e8_example
+export BATCH_SIZE=256
+export SLURM_EXPORT_ENV=ALL
+
+sbatch -p mit_normal --array=0-99%96 \
+  --job-name=mhd_v6_batch \
+  --time=04:00:00 \
+  --cpus-per-task=1 \
+  --mem=1G \
+  --no-requeue \
+  submit_v6_batch_array.sbatch
+```
+
+Backup sweeper (non-batch worker) is available if you need a fallback lane:
+
+```bash
+./non_batch/submit_v6_backup_array.sh
+```
+
+To resume an existing run and only fill missing shards, reuse the same `OUT_DIR` and `SHARD_COUNT`:
+
+```bash
+OUT_DIR=results/run_xxx SHARD_COUNT=100 ./submit_v6_batch_array.sh
+```
+
+## Batch tuning notes
+
+- Current Engaging default for `submit_v6_batch_array.sbatch`:
+  - `--cpus-per-task=1`
+  - `BATCH_SIZE=256`
+- Local MacBook tuning note:
+  - use `4` CPU threads and `batch_size=256` for local runs/benchmarks
 
 ## If you want to reuse the old global env
 

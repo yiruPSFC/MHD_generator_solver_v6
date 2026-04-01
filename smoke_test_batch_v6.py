@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from pde_solver_v6 import ForwardPDESolverV6
+from non_batch.pde_solver_v6 import ForwardPDESolverV6
 from pde_solver_v6_batch import ForwardPDESolverV6Batch, event_name_from_code
 
 

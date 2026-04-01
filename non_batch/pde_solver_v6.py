@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 from __future__ import annotations
 
 """
@@ -12,10 +13,16 @@ Core changes vs V5:
 import argparse
 import math
 from dataclasses import dataclass
+from pathlib import Path
+import sys
 from typing import Dict, Optional
 
 import numpy as np
 from scipy.integrate import solve_ivp
+
+REPO_DIR = Path(__file__).resolve().parents[1]
+if str(REPO_DIR) not in sys.path:
+    sys.path.insert(0, str(REPO_DIR))
 
 from local_algebraic_closure import (
     B_FIELD,

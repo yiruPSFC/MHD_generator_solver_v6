@@ -78,7 +78,7 @@ Step 2: 建立 PDE 导数转换逻辑 (Analytical Jacobian Transformation)
 
 优势: 所有的 partial 变量均为明确的、不包含任何隐函数或黑盒调用的纯代数多项式。将其全部展开后，这是一个 O(1) 复杂度的极速显式计算过程。
 
-Step 3: 建立主积分器 (pde_solver_v6.py)
+Step 3: 建立主积分器 (non_batch/pde_solver_v6.py)
 输入: 入口参数 (n_pin, Z_in, T_pin, T_ein)
     - 首先显式公式算出常数 vp, 然后得出来 m_0 = n_pin * v_pin 和 J_{x0}。
     - 将初始状态设为 y0 = [n_pin, T_ein] (T_ein 由入口参数获得)。
@@ -87,7 +87,7 @@ Step 3: 建立主积分器 (pde_solver_v6.py)
     - rtol=1e-6, atol=1e-8
     - 设置 event 函数: 追踪 Mach 物理奇异点, 当 M 达到 0.99 或 1.01 时触发 terminate=True 截断积分。
 
-Step 4: 建立高吞吐量的集群扫描 Worker (cluster_sweep_worker.py)
+Step 4: 建立高吞吐量的集群扫描 Worker (non_batch/cluster_sweep_worker.py)
     - 基于拉丁超立方抽样 (scipy.stats.qmc.LatinHypercube) 生成数百万个候选入口点。
     - 利用极速的 V6 solver 对高价值区域进行快速前向积分。
     - 提交batch到engaging cluster并且进行分析.
