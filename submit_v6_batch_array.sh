@@ -43,7 +43,10 @@ TASK_POLL_INTERVAL_S="${TASK_POLL_INTERVAL_S:-1.0}"
 TASK_STALE_TIMEOUT_S="${TASK_STALE_TIMEOUT_S:-900}"
 TASK_HEARTBEAT_INTERVAL_S="${TASK_HEARTBEAT_INTERVAL_S:-15}"
 TASK_MAX_REQUEUE_PER_SCAN="${TASK_MAX_REQUEUE_PER_SCAN:-4}"
+TASK_MAX_ATTEMPTS="${TASK_MAX_ATTEMPTS:-3}"
 TASK_FAIL_FAST="${TASK_FAIL_FAST:-0}"
+ALLOW_TASK_POOL_RESET="${ALLOW_TASK_POOL_RESET:-0}"
+FORCE_RESET_TASK_POOL="${FORCE_RESET_TASK_POOL:-0}"
 
 NO_VELIKHOV_CHECK="${NO_VELIKHOV_CHECK:-0}"
 NO_PREFILTER_DTE_REL="${NO_PREFILTER_DTE_REL:-0}"
@@ -70,6 +73,7 @@ require_positive_int "SHARD_COUNT" "$SHARD_COUNT"
 if [ "$PULL_POOL_MODE" = "1" ]; then
     require_positive_int "WORKER_COUNT" "$WORKER_COUNT"
     require_positive_int "ARRAY_CONCURRENCY" "$ARRAY_CONCURRENCY"
+    require_positive_int "TASK_MAX_ATTEMPTS" "$TASK_MAX_ATTEMPTS"
     if [ -z "$ARRAY_SPEC" ]; then
         ARRAY_SPEC="0-$((WORKER_COUNT - 1))%${ARRAY_CONCURRENCY}"
     fi
@@ -83,12 +87,26 @@ if [ "$PULL_POOL_MODE" = "1" ]; then
     TODO_DIR="${TASK_POOL_ROOT%/}/todo"
     PROCESSING_DIR="${TASK_POOL_ROOT%/}/processing"
     DONE_DIR="${TASK_POOL_ROOT%/}/done"
-    mkdir -p "$OUT_DIR" "$TODO_DIR" "$PROCESSING_DIR" "$DONE_DIR"
+    FAILED_DIR="${TASK_POOL_ROOT%/}/failed"
+    ATTEMPTS_DIR="${TASK_POOL_ROOT%/}/attempts"
+    mkdir -p "$OUT_DIR" "$TODO_DIR" "$PROCESSING_DIR" "$DONE_DIR" "$FAILED_DIR" "$ATTEMPTS_DIR"
 
     if [ "$RESET_TASK_POOL" = "1" ]; then
+        if [ "$ALLOW_TASK_POOL_RESET" != "1" ]; then
+            echo "RESET_TASK_POOL=1 is destructive. Set ALLOW_TASK_POOL_RESET=1 to confirm." >&2
+            exit 1
+        fi
+        processing_live_n=$(find "$PROCESSING_DIR" -maxdepth 1 -type f -name 'shard_*.task' | wc -l | tr -d ' ')
+        if [ "$processing_live_n" -gt 0 ] && [ "$FORCE_RESET_TASK_POOL" != "1" ]; then
+            echo "Detected $processing_live_n processing tasks. Refusing reset while work may be active." >&2
+            echo "If you are sure this run is dead, set FORCE_RESET_TASK_POOL=1." >&2
+            exit 1
+        fi
         rm -f "$TODO_DIR"/shard_*.task
         rm -f "$PROCESSING_DIR"/shard_*.task
         rm -f "$DONE_DIR"/shard_*.task
+        rm -f "$FAILED_DIR"/shard_*.task
+        rm -f "$ATTEMPTS_DIR"/shard_*.attempt
     fi
 
     if [ "$INIT_TASK_POOL" = "1" ]; then
@@ -102,10 +120,14 @@ if [ "$PULL_POOL_MODE" = "1" ]; then
                 : >"$done_task"
                 rm -f "$todo_task"
                 rm -f "$PROCESSING_DIR"/"shard_${i}"*.task
+                rm -f "$FAILED_DIR"/"shard_${i}.task"
+                rm -f "$ATTEMPTS_DIR"/"shard_${i}.attempt"
                 continue
             fi
 
             rm -f "$done_task"
+            rm -f "$FAILED_DIR"/"shard_${i}.task"
+            rm -f "$ATTEMPTS_DIR"/"shard_${i}.attempt"
             if [ -f "$todo_task" ]; then
                 continue
             fi
@@ -119,7 +141,8 @@ if [ "$PULL_POOL_MODE" = "1" ]; then
     todo_n=$(find "$TODO_DIR" -maxdepth 1 -type f -name 'shard_*.task' | wc -l | tr -d ' ')
     processing_n=$(find "$PROCESSING_DIR" -maxdepth 1 -type f -name 'shard_*.task' | wc -l | tr -d ' ')
     done_n=$(find "$DONE_DIR" -maxdepth 1 -type f -name 'shard_*.task' | wc -l | tr -d ' ')
-    echo "Task pool prepared: root=$TASK_POOL_ROOT todo=$todo_n processing=$processing_n done=$done_n"
+    failed_n=$(find "$FAILED_DIR" -maxdepth 1 -type f -name 'shard_*.task' | wc -l | tr -d ' ')
+    echo "Task pool prepared: root=$TASK_POOL_ROOT todo=$todo_n processing=$processing_n done=$done_n failed=$failed_n"
 fi
 
 export_items=(
@@ -155,6 +178,7 @@ if [ "$PULL_POOL_MODE" = "1" ]; then
         "TASK_STALE_TIMEOUT_S=${TASK_STALE_TIMEOUT_S}"
         "TASK_HEARTBEAT_INTERVAL_S=${TASK_HEARTBEAT_INTERVAL_S}"
         "TASK_MAX_REQUEUE_PER_SCAN=${TASK_MAX_REQUEUE_PER_SCAN}"
+        "TASK_MAX_ATTEMPTS=${TASK_MAX_ATTEMPTS}"
         "TASK_FAIL_FAST=${TASK_FAIL_FAST}"
     )
 fi

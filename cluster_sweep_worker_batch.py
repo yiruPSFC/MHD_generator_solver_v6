@@ -5,6 +5,7 @@ import argparse
 import json
 import math
 import os
+import random
 import re
 import time
 from dataclasses import asdict, dataclass, field
@@ -654,22 +655,35 @@ def _parse_task_index(task_path: Path) -> int | None:
     return int(m.group(1))
 
 
-def _todo_task_candidates(todo_dir: Path) -> List[Path]:
-    tasks: List[tuple[int, Path]] = []
-    for task_path in todo_dir.glob("shard_*.task"):
-        shard_index = _parse_task_index(task_path)
-        if shard_index is None:
-            continue
-        tasks.append((shard_index, task_path))
-    tasks.sort(key=lambda x: x[0])
-    return [p for _, p in tasks]
+def _pick_coprime_step(rng: random.Random, modulo: int) -> int:
+    if modulo <= 1:
+        return 1
+    if modulo == 2:
+        return 1
+
+    for _ in range(8):
+        step = rng.randrange(1, modulo)
+        if math.gcd(step, modulo) == 1:
+            return step
+    return 1
 
 
-def _try_claim_task(todo_dir: Path, processing_dir: Path, worker_id: str) -> Path | None:
-    for src in _todo_task_candidates(todo_dir):
-        shard_index = _parse_task_index(src)
-        if shard_index is None:
-            continue
+def _try_claim_task(
+    todo_dir: Path,
+    processing_dir: Path,
+    worker_id: str,
+    shard_count: int,
+    rng: random.Random,
+) -> Path | None:
+    if shard_count <= 0:
+        return None
+
+    start = rng.randrange(shard_count)
+    step = _pick_coprime_step(rng, shard_count)
+
+    for k in range(shard_count):
+        shard_index = (start + k * step) % shard_count
+        src = todo_dir / _task_name(shard_index)
         dst = processing_dir / f"shard_{shard_index}.{worker_id}.task"
         try:
             os.rename(src, dst)
@@ -757,6 +771,49 @@ def _mark_done_task(processing_task_path: Path, done_dir: Path, shard_index: int
         except FileNotFoundError:
             pass
         done_path.touch(exist_ok=True)
+
+
+def _attempt_file(attempts_dir: Path, shard_index: int) -> Path:
+    return attempts_dir / f"shard_{int(shard_index)}.attempt"
+
+
+def _read_attempt_count(attempts_dir: Path, shard_index: int) -> int:
+    path = _attempt_file(attempts_dir, shard_index)
+    try:
+        raw = path.read_text(encoding="utf-8").strip()
+    except FileNotFoundError:
+        return 0
+    except OSError:
+        return 0
+    if not raw:
+        return 0
+    try:
+        return max(0, int(raw))
+    except ValueError:
+        return 0
+
+
+def _write_attempt_count(attempts_dir: Path, shard_index: int, count: int) -> None:
+    path = _attempt_file(attempts_dir, shard_index)
+    tmp = path.with_name(f".{path.name}.tmp.{os.getpid()}.{time.time_ns()}")
+    try:
+        with tmp.open("w", encoding="utf-8") as f:
+            f.write(str(max(0, int(count))))
+        os.replace(tmp, path)
+    finally:
+        if tmp.exists():
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
+
+
+def _clear_attempt_count(attempts_dir: Path, shard_index: int) -> None:
+    path = _attempt_file(attempts_dir, shard_index)
+    try:
+        path.unlink()
+    except FileNotFoundError:
+        pass
 
 
 def _apply_inlet_prefilter(
@@ -1075,23 +1132,30 @@ def _run_task_pool(
     todo_dir = pool_root / "todo"
     processing_dir = pool_root / "processing"
     done_dir = pool_root / "done"
+    failed_dir = pool_root / "failed"
+    attempts_dir = pool_root / "attempts"
     todo_dir.mkdir(parents=True, exist_ok=True)
     processing_dir.mkdir(parents=True, exist_ok=True)
     done_dir.mkdir(parents=True, exist_ok=True)
+    failed_dir.mkdir(parents=True, exist_ok=True)
+    attempts_dir.mkdir(parents=True, exist_ok=True)
 
     shard_count = max(1, int(args.shard_count))
     poll_interval_s = max(0.1, float(args.task_poll_interval_s))
     stale_timeout_s = float(args.task_stale_timeout_s)
     max_requeue_per_scan = max(1, int(args.task_max_requeue_per_scan))
+    max_attempts = max(1, int(args.task_max_attempts))
     worker_id = args.task_worker_id.strip() or (
         f"{os.environ.get('SLURM_JOB_ID', 'noj')}_"
         f"{os.environ.get('SLURM_ARRAY_TASK_ID', 'na')}_"
         f"pid{os.getpid()}"
     )
+    rng = random.Random(f"{worker_id}:{os.getpid()}:{time.time_ns()}")
 
     claimed_n = 0
     completed_n = 0
     failed_n = 0
+    failed_permanent_n = 0
     requeued_stale_n = 0
     skipped_existing_n = 0
 
@@ -1104,6 +1168,7 @@ def _run_task_pool(
                 "shard_count": int(shard_count),
                 "poll_interval_s": float(poll_interval_s),
                 "stale_timeout_s": float(stale_timeout_s),
+                "max_attempts": int(max_attempts),
             },
             ensure_ascii=False,
         )
@@ -1122,13 +1187,16 @@ def _run_task_pool(
             todo_dir=todo_dir,
             processing_dir=processing_dir,
             worker_id=worker_id,
+            shard_count=shard_count,
+            rng=rng,
         )
         if claimed_path is None:
             todo_left = _has_task_files(todo_dir)
             processing_left = _has_task_files(processing_dir)
             if (not todo_left) and (not processing_left):
                 break
-            time.sleep(poll_interval_s)
+            sleep_s = poll_interval_s * (1.0 + 0.2 * rng.random())
+            time.sleep(sleep_s)
             continue
 
         shard_index = _parse_task_index(claimed_path)
@@ -1149,6 +1217,7 @@ def _run_task_pool(
 
         if out_exists:
             skipped_existing_n += 1
+            _clear_attempt_count(attempts_dir, shard_index)
             _mark_done_task(
                 processing_task_path=claimed_path,
                 done_dir=done_dir,
@@ -1189,22 +1258,53 @@ def _run_task_pool(
             )
         except Exception as exc:
             failed_n += 1
-            todo_path = todo_dir / _task_name(shard_index)
-            try:
-                os.replace(claimed_path, todo_path)
-            except FileNotFoundError:
-                pass
-            print(
-                json.dumps(
-                    {
-                        "event": "task_failed_requeued",
-                        "worker_id": worker_id,
-                        "shard_index": int(shard_index),
-                        "error": str(exc),
-                    },
-                    ensure_ascii=False,
+            attempts = _read_attempt_count(attempts_dir, shard_index) + 1
+            _write_attempt_count(attempts_dir, shard_index, attempts)
+            if attempts >= max_attempts:
+                failed_permanent_n += 1
+                failed_task_path = failed_dir / _task_name(shard_index)
+                try:
+                    os.replace(claimed_path, failed_task_path)
+                except FileNotFoundError:
+                    pass
+                except OSError:
+                    try:
+                        claimed_path.unlink()
+                    except FileNotFoundError:
+                        pass
+                    failed_task_path.touch(exist_ok=True)
+                print(
+                    json.dumps(
+                        {
+                            "event": "task_failed_permanent",
+                            "worker_id": worker_id,
+                            "shard_index": int(shard_index),
+                            "attempts": int(attempts),
+                            "max_attempts": int(max_attempts),
+                            "error": str(exc),
+                        },
+                        ensure_ascii=False,
+                    )
                 )
-            )
+            else:
+                todo_path = todo_dir / _task_name(shard_index)
+                try:
+                    os.replace(claimed_path, todo_path)
+                except FileNotFoundError:
+                    pass
+                print(
+                    json.dumps(
+                        {
+                            "event": "task_failed_requeued",
+                            "worker_id": worker_id,
+                            "shard_index": int(shard_index),
+                            "attempts": int(attempts),
+                            "max_attempts": int(max_attempts),
+                            "error": str(exc),
+                        },
+                        ensure_ascii=False,
+                    )
+                )
             if args.task_fail_fast:
                 raise
             continue
@@ -1215,6 +1315,7 @@ def _run_task_pool(
             done_dir=done_dir,
             shard_index=shard_index,
         )
+        _clear_attempt_count(attempts_dir, shard_index)
         completed_n += 1
 
         summary["mode"] = "task_pool"
@@ -1230,6 +1331,7 @@ def _run_task_pool(
                 "claimed": int(claimed_n),
                 "completed": int(completed_n),
                 "failed": int(failed_n),
+                "failed_permanent": int(failed_permanent_n),
                 "requeued_stale": int(requeued_stale_n),
                 "skipped_existing": int(skipped_existing_n),
             },
@@ -1242,7 +1344,7 @@ def _run_task_pool(
 def main() -> int:
     p = _build_parser()
     p.description = "V6 cluster sweep worker (batch fixed-step)"
-    p.add_argument("--batch-size", type=int, default=64, help="number of candidates per batch solve")
+    p.add_argument("--batch-size", type=int, default=256, help="number of candidates per batch solve")
     p.add_argument("--dx", type=float, default=2e-5, help="fixed spatial step for batch RK4")
     p.add_argument(
         "--prefilter-dte-rel-min",
@@ -1295,6 +1397,12 @@ def main() -> int:
         type=int,
         default=4,
         help="upper bound of stale processing tasks requeued per scan",
+    )
+    p.add_argument(
+        "--task-max-attempts",
+        type=int,
+        default=3,
+        help="max retries per shard in task-pool mode before marking failed/",
     )
     p.add_argument(
         "--task-fail-fast",

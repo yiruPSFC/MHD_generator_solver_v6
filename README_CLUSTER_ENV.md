@@ -119,9 +119,10 @@ Default scheduler mode is now pull-based worker pool:
 - `SHARD_COUNT=100` (physics shards)
 - `WORKER_COUNT=115` (redundant workers to absorb node loss)
 - `ARRAY_CONCURRENCY=96`
-- task pool root: `${OUT_DIR}/todo|processing|done` (or override via `TASK_POOL_ROOT`)
+- `TASK_MAX_ATTEMPTS=3`
+- task pool root: `${OUT_DIR}/todo|processing|done|failed|attempts` (or override via `TASK_POOL_ROOT`)
 
-Workers atomically claim `todo/shard_*.task` using rename, write `sweep_shard_<i>.jsonl`, mark `done/`, and idle workers can requeue stale `processing/` tasks after `TASK_STALE_TIMEOUT_S` to recover from node kills.
+Workers atomically claim `todo/shard_*.task` using rename, write `sweep_shard_<i>.jsonl`, mark `done/`, and idle workers can requeue stale `processing/` tasks after `TASK_STALE_TIMEOUT_S` to recover from node kills. Repeated shard exceptions are capped by `TASK_MAX_ATTEMPTS`; over-limit shards are moved to `failed/` instead of infinite requeue.
 
 That `--no-requeue` default is intentional on this cluster. The observed `user env retrieval failed requeued held` failures only appeared after Slurm requeued array tasks (`Restarts=1`). Disabling requeue avoids that failure mode. The tradeoff is that if a shard is interrupted by the scheduler or node issues, it will stay failed and should be resubmitted explicitly instead of being silently retried.
 
@@ -141,6 +142,7 @@ SHARD_COUNT=100 \
 WORKER_COUNT=130 \
 ARRAY_CONCURRENCY=96 \
 TASK_STALE_TIMEOUT_S=1200 \
+TASK_MAX_ATTEMPTS=3 \
 ./submit_v6_batch_array.sh
 ```
 
@@ -180,6 +182,14 @@ To resume an existing run and only fill missing shards, reuse the same `OUT_DIR`
 ```bash
 OUT_DIR=results/run_xxx SHARD_COUNT=100 ./submit_v6_batch_array.sh
 ```
+
+`RESET_TASK_POOL=1` is guarded because it clears queue state. To confirm reset, set:
+
+```bash
+RESET_TASK_POOL=1 ALLOW_TASK_POOL_RESET=1 ./submit_v6_batch_array.sh
+```
+
+If `processing/` is non-empty and you are sure the old run is dead, additionally set `FORCE_RESET_TASK_POOL=1`.
 
 ## Batch tuning notes
 

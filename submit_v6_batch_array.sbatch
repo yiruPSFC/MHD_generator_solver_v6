@@ -55,6 +55,7 @@ TASK_POLL_INTERVAL_S="${TASK_POLL_INTERVAL_S:-1.0}"
 TASK_STALE_TIMEOUT_S="${TASK_STALE_TIMEOUT_S:-900}"
 TASK_HEARTBEAT_INTERVAL_S="${TASK_HEARTBEAT_INTERVAL_S:-15}"
 TASK_MAX_REQUEUE_PER_SCAN="${TASK_MAX_REQUEUE_PER_SCAN:-4}"
+TASK_MAX_ATTEMPTS="${TASK_MAX_ATTEMPTS:-3}"
 TASK_FAIL_FAST="${TASK_FAIL_FAST:-0}"
 
 if [ "$PULL_POOL_MODE" = "1" ]; then
@@ -91,13 +92,19 @@ cmd=(
 )
 
 if [ "$PULL_POOL_MODE" = "1" ]; then
-    mkdir -p "${TASK_POOL_ROOT%/}/todo" "${TASK_POOL_ROOT%/}/processing" "${TASK_POOL_ROOT%/}/done"
+    mkdir -p \
+        "${TASK_POOL_ROOT%/}/todo" \
+        "${TASK_POOL_ROOT%/}/processing" \
+        "${TASK_POOL_ROOT%/}/done" \
+        "${TASK_POOL_ROOT%/}/failed" \
+        "${TASK_POOL_ROOT%/}/attempts"
     cmd+=(
         --task-pool-root "$TASK_POOL_ROOT"
         --task-poll-interval-s "$TASK_POLL_INTERVAL_S"
         --task-stale-timeout-s "$TASK_STALE_TIMEOUT_S"
         --task-heartbeat-interval-s "$TASK_HEARTBEAT_INTERVAL_S"
         --task-max-requeue-per-scan "$TASK_MAX_REQUEUE_PER_SCAN"
+        --task-max-attempts "$TASK_MAX_ATTEMPTS"
         --task-worker-id "${SLURM_JOB_ID:-0}_${SLURM_ARRAY_TASK_ID:-0}_${HOSTNAME:-unknown}"
     )
     if [ "$TASK_FAIL_FAST" = "1" ]; then
