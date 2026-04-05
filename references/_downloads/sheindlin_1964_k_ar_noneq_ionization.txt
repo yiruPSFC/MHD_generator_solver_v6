@@ -1,0 +1,2555 @@
+1                                                                                                                   1
+
+
+                                                                                                             1 '
+                                                                                                             i
+                                                                                                                   CR-54475
+
+
+
+
+i
+                                                  A MAGNETOGASDYNAMIC
+
+                                                  POWER G E N E R A T I O N STUDY
+
+
+                                                             Summary         Report
+
+I                                                          Contract NAS 3-6260
+
+
+
+
+?                                                                  prepared for
+
+
+                                     N A T I O N A L A E R O N A U T I C S AND SPACE A D M I N I S T R A T I O N
+
+    i
+
+
+            c
+            a
+            P
+            >
+            k
+            2
+            <
+                           (PAGES1
+                                                               /
+                                                             (CODE)
+
+
+                                                              ;3.r
+                                                                               1
+                                                                               1
+                                                                                     GPO PRICE
+
+                                                                                    CFSTI PRICE(S) $
+                                                                                                         $
+
+
+                (NASA CR O R TMX O R AD NUMBER1            (CATEGORY1
+
+                                                                               I
+                                                                              I
+                                                                                          Hard copy (HC)
+
+        ,
+                                                                                          Microfiche (MF)               -33
+                                                                                     ff 653 July 65
+
+
+
+
+                                                  SPACE SCIENCES LABORATORY
+
+                                                  GENERAL@!                        ELECTRIC
+                                                      MISSILE A N D S P A C E DIVISION
+    f '
+
+
+
+
+I
+
+
+
+
+                                         NOTICE
+
+          Thin r e p o r t was prepared as an account of Government sponsored
+          work. Neither the United States, nor the National Aeronautics and
+          Space Administration (NASA), nor any person acting on behalf of
+          NASA:
+
+                A.)   Makes any warranty o r representation, expressed o r
+                      implied, with r e s p e c t to the accuracy, completeness,
+                      o r usefulness of the information contained in t h i s
+                      report, o r that t h e use of any information, apparatus,
+                      method, o r process disclosed i n t h i s r e p o r t m a y not
+                      infringe privately owned rights: o r
+
+                B.    Assumes any liabilities with respect to the use of,
+                      o r for damages resulting from the use of any infor
+                      mation, apparatus, method o r p r o c e s s disclosed in
+                      this report.
+
+          As used above, "person acting on behalf of NASA" includes any
+          employee o r contractor of NASA, o r employee of such contractor,
+          to the extent that such employee o r contractor of NASA, o r
+          employee of such contractor prepares, disseminates, o r provides
+          access to, any information pursuant to his employment o r contract
+          with NASA, or his employment with such contractor.
+
+
+
+          Requests for copies of this report should be r e f e r r e d t o
+
+                  National Aeronautics and Space Administration
+                  Office of Scientific and Technical Information
+                  Attention; AFSS-A
+                  Washington, D. C. 20546
+I                          GENERAL@                                  ELECTRIC                                          MISSILE              AND
+
+                                                                                                                       SPACE          DIVISION
+                                                    COMPANY
+~
+
+
+
+
+I                                                                                                                      SPACE SCIENCES
+
+        VALLEY F O R G E SPACE T E C H N O L O G Y CENTER (MAIL: P. 0.BOX 8555, PHILA., PA. 19101) . . TEL. 969-2000   L A B 0 R A T 0 RY
+
+    I
+
+
+
+
+                        Subject:           Contract NAS 3-6260
+                                           Summary Report, NASA CR-54475
+
+
+
+
+                         The enclosed document, "A Magnetogasdynamic Power Generation
+
+                         Study, I ' i s a s u m m a r y r e p o r t f o r the subject contract.                        It is sent
+
+                         f o r your perusal and retention in accordance with the distribution
+
+                         l i s t furnished by NASA headquarters.
+
+                                                                                              Very t r u l y y o u r p
+
+
+
+                                                                                             Yohn H. Wood
+                                                                                              Senior Technical Editor
+
+
+
+
+                         J H W / mjp
+                                            NASA CR-54475
+
+                SUMMARY REPORT
+
+        A MAGNETOGASDYNAMIC POWER
+               GENERATION STUDY
+
+
+          Principal Investigator: F. H. Shair
+          Technical Direction: A. Sherman
+
+
+                    prepared f o r
+
+NATIONAL AERONAUTICS AND SPACE ADMINISTRATION
+
+                  January 20, 1966
+
+              CONTRACT NAS 3 - 6 2 6 0
+
+
+                Technical Management
+            NASA Lewis Research Center
+           Spacecraft Technology Division
+                   Cleveland, Ohio
+
+                    Ne J. Stevens
+
+
+
+
+         GENERAL ELECTRIC COMPANY
+            Missile and Space Division
+           Space Sciences Laboratory
+      P. 0. Box 8555, Philadelphia, Pa., 19101
+                                      ABSTRACT                                     f G \.3%
+
+               Experiments were performed with an electron beam to i n c r e a s e the
+e l e c t r i c a l conductivity of a cesium-seeded argon plasma above the t h e r m a l
+equilibrium value in a subsonic duct at n e u t r a l particle t e m p e r a t u r e s up to
+        0
+1500 K and p r e s s u r e s of the o r d e r of one atmosphere. Microwave i n t e r -
+f e r o m e t e r diagnostic techniques indicated an electron density up to twenty
+times the Saha equilibrium value and a low electron density recombination
+r a t e which w a s supported, in qualitative trends at least, by theoretical
+analy si s.
+             Other subsonic experiments conducted with applied electric and
+magnetic fields and using cesium and c e s i u m - m e r c u r y (Penning) seed mixture
+indicated the existence of low net induced voltages, while experiments with
+only applied electric fields showed the influence of s e v e r a l types of cathode
+m a t e r i a l and a relatively insensitive dependence of performance on seeding
+rate.
+
+      Intended experiments in a supersonic channel were prevented by
+equipment and m a t e r i a l s problems which produced excessive contamination.
+
+        Calculations w e r e also performed t o determine t h e seed concentration
+required t o obtain the optimum electrical conductivity for a MHD generator
+operating i n the non-equilibrium mode. The r e s u l t s indicated a reduction
+in the seed concentration as compared t o the equilibrium situation.
+                                                                                    h
+                                                                                    j), L-.
+                                                                                              $3   c-
+                                                                                    I ’
+                           TABLE OF CONTENTS
+
+Section                                                         Page
+
+  I       Summary                                                 1
+
+  I1      Introduction                                           3
+
+  I11     Objective and Scope of Work                            4
+
+  IV      Theoretical Aspects                                    5
+               1. Optimum Seed Concentration at Elevated         5
+                   Electron Temperatures
+               2. MGD Flows in a Recombining Plasma              8
+
+  V       Experimental Apparatus                                 12
+                  .
+               1 Generator Channel
+               2. Electrode Materials
+                                                                 12
+                                                                 13
+               3. Cold Cathode Electron Beam                     13
+               4. Recording System                               13
+               5. Cesium Seed Injection                          14
+
+  VI      Experimental P r o g r a m and Results                 15
+               1. The Electron Beam in the Subsonic Channel      15
+               2. Non-equilibrium Ionization in Subsonic Flow    16
+               3. U s e of the Supersonic Channel                18
+
+  VI1     Conclu s ions                                         20
+
+  VI11    Future Work and Recommendations                       22
+
+  IX      Table of Symbols                                      23
+
+  X       Bibliography                                          26
+
+  XI      Appendix: Super sonic Channel Design                  28
+
+          A cknow1edg em e nt                                    33
+
+          Figures
+
+          Distribution L i s t
+
+
+
+
+                                 iii
+                                   I. SUMMARY
+
+
+             Experiments w e r e performed with an e l e c t r o m beam t o increase
+the electrical conductivity of a cesium seeded argon plasma in a dense
+alumina 1 c m x 3 c m duct at neutral gas t e m p e r a t u r e s up t o 1500°K, Mach
+number up t o 0.6 and a p r e s s u r e of Y     1 - 1 / 2 atmospheres. A typical argon
+m a s s flow r a t e in this range of operating conditions was 75 g r m s / s e c . The
+electron beam w a s injected through a 0.25 m i l aluminum foil window, an
+a v e r a g e c u r r e n t entering the plasma being 0. 1 mA at 15,000-20,000 volts.
+
+        A 60 KMC microwave interferometer was used t o m e a s u r e electron
+densities with the following results:
+
+          1. electron densities over a s m a l l range of neutral g a s t e m p e r a t u r e
+w e r e 10 t o 20 t i m e s the Saha equilibrium value, and
+
+        2.   a slow electron density decay r a t e (due t o a relatively low
+electron density level) was inferred and presumably gave r i s e t o a m e a s u r e
+of partially frozen ionization.
+
+F o r t h i s latter result, good agreement in the qualitative t r e n d s was obtained
+with t h e predictions of a recombination theory after making adjustments t o
+the magnitude of the electron-ion pair production energy. T h e s e experi-
+ments generally confirmed the results of e a r l i e r work under a preceding
+contract.
+
+               F u r t h e r subsonic channel experiments with applied e l e c t r i c and
+magnetic fields using cesium seed and a c e s i u m - m e r c u r y (Penning) mixture
+showed that the net induced voltage reached only 8. 7% of the theoretically
+attainable value of 28.8 volts. Compared with pure cesium, the Penning
+m i x t u r e inhibited the initial flow of current, but it i s possible that i t s u s e
+produced significant volumetric ionization. In experiments with only applied
+e l e c t r i c fields, a barium oxide cathode was considerably superior in p e r -
+f o r m a n c e compared with 2% thoriated tungsten, while plain molybdenum
+was a f a i r l y acceptable possibility. Cathode heating through ionic bombard-
+ment w a s definitely beneficial t o performance, but the lowest z e r o current
+sheath l o s s ( b a r i u m oxide cathode) was still high at 10 volts, and during
+experiments with other cathode materials this quantity ranged up to 44 volts.
+An associated preliminary result suggested that an o r d e r of magnitude v a r i a -
+tion (- 0. 1 to -1% m o l a r fraction) in c e s i u m seed concentration (molybdenum
+cathode) had v e r y little effect on performance.
+
+        The 2 c m x 3 c m dense alumina supersonic channel produced an
+exit centerline Mach number 311 = 1.80, the increase over the required
+design value of nil = 1.50 being due to slight over-correction for viscous
+effects. Subsequent equipment and materials problems and the ensuing
+
+                                            1
+    contamination prevented the gathering of useful super sonic data during the
+,
+I   contract period covered by this report.
+
+           Theoretical calculations of the seed concentration to produce a
+    maximum conductivity w e r e computed f o r a magnetically induced non-
+    equilibrium MHD generator. The r a t i o of the equilibrium t o non-equilibrium
+    electron concentration was found t o be relatively independent of g a s t e m -
+    perature, g a s p r e s s u r e , or c r o s s - s e c t i o n magnitude and of o r d e r of 10.
+
+
+
+
+                                                 2
+                               11.   INTRODUCTION
+
+
+          A theoretically attractive solution to the problem of producing an
+electrical generator for space applications l i e s in the coupling of a plasma
+MGD device to a nuclear energy source. The basic requirement in the
+theoretical treatment of this type of plasma MGD generator is the successful
+inducement and maintenance of an appreciable conductivity when operating a t
+                                      0
+a t e m p e r a t u r e level ( g 1500 K ) which i s compatible with the operation of the
+nuclear reactor. T h e r m a l equilibrium ionization a t such total t e m p e r a t u r e s
+in a high speed flow s y s t e m a r e several o r d e r s of magnitude too low f o r
+acceptable efficiency. Although there a r e many reported observations of the
+existence of non-equilibrium ionization ( f o r example, r e f e r e n c e s 1 , 2 and 3 ) ,
+continuous power extraction a t a significant level using this phenomenon has
+yet to be reliably demonstrated by experiment.
+
+             This report is concerned principally with the investigation of generating
+power f r o m a cesium-seeded argon plasma. This choice of working fluid p r o -
+vide s considerable experimental convenience and, f r o m the MGD point of view,
+has many potential optimal qualities such a s high conductivity and low cathode
+sheath voltage, T h e s e and other properties have been recently reported by
+E l l i n g t ~ n (who
+                     ~ ) investigated several seed and monatomic gas combinations
+in a static diode experiment. Before significant power can be generated in
+the non -equilibrium ionization regime, sufficiently high open circuit voltages
+m u s t be induced to overcome the sheath voltages that develop: so f a r ,
+m e a s u r e d open circuit voltages have reached only a modest fraction of the
+theoretically attainable value, with the r e s u l t that power extraction has been
+s e v e r a l o r d e r s of magnitude below the expected.
+
+
+
+
+                                            3
+I
+
+
+
+
+                             111.    OBJECTIVE AND SCOPE O F WORK
+
+
+             The present work is the continuation of a study* (5) in a 1 cm. x
+    3 cm. subsonic duct in which an electron beam was used t o produce a
+    plasma conductivity of approximately 10 mho/m, representing an approximate
+    two o r d e r of magnitude increase over the Saha equilibrium value. In the
+    s a m e study, open circuit voltages reached a maximum of 25% of the
+    theoretical value.
+
+                                                                     s l r h g ~ - t &ct,
+             In a d d i t i o n to fiirfhpr i E x r e S + i0m-a- t- i-n- -n ~f       i~   evperjments
+    w e r e t o be performed in a 2 cm. x 3 cm. supersonic duct in o r d e r to
+    elucidate the problems t o be solved for the design of an efficient generator.
+    T h e s e included electrode phenomena such a s geometry and t e m p e r a t u r e ,
+    seed concentration requirement, and the effectiveness of pre-ionization
+    techniques. The remaining experimental variables w e r e t o be magnetic
+    field strength (approximately 20,000 gauss maximum), gas velocity (300 -
+    800 m / s e c . ), g a s stagnation t e m p e r a t u r e (1000 - 1700°K) and seed m a t e r i a l
+    (cesium, mercury and c e s i u m - m e r c u r y mixture). Microwave interferometer
+    techniques were to be used for the measurement of electron density, collision
+    frequency and recombination r a t e s .
+
+
+
+
+    * C a r r i e d out under NASA Contract No. NAS 3-4103
+
+
+                                                                4
+                                           IV.   THEORETICAL ASPECTS
+
+
+1.   Optimum Seed Concentration In Ionized G a s by J. M. Smith and F. H. %air
+
+        In the f i r s t quarterly r e p o r t of this contract F. H. Shair considered the
+problem of maximizing the electrical conductivity of a n ionized g a s with respect
+to the seed concentration. In this analysis the electron temperature was
+assumed to be independent of the seed concentration and it w a s found that the
+optimum seed concentration increased with increasing degree of non-equilibrium.
+This conclusion w a s l a t e r discovered to be in contradiction to the r e s u l t s
+obtained in the diode experimepts of reference (4)in which i t w a s found that an
+approximately one o r d e r of magnitude d e c r e a s e in the optimum seed concentra-
+tion existed when the diode was operated in the non-equilibrium mode.
+
+          In this section the problem of maximizing the e l e c t r i c a l conductivity
+with r e s p e c t to the seed concentration is considered by including the dependency
+of the electron temperature on the seed concentration through the electron
+heating equation. This extension of the previous analysis leads to at l e a s t
+qualitative agreement with the r e s u l t s of reference (4).
+        W e consider the following equations t .                            .
+                                   2
+                       n       e
+                           e
+        u =
+                          mv
+        v =           Saes( n s - n e ) T e1 ’ 2 + b Q en nn T e1 / 2 t c ne T e- 3 / 2   \
+
+              2
+         n
+           e
+         n -n                  = x (Te)
+             s        e
+         rn
+         I
+                                                                               f
+         -Te- - 1 t -31y w 2 r 2 (1-K)2 7/12                              1 + - 2
+                                                                               v
+                                            5
+where: b = 6.212 x 10
+         c = 1.79
+
+
+
+
+and it is assumed that the c r o s s sections a r e constant.
+
+       Differentiating equation ( I ) , ( 2 ) , (31, (4), and ( 5 ) with r e s p e c t to ne
+we obtain
+                                                               7
+                                                               L
+                                       2   dn      n       e
+         -ddno-           - - -e-
+                                mu
+                                             e
+                                           dns
+                                                       e
+                                                           2
+                                                                   dv
+                                                                   dn S
+                  S                                mu
+
+ t Symbols a r e defined on page 23                                5
+         dlJ
+        -dn
+          =bQ
+                                      dn
+                            e s (l--$)Te
+                                                   1/2     1
+                                                         +TU--T
+                                                                  1
+                                                                          dT
+                                                                            e
+                                                                          dn t cTe
+                                                                                  -3/2     ( )-
+                                                                                            3
+                                                                                           Te
+                                                                                       l n d r
+                                                                                                    dne
+                                                                                                    dn
+            S                              S                          e     S               e        S
+
+
+                                                3
+                                                               dT
+                 - c n e T e- 3 / z l n (d%)-
+                                                         1
+                                                         T     -  e
+                                                                dn t cn e T e
+                                                           e      S                    e
+
+
+
+
+        dX
+        dT
+             e                       e         e
+
+        T h e condition f o r optimum seed concentration i s obtained f r o m
+equation (6) by setting d o / d n s = 0. Equations ( 7 ) - (10) a r e then substituted
+into this condition to obtain, after considerable algebraic manipulation,
+
+
+
+
+                      GI1     G                                                             A
+                                                                                                e
+                 4n
+                 6
+where p =       -
+                  X
+
+     In the equilibrium c a s e T = T and slight d e g r e e s of ionization, i. e . ,
+#I>>
+  1, w e obtain                  e
+
+
+
+
+                                                           6
+which is the common expression given for the seed concentration. In t h e
+non-equilibrium case, i. e., T > T , and for low degrees of ionization,
+@ > >1, we obtain             e
+                                                                   -
+        n                  Q
+         n          -
+                    1 -
+                      -- e s
+        n             CY   Q                              m
+                                                          I
+            S                  en                   2 -   -
+                                                          Te           J
+or
+
+
+                                       2 --
+                                              T
+                    Q en                      Te
+                                                -
+         Q =
+                   Qe s
+                            1 + 2 ( 1 - + ) ( 1e + $ )         e
+
+
+which f o r Ti > > T >> T yields
+                    e
+                    Q en   T
+         C Y = -           - e
+                    Qe s   T
+                               i
+                T
+                  i
+and since       -
+                T
+                           10 we see the order of magnitude d e c r e a s e in X for the
+               .e
+non - equilibr ium cas e.
+
+            In Figure 5A Q a s given by equation 11 divided by Qen/Qes, i. e.,
+ratio of non-equilibrium concentration to equilibrium concentration, i s
+plotted a s a function of electron temperature for various a s p r e s s u r e s and
+electron-Argon c r o s s sections of 4.7 x            and 8 x 10-7' cmZ0 It i s
+noted that t h i s ratio i s relatively independent of gas p r e s s u r e and assumption
+a s t o t h e magnitude of t h e electron-neutral c r o s s section.
+
+           In Figure 5B the ratio of non-equilibrium to equilibrium concentration
+i s plotted a s a function of electron temperatures f o r various
+and electron-Argon c r o s s sections of 4.7 x                   and 8 x 10
+noted that f o r T e slightly greater than T that the r a t i o i s relatively independent
+of g a s t e m p e r a t u r e and the magnitude of the c r o s s section.
+
+            It is concluded f r o m the above r e s u l t s that the ratio of non-equilibrium
+to equilibrium concentration i s relatively independent of a s properties,
+relatively independent of c r o s s section, and of o r d e r 10-      f.   This i s a r e l a -
+tively important result in that it shows that a MHD generator operating in the
+non-equilibrium mode w i l l be operated optimally a t lower seed concentration
+than the equilibrium generator which should greatly reduce the corrosion
+p r o b l e m inherent with alkali m e t a l atmospheres.
+
+
+                                                    7
+2.   MGD Flows in a Recombining P l a s m a by J. M. Smith
+
+        During a pre-ionization experiment with the electron beam, a
+surprisingly slow decay in electron density was m e a s u r e d with t h e m i c r o -
+wave interferometer. A one-dimensional analysis, developed under an
+AFOSR program*, was applied t o the results. The main features of the
+analysis a r e given below.
+
+         F o r one-dimensional inviscid MHD flow, the equations a r e
+
+               continuity :       p UA      = const
+                                         dU
+               momentum:                             t - -
+                                 p u dx                      dx
+
+                                                                        U2
+               energy:                                       C    T t - 2            =.OF)   (3)
+
+               state:            p =pRT                                                      (4)
+
+               current :             -                       [E       -p(E       - UB)]      (5)
+                                                                  X          Y
+
+
+
+
+         Instead of the u s u a l assumption u = const., it i s used in i t s defined
+form
+                                                         2
+                                            n        e
+                                                e-
+                                 o =        mIJ                                              (7)
+
+         The equation f o r the electron density i s given by the r a t e equation
+
+
+
+
+where, on the right, the f i r s t two t e r m s r e p r e s e n t t h r e e body recombination
+and ionization and the l a s t two t e r m s r e p r e s e n t two body recombination and
+ionization. The recombination r a t e coefficient V r was determined a s a
+function of electron t e m p e r a t u r e f r o m r e f e r e n c e ( ), and V  2
+                                                                                r2
+                                                                                   was estimated
+similarly f r o m reference (7). In order that thermodynamic equilibrium
+can be achieved, the ionization r a t e coefficients, vi , w e r e determined by
+the method of detailed balance s o that equation (8) t a k e s the f o r m
+
+
+*'Contract No.     A F 49 ( 6 3 8 )- 1465
+
+                                                     8
+                                -- - d
+                                     dx           neUe       l3 dx    d
+                                                                          neUe    l2
+where
+
+
+
+
+                                 -10
+                        3 . 2 ~10
+        u           =                         for cesium
+            r                       5
+                3           T
+                                e
+
+
+        u
+                    -- 1.44 x 107
+         r                  0.7
+                2
+                            e
+
+       The electron t e m p e r a t u r e was determined f r o m the electron energy
+equation
+
+
+        n U
+            e edx
+                        -                 e
+
+                    - E ne U ej ( 2 % ) 3 / 2 k ( T              e -T)
+                        j                         j
+
+                    t(dit5/2kT
+                                              e
+                                                  t   ""')   2   -
+                                                                 d
+                                                                 dx       e   e
+                                                                                  3
+where in the last t e r m the t h r e e body contribution only is included since
+radiation does not affect the electron energy. The collision frequencies
+V     are
+  e
+    i
+
+
+
+
+                                                             9
+             T h e above set of equations a r e still indeterminate t o the extent that
+the channel configuration, A (x), i s under the control of the experimenter.
+F o r simplicity, A is chosen s o that U = U 0 = constant and the analysis i s
+f u r t h e r r e s t r i c t e d t o the segmented eiectroae case, i. G .
+
+
+             JX
+                  = 0, E = @(E
+                              X             Y
+                                                - UB)
+             jY = o [ E Y - U B I
+
+
+Defining K through E                        = K UB
+                                        Y
+then j       = - u (1-K)U B
+         Y
+and Ue = U
+                  0
+
+             The equations governing the flow then reduce t o
+
+                      PA = PoAo
+
+                   -
+                   dp
+                       - -
+                      =jxB=-u(1-K)U B
+                                      2
+                      dx                                   0
+
+
+                                  d                 2 2
+                      "0
+                                  -
+                                  dx
+                                     C T = -D(l-K)KUoB
+                                      P
+
+                      p = PRT
+
+                                        2
+                                  n e
+                                   e
+                      ( T =
+                                  mu
+
+                      dne = - [1 -
+                      -
+                       dX
+                                                  n            S
+                                                                     ]   [n%qj
+                                                                            0
+                                                                                 +
+                                                                                      2 vr2
+                                                                                     ne
+
+                                                                                      U
+                                                                                          0
+                                                                                              1
+                                                      e            eq*
+
+
+
+
+                                                          10
+            d 5
+        n U --
+         e odx 2
+                 kTe = C Y (1-K) 2 Uo2 B 2 -                    C neuej (?)3/2   k (T -T)
+                                                                                     e
+                                                                J
+
+
+                              t 5 / 2 kT e t   "'7
+                                                 t) -     dx
+                                                          d    (ne U0)
+
+       Equations 23, 24, and 2 5 can be solved s o that equation 2 4 can be
+replaced by
+
+
+
+        T =(*)                          Y
+        T
+                0
+
+
+where
+
+        y = c /c
+             P V
+
+        The seed density n                   is given through the see4 fraction a by
+                                         S
+
+                    n       = a n                                                           (31)
+                        S        a
+
+and     n
+            n
+                        -P
+                        kT
+
+
+
+          In the electron beam experiments the magnetic field w a s zero between
+the b e a m port and the microwave station and therefore the above equations
+w e r e integrated down the MHD channel with B = 0. The application of this
+analysis i s described in Section VI.
+
+
+
+
+                                                     11
+                            V.    EXPERIMENTAL APPARATUS
+
+
+            The bulk of the experimental apparatus remained the s a m e as
+    described previously ( 5 ) , with the following being the principal changes
+    effected for the present program, together with additional comments. A
+    sketch of the complete facility is shown in figure 1.
+
+
+    1.   Generator Channels
+
+                 A s previousiy reported, the subsonic channel had a constant i cm. x
+    3 cm. cross-section and w a s made of GE A976 dense aluminum oxide
+    ( "lucaloxtt). A second subsonic channel, used for obtaining the data in this
+    r e p o r t , was assembled in Dec. 1964 with s e v e r a l types of cathode (described
+    below) and voltage profile measuring w i r e s (0.625 mm diameter molybdenum)
+    a s shown in figure 2,
+
+            The supersonic lucalox channel f o r a Mach number 94 = 1.5 i s shown
+    in figure 3. The channel entrance is 2 cm. x 3 cm. and the s h o r t e r sides
+    diverage in the flow direction to compensate for boundary l a y e r growth. The
+    details of the supersonic nozzle and channel design a r e given in Appendix I.
+    The method of assembly was the same a s for the subsonic channels, except
+    that the l a y e r of Resco AA22 potting cement, used a s an insulating s t r u c t u r a l
+    support, had to be thinner than before since the channel w a s twice a s wide,
+    and the pole face gap w a s held constant a t 5 cm.
+
+              Lucalox has exhibited a high degree of r e s i s t a n c e to surface attack
+    f r o m cesium seeding, the principal effect being a light brown discoloration
+    which produced no detectable deterioration in the high e l e c t r i c a l r e s i s t a n c e
+    required, and w a s almost completely removable when scrubbed in a detergent
+    solution. A disadvantage in the use of lucalox is i t s r a t h e r poor t h e r m a l shock
+    property, and this appears to limit the useful life of a subsonic section to
+    10-15 hours high temperature operation, the corresponding figure f o r the
+    wider (higher w a l l temperature gradient) supersonic channel being 5 -10 hours.
+    A typical t e s t in e i t h e r channel required an hour of high t e m p e r a t u r e o p e r a -
+    tion, and the life problem w a s probably aggravated by the inclusion of w a t e r -
+    cooled t e s t section side plates for magnet pole face protection. Initial h a i r
+    line surface crazing in the lucalox progressively developed into definite
+    breaks which allowed cold-trapping of c e s i u m and subsequent attack of the
+    potting compound between the lucalox and the side plates. The resulting
+    products then entered the test section, contaminating the w a l l s and the e l e c -
+    trodes. This conclusion w a s drawn f r o m the r e s u l t s of a n X-ray diffraction
+    analysis carried out on a sample taken f r o m the supersonic channel and found
+    to contain phosphorus, a n element in the potting cement binder.
+
+
+
+
+                                                  12
+
+c
+2.   Electrode Materials
+
+         The following m a t e r i a l s were used f o r electrodes:
+
+              1) molybdenum
+              2) 27'thoriated tungsten
+              3) barium oxide coated tungsten
+              4) barium strontium tungstates
+
+                     [ Ba5St ( W 0 6 ) 2 +
+                                         5 BaO S r O 2WO 1 plus tungsten
+                                                    0
+                                                        3
+                   and a small amount of zirconium.
+
+             Under appropriately clean conditions, the l a s t type as a cathode is
+capable of a n emission of 1 2 A / c m 2 minimum at 1273OK in atmospheric
+p r e s s u r e argon. Unfortunately, the method of weld mounting adopted and
+poisoning in the cesium-seeded argon prevented attainment of proper break-
+down of the plasma under conditions where the first t h r e e types w e r e operable.
+
+             A boron nitride mounted 200 w a t t tungsten l a m p filament, intended
+f o r u s e as a directly heated cathode, was tested in an argon atmosphere t o
+a t e m p e r a t u r e of 2100OK. A photograph of a complete cathode before in-
+s e r t i o n into the channel is shown i n figure 4. Channel testing of t h i s type
+of cathode was never realized because cesium attack of the sealants used
+produced too much contamination and necessitated channel disassembly
+and cleaning. Better success was obtained with an indirectly heated b a r i u m
+nxide cathode, but in t h i s c a s e , the maximum t e m p e r a t u r e attainable was
+a modest 1500°K at z e r o flow velocity and room temperature.
+
+
+3,   Cold Cathode Electron Beam
+
+           After adding a quadrupole magnetic focus system to the electron
+b e a m apparatus it was possible t o pass a maximum safe current into the
+p l a s m a of 0.1 ma at approximately 2 0 , 0 0 0 volts without danger of rupturing
+the aluminum foil window. This focusing system was capable of modulation
+at a low frequency (7 c y c l e s / s e c ) for diagnostic purposes.
+
+
+4.   Recording System
+
+              Two 24 channel Minneapolis-Honeywell Visicorder high speed o s c i l -
+lographs with light sensitive recording paper w e r e installed f o r the continuous
+monitoring of various quantities of i n t e r e s t such as e l e c t r i c a l p a r a m e t e r s
+associated with the generator channel and the output of s t r a i n gage p r e s s u r e
+t r a n s d u c e r s . T e m p e r a t u r e s w e r e recorded, as before, on Electronik 1 7
+r e c o r d e r s and a General E l e c t r i c 24 Multipoint Recorder.
+
+
+                                             13                                                           c
+
+
+
+                                                                                                      c
+5.   Cesium Seed Injection
+
+       This was improved by replacing the original fixed speed drive by a
+variable speed motor, the injection rate b e k g determined f r o m a gear tooth
+operated switch which caused a. pulsed signal to appear on one channel of each
+Visicorder. In this way, it was also m o r e convenient t o relate timewise
+the two s e t s of records.
+
+
+
+
+                                    14
+             VI.   EXPERIMENTAL P R O G R A M A N D RESULTS
+
+
+1.   The Electron Beam in the Subsonic Channel
+
+            Experimental measurements of electron density made by microwave
+interferometry w e r e reported in reference 8 and a r e shown in Figures 6 and
+7. Initially, m e a s u r e m e n t s were made with the electron beam -    off in o r d e r
+to provide a reference for beam on measurements. The electron beam w a s
+injected through the Aluminum f o y , and enhanced electron densities w e r e
+m e a s u r e d 19 centimeters downstream f r o m the beam port by the microwave
+interferometer for several neutral gas temperatures. The t e m p e r a t u r e s
+indicated in parenthesis a r e the electron t e m p e r a t u r e s corresponding to
+Saha equilibrium at the indicated electron density and gas conditions. How-
+ever, the recombination analysis predicts that the actual electron t e m p e r a t u r e
+( s e e below) at the interferometer station w i l l have fallen to a value near the
+neutral gas temperature. As a result, the calculated conductivities, using
+the indicated electron temperatures, a r e pessimistically low but a r e still
+ 10-20 t i m e s the "beam off'' value, a s shown in Figure 7. These r e s u l t s
+generally confirm those of similar experiments reported in reference 5.
+Microwave attenuation experiments were attempted f o r determination of the
+collision frequency and thereby the electron temperature, but w e r e unsuc-
+cessful due t o inadequate resolution.
+
+         In the vicinity of the beam port gas conditions a r e now estimated to
+ -
+1.
+nave been pstatic      34 psia, u   3 0 6 m j s e c (M 3 0.4j. Aiiowing f o r tne r e -
+duction in static gas temperature below the total gas t e m p e r a t u r e due to the
+Mach number effect requires a shift in the t e m p e r a t u r e axis of 100°K, for
+the experimental points only, a s compared to the figures reported in reference
+8. Also, the conditions at the beam entry port w e r e not noted in reference 8
+but a r e shown now on Figures 6 and 7. It should be noted, however, that
+since the experimental conditions a r e estimated there i s an uncertainty in the
+horizontal location of the experimental data points of perhaps & 50°K.
+
+              Despite some experimental uncertainty two relatively definite con-
+clusions can be drawn from these results. One, t h e r e s e e m s t o be some
+r e s i d u a l ionization in the plasma presumably frozen in during expansion in
+the nozzle to M 2 0.4. Secondly, electron densities and conductivities
+m o r e than an o r d e r of magnitude greater than those existing with the beam
+off w i r e observed when the beam was turned on. In conclusion, it must be
+noted that quantitative use of the above experimental r e s u l t s must be deferred
+until additional experiments a r e c a r r i e d out under m o r e carefully controlled
+conditions.
+
+             A simple theoretical model has been used t o predict the conductivity
+at the beam injection port. It was assumed that electron-ion p a i r s w e r e
+c r e a t e d uniformly throughout the plasma by mono-energetic electrons of
+
+
+                                           15                                                      c
+
+
+                                                                                               d
+        energy E. It was further assumed that, on av-erage, an energy of Vo ev
+        was required to produce an electron-ion pair and that the volume within
+        which the beam existed was swept out UA t i m e s per second. Then knowing
+        the total beam current I entering the plasma, the electron density created
+        was determined from I = V o UA ne/E. The electron t e m p e r a t u r e compatible
+        with this value of ne allowed determination of a corresponding conductivity.
+        Using measured values of I, U, E andA and a conservative value of Vo = 3 0 ev
+        f o r the cesium seed leads to a conductivity of 5 m h o / m - f o r T g = 1405OK
+        ( a value shown in figure 8). Com a r i s o n of this value with t h t ane i n f e r r e d
+        (4 m h o / m at ne = 3 . 2 x 1 0 l 2 c m - 4 19 c m downstream of the beam injection
+        port suggested that a remarkably slow re-combination r a t e existed, even
+        when allowing tor a degree of inaccuracy in the simple model adopted f o r
+        calculation of the initial conductivity.
+
+                Application of t h e theoretical recombination analysis of Section IV. 2
+        to the experimentals points obtained is shown in Figures 8A, 8B, 8C
+
+                 In order t o c o r r e l a t e the data various values of ne a t the electron
+        beam port were chosen until the value of ne at the microwave port agreed
+        with experiment. The value of Te at the electron beam port was chosen to
+        satisfy Saha's equation at t h e assumed initial electron density. It was
+        found that the electron temperature f e l l to approximately the g a s t e m p e r a t u r e
+        i n the o r d e r of a c m ( s e e Fig. 8A) while the electron density decayed very
+        slowly and remained well above the value it would have i n Saha equilibrium
+        with the electron temperature ( s e e Figs. 8B and 8C).
+
+                                                                                             12 electron
+                The above calculations were c a r r i e d out for the highest ( 3 . 2 x 10               )
+                                                                                                    3
+                                  12 electron                                                    cm
+        and the lowest ( 1 2 x 10               ) electron densities m e a s u r e d at the
+                                          3
+        microwave port. F r o m the cm initial values of electron density n e c e s s a r y to
+        obtain these values the energy to produce a n ,electron-ion pair was calculated.
+        This value varied from 14. 2 to 86. 7 ev-and this range includes the average value
+        of 32 ev which is generally assumed for electron-ion pair production. It was
+        therefore concluded that the theory at least qualitatively explained these p r e -
+        liminary experimental points; i. e., the electron density was partially frozen.
+
+
+        2.   Non-Equilibrium Ionization in Subsonic Flow
+
+                    Before conducting power generation experiments, t e s t s w e r e per -
+        f o r m e d with applied electric fields on one pair of electrodes i n the subsonic
+        channel in t h e presence of a magnetic field. Data was r e c o r d e d f o r both
+        directions of the applied electric field using the circuit of f i g u r e 9 in which
+        voltage and current were recorded by galvanometers. The resulting electrode
+        voltages and currents a r e plotted in figure 10. It a p p e a r s that t h e r e was a
+        sheath voltage at which appreciable c u r r e n t s t a r t e d flowing smoothly, the
+        difference i n voltage between the two c u r v e s at constant c u r r e n t being
+
+4
+
+
+                                                  16
+    r
+attributed t o twice the net induced voltage V             Thus for an approximately
+                                                     g'
+constant difference of 5 volts, Vg = 2.5 volts, representing 8. 770 of the
+theoretical value of UB1 = 28.8 volts for the conditions of the experiment.
+F u r t h e r m o r e , the zero current sheath voltage was approximately 17 volts.
+If this sheath voltage is assumed constant with c u r r e n t and i s subtracted,
+the resulting conductivities w e r e of the order of 0 = 100 inho/m, and since
+only one electrode pair was being used, the scalar conductivities in the channel
+w e r e v e r y high. Two typical single f r a m e s f r o m a cine c a m e r a r e c o r d of
+the discharge a r e shown in figure 11: throughout the c u r r e n t range when
+the discharge was visible it had a uniform diffuse appearance with no evidence
+of s t r e a m e r s or a r c s .
+
+               The r e s u l t s of an applied voltage experiment with a magnetic field
+of 24, 000 gauss and using a metastable (Penning) mixture of m e r c u r y and
+c e s i u m a r e shown in figure 12. The curve f o r which the induced and applied
+e l e c t r i c fields a r e additive (2% thoriated tungsten cathode) i s closely similarly
+to the corresponding curve of figure 10 except that the initial voltage f o r
+appreciable c u r r e n t flow was approximately 657' higher with the Penning
+mixture. This was followed by a rapid decrease in voltage with increasing
+c u r r e n t until similarity of the two curves resulted and then both c u r r e n t and
+voltage increased together, Similar r e m a r k s apply to the c a s e where the
+induced electric field subtracted f r o m the applied electric field (unheated
+BaO cathode), but the initial voltage f o r current flow was even higher (ap-
+proximately 120%) and the final similarity with the corresponding curve of
+f i g u r e 10 was not a s close a s for the additive electric field case. F u r t h e r -
+m o r e , for c u r r e n t s greater than 0 . 6 amp, the average net induced voltage
+was approximately the s a m e a s with cesium seeding (figure 10). Thus, com-
+p a r e d with c e s i u m seed, the Penning mixture inhibits the initial flow of c u r -
+rent to a certain breakdown point after. which the voltage-current c h a r a c t e r -
+i s t i c s a r e f a i r l y similar. On this basis, cesium seeding appears preferable
+except that, with the Penning mixture, the breakdown point may correspond
+to the onset of extensive volumetric photo-ionization along the channel instead
+of just local ionization between the electrodes. In reference 5, microwave
+i n t e r f e r o m e t e r measurements upstream of the electrodes during a similar
+experiment indicated the occurrence of such a phenomenon.
+
+             The r e s u l t s of applied voltage experiments without magnetic field for
+different electrode materials using cesium and m e r c u r y seed a r e shown
+in f i g u r e 13. It i s seen that on decreasing the voltage a higher current i s
+p a s s e d compared with that for the same ascending voltage, presumably due
+to b e t t e r cathode emission a s a result of t e m p e r a t u r e r i s e after a period
+(- 10 s e c ) of ionic bombardment, In addition, the performance of a barium
+oxide coated cathode i s superior t o that of a 270 thoriated tungsten cathode
+with r e s p e c t t o emission and z e r o current sheath voltage. With c e s i u m
+seeding, the molybdenum cathodes are intermediate in performance which
+was essentially unaffected by an order of magnitude variation in seed rate.
+T h e s e latter r e s u l t s w e r e obtained during subsonic checking of the super-
+sonic channel a s described in the next sub-section, and w e r e not accompanied
+                                           17
+
+                                                                                                 .
+by the visual observation of a glow discharge. This fact was supported by
+the increased unsteadiness of the signal t r a c e s f r o m which average values
+w e r e obtained f o r the points plotted.
+
+
+3.   Use of the Supersonic Channel by N. A. Evans
+
+       The subsonic experiments indicated that appreciable electrode l o s s e s
+were present and that a higher induced voltage would be required f o r generating
+power. It was therefore decided to proceed directly to the supersonic channel
+which was theoretically capable of producing a value of UB1 = 61 volts for
+B = 2.5 w e b e r s / m 2 , 7?l = 1.5 at To = 1500OK and 1 = 0.03 m.
+
+           On a preliminary test, related m e a s u r e m e n t s of static and total p r e s -
+s u r e showed that the channel exit centerline Mach number was 1.80, the
+increase over the design Mach number of 1.50 being attributed to o v e r -
+correction for viscous effects when using a friction f a c t o r f = 0.003. During
+this run the m a s s flow was 185 granlsec a t a maximum t e m p e r a t u r e of 1080OK
+which occurred a s a result of resistance m i s - m a t c h of the main heater element
+with i t s power supply. Since the s t r e a m static t e m p e r a t u r e was v e r y low
+(- 550°K on average along the channel) subsequent t e s t s were conducted sub-
+sonicly in the supersonic channel at lower m a s s flows (- 80 g m s / s e c ) i n
+o r d e r to achieve higher static t e m p e r a t u r e s in the range 1200 to 14000K
+while the establishment of a glow discharge f r o m d.c. pre-ionization was
+being checked out. After completing this stage, it was intended t o give a
+rapid i n c r e a s e in m a s s flow t o achieve supersonic operation for a short
+period (-15 sec) a t high t e m p e r a t u r e by making use of the small t h e r m a l
+capacity of the main heater. This objective was never realized on account
+of difficulty i n achieving the desired pre-ionization glow discharge. Main
+heater failure (after 42 successful cycles to high temperature) was followed
+by several almost consecutive failures of a new element and one severe c a s e
+of channel and electrode contamination when the directly heated cathode
+sealants decomposed. In addition, the section immediately downstream of
+the seed injection station was severely attacked by cesium. A photograph
+of the seeding station and the adjacent downstream section i s shown in
+figure 14, and it can be seen that the c e s i u m was not vaporizing efficiently.
+The decomposed molded alumina section was replaced by one of boron nitride,
+the seed spray b a r was modified and the directly heated cathodes w e r e r e -
+placed by plain molybdenum type s.
+
+        When the channel was dismantled on a second occasion for cleaning,
+breaks were found in the lucalox walls, and i t was apparent from X-ray
+diffraction analysis that the products of c e s i u m attack on the potting cement
+behind the lucalox were contributing to the contamination problem. The
+subsonic section was then re-installed while the s y s t e m was being further
+checked out, and during this time it became evident that the succession of
+
+
+
+                                           18
+new heater elements w a s introducing an insulative contamination by the
+sublimation into the hot argon s t r e a m of an oxide f r o m t he surface of the
+molybdenum wire mesh: a wall deposit downstream of the heater exit was
+found to be r i c h in an oxygen deficient molybdenum oxide when subjected to
+analy s i s
+
+
+           The heater failure problem was finally solved by making a tightly
+rolled element with a s much molybdenum w i r e m e s h a s could be fitted into
+the c e r a m i c tube housing, and by installing a second t r a n s f o r m e r t o provide
+proper matching with the power supply. After an initial shakedown cleaning
+run, satisfactory glow discharges for 10-15 second periods were obtained
+in the cleaned subsonic channel only when seed injection (at Xcs 1%) was      -
+stopped. Apart f r o m visual observation, the oscillograph r e c o r d s showed
+precisely that the nature of the discharge changed when seed injection was
+switched on and off. It was apparent that incomplete seed vaporization was
+ still occurring, but it is not c l e a r why the glow discharge was extinguished
+with seed injection. T h e s e glow discharge r e s u l t s have not been reported
+because the effective seed r a t e was uncertain and varying with time. This
+t e s t was the l a s t that could be conducted during the contract period covered
+by t h i s report, and the interpretable r e s u l t s obtained have been included in
+the previous sub-section, since tney w e r e r e c o r d e d duriug a u L i i G i i k G ~ c ~ Z ~ ~ Z Z
+of the supersonic channel.
+
+
+
+
+                                           19
+                                      VII.   CONCLUSIONS
+
+
+            A theoretical investigation of the seed concentration t o produce an
+     optimal electrical conductivity in a magnetically induced non-equilibrium
+     MHD generator showed that the concentration could be reduced by the factor
+
+                                T
+                         2 -   -
+                               T
+                                  e
+
+
+
+
+     approximately, F r o m the above expression it is seen that when'appreciable
+     non-equilibrium exists, i. e., T i >> T, >> T , that the concentration i s reduced
+     by T i / T e 10. This represents a significant reductionin the alkali m e t a l
+     seed Concentration requirements and hence should significantly reduce con-
+     tamination and corrosion problems which have appeared to plague the per -
+     formance of alkali metal seeded MHD generators.
+
+             The experiments with the electron beam a s a pre-ionizing agent in
+     the subsonic channel have shown that significant levels of non-thermal
+     ionization a r e obtainable. F u r t h e r m o r e , m e a s u r e m e n t s with the m i c r o -
+     wave interferometer indicated a remarkable persistence along the channel
+     of an elevated electron density, possibly due t o the electron density itself
+     being relatively low. However , on making reasonable assumptions concerning
+     the magnitude of some of the physical p a r a m e t e r s involved (such a s the
+     electron-ion pair production energy), good agreement between experiment
+     and recombination theory has been demonstrated for at l e a s t the qualitative
+     trends.
+
+                The effectiveness of the electron beam in a space power package
+     application may be judged f r o m the extent by which i t s u s e d e c r e a s e s the
+     overall efficiency of the generator (8). Although in the present experimental
+     situation only 0. 1 m A out of a possible 50 m A available typically entered
+     the channel (at 17, 000 volts) on account of practical considerations, it
+     appears reasonable at this stage t o a s s u m e that a beam s y s t e m with power
+     supply could be designed with a power efficiency of 80oJ. In t h i s c a s e no
+     f o i l window with i t s attendant losses would be required since a space vacuum
+     would be available for differential pumping. It is also a s s u m e d that a suf-
+     ficiently precise magnetic sheet focussing s y s t e m would ensure that the
+     total 0.1 mA beam current produced would go into the generator at i t s
+     entrance with no l o s s e s suffered through recombination. Hence the required
+     beam power would be P = l 7 O o                          = 2. 1 watts.    An idealised
+                          b                    0.8
+
+
+
+
+I'
+                                                 20
+estimate (neglecting sheath losses) of the generator power output for the
+conditions of the present experiment may be obtained f r o m
+                                    2 2
+             P       = - u (1-K) K U B A L
+                 g
+where the load factor will be taken a s K - 0.8 with u = 3 m h o / m calculated
+at the beam port (Section VI. l ) , U 2 470 m / s e c , M  0.7, B = 5 w e b e r s / m ,
+A = 3 x         m 2 and the generator length L = 0.2 m e Thus Pg      150 watts,
+and on this approximate basis, the generator power efficiency l o s s would
+be l e s s than 27'0, suggesting that electron beam pre-ionization has promising
+potential.
+
+             Experiments in the subsonic channel with applied electric and magnetic
+fields showd that the net induced voltage level was only a small fraction (8. 770)
+of the theoretically attainable, due presumably to the existence of l a r g e
+electrodes l o s s e s when apparently current was flowing. This o c c u r r e d
+even though t h e r e was a good conduction path between electrodes during the
+p r e s e n c e of a glow discharge. The use of a c e s i u m - m e r c u r y Penning seed
+mixture probably produced significant volumetric ionization but the zero
+c u r r e n t sheath voltage was appreciably higher compared with the pure cesium
+caseo
+
+             Shock tube studies of actual power generation in the s a m e laboratory (9)
+have conclusively indicated that significant short duration power i s extractable
+when a sufficiently high induced voltage i s produced to overcome the sheath
+I n s s e s ; However, before attempting to generate voltages in a siipersoniz
+channel, further subsonic experiments with differect electrodes and seed
+m a t e r i a l s suggested that barium oxide cathodes were far superior to 270
+thoriated tungsten types, with plain molybdenum a f a i r l y acceptable pos -
+sibility. The influence of cathode deating from ionic bombardment appears
+t o be definitely beneficial, but preliminary r e s u l t s indicated (for a moly-
+bdenum cathodk) that performance was relatively unaffected by quite a l a r g e
+variation in seed concentration.
+
+         Supersonic experiments were hampered by a succession of equipment
+and m a t e r i a l s problems which produced serious channel and electrode con-
+tamination with the unfortunate result that very little useful data w e r e obtained.
+
+
+
+
+                                         21
+            VIII. FUTURE WORK AND RECOMMENDATIONS by N. A. Evans
+
+
+         The present study has emphasized the need f o r gaining a better basic
+under standing of electrical discharge phenomena in viscous seeded gas flows,
+and it i s intended to continue experimental work f r o m this point of view,
+paying particular attention to materials selection, channel design and the
+exclusion, a s far a s possible, of contaminating influences. Although dense
+aluminum oxide (lucalox) has shown a satisfactory resistance to alkali metal
+seed attack, it i s rather susceptible to t h e r m a l shock and t h e r e a r e dif-
+ficulties in producing gas tight seals. Boron nitride i s definitely superior
+on the last two points, and appears capable of satisfactory performance in
+a low partial p r e s s u r e seed environment if handled with c a r e (1). Accordingly
+a boron nitride t e s t section i s presently under construction: external wall
+heating (instead of cooling) will be incorporated together with a high degree
+flexibility in the changing of electrode materials and geometry. In addition,
+the sections immediately u p s t r e a m and downstream of the boron nitride
+channel w i l l be independently heated to minimize the build-up of seed con-
+centration at the walls which could lead to troublesome short-circuiting.
+Instead of a liquid spray, cesium seed will be injected a s a vapor.
+
+        Initial experiments, using applied electric fields, will be concerned
+with the measurement, by positionable probes in the discharge region, of
+positive column fields and sheath voltages through a velocity range f r o m
+essentially zero (static diode c a s e ) into the low supersonic regime; sub-
+sequent experiments will involve the use of a n applied magnetic field.
+Microwave interferometer measurements w i l l be used f o r determining
+electron densities, collision frequencies and recombination r a t e s . In
+this way, it i s hoped that a systematic picture c a n be built up of the nature
+of electrical discharge phenomena in seeded gas flows, and that some of
+the problems associated with continuous power generation involving non-
+equilibrium ionization can be elucidated.
+
+
+
+
+                                       22
+                             IX.   TABLE O F SYMBOLS
+
+
+A       area
+
+B       magnetic field strength
+
+C       gas specific heat at constant pressure
+    P
+        friction coefficient
+
+E       electric field strength
+
+e       electronic charge
+
+I       current
+
+        current density
+
+K       load factor = E /UB
+                       Y
+K       Hoitzmann constant
+
+L       generator length
+
+1
+
+
+
+n       Mach number
+
+M       heavy particle m a s s
+
+m       light particle m a s s
+
+n       number density
+
+P       power
+
+P       pr e s sur e
+
+Q       c r o s s -section
+
+R       gas constant
+                                         2 area
+r       hydraulic radius =
+    h                              wetted perimeter
+
+
+
+
+                                           23
+    T         temperature
+
+    U         velocity
+
+    V         vo It a g e
+
+    X         molar seed fraction
+
+    X         coordinate in flow direction
+
+    Y         coordinate t r a n s v e r s e t o flow direction
+
+    a         recombination coefficient
+
+    B         UT     or 4 nS/x
+
+    Y          ratio of gas specific heats
+
+    rl         efficiency
+
+    9         flow deflection angle
+
+    c1        viscosity, Mach angle
+
+    V          collision frequency, r e combination rat e, o r Pr andtl - Meyer function
+
+    P          density
+
+    (3         conductivity
+
+    7          collision t i m e
+
+    d          ionization energy
+
+    X          temperature dependent function
+
+    w          cyclotron frequency
+
+    Super s c r i p t s
+
+    *          condition related to 74 = 1
+
+    Sub script s
+
+    0          constant value, stagnation value, output o r s o u r c e
+
+
+
+,                                               24
+2    2-body process
+
+3    3-body process
+
+d    design condition
+
+av   average value
+
+e    electron
+
+eq   equilibrium
+
+g    generated
+
+i    ion, ionization o r input
+
+n    neutral particle
+
+P    photon o r plasma
+
+r    rejcvIuiiiiiaiiuii,       1.-1
+                           ~-iiura
+                                      -1.   L e - - - -
+                                   ~a L a L L b G
+                                 U A
+                                                          1- - ^ -
+                                                              vaL1
+                                                                     ---e--..+
+                                                                     uyp-*              --
+                                                                                 -nrr...-P
+                                                                                 y-I-
+
+
+
+
+S    seed
+
+x    axial rcrm-ponent
+
+Y    t r a n s v e r s e component
+
+cs   cesium
+
+Hg   mercury
+
+
+
+
+                                                     25
+                           X.   BIBLIOGRAPHY
+
+
+ 1.   c o o l , T. A. and ZukOSki, E. E. , !'Recombination Rates and Non-
+      equilibrium E l e c t r i c a l Conductivity i n a Seeded Plasma. 6th
+      Symposium on Engineering Aspects of MHD, Pittsburgh, Penna.
+      1965.
+
+ 2.   Sheindlin, A. , Batenin, V. and Asinovsky, E. , I'Experimental
+      Investigation of Non-equilibrium Ionization i n a Mixture of Potassium
+      and Argon. ' I International Symposium on MHD Power Generation,
+      Paris, 1964.
+
+ 3.   Golubev, V. S., Kasabov, G. A. and Kanakh, V, F. , "Study of a
+      Steady -St at e Argon- C e sium Pla sma with Non- equilibrium Con -
+      ductivity, ' I Teplofizika Vysokikh Temperatur, Vole 2, No. 4.
+
+ 4.   Ellington, H. I. , "Low Voltage Diffuse Discharge in Atmospheric
+      P r e s s u r e Helium and Argon Seeded with Small Amounts of Cesium,
+      Potassium and Sodium, AERE-M1616, July 1965.
+
+ 5.   Shair, F. H. , "Investigation of an MGD Power Generation Duct, I '
+      NASA CR-54124, January 1965.
+
+ 6.   Dugan, J. V. , !'Three-body Collisional Recombination of Cesium
+      Seed Ions and Electrons i n High Density Plasmas with Argon C a r r i e r
+      G a s o " NASA TN D-2004.
+
+ 7.   Bates, D. R. , Atomic and Molecular P r o c e s s e s .   Academic P r e s s ,
+      New York, p. 252, 1962.
+
+ 8.   Shair, F. H. and Sherman, A. , "Electron Beam Preionization i n a n
+      MHD Generator, 6th Symposium on Eng. Aspects of MHD, Pittsburgh,
+      1965.
+
+ 9.   Zauderer, B. , Effects Governing Magnetically Induced Ionization.
+      Proc. Int. Symposium on MHD E l e c t r i c a l Power Generation, Vol. 4,
+      P a r i s , 1964.
+
+10.   Crown, J. C. , "Supersonic Nozzle Design, I ' NACA TN 1651, June
+      1948.
+
+11.   Foa, J. V. , "Elements of Flight Propulsion,         John Wiley and Sons,
+      Inc., New York.
+
+12.   Ruptash, J. , "Supersonic Wind Tunnel - Theory, Design and P e r -
+      formance, '' U T U Review #5, June 1952.
+
+                                     26
+13.   Handbook of Supersonic Aerodynamics, NAVORD Report #1488,
+      Vole 2.
+
+14.   P e r s h , J. and Lee, R. E., "A Method f o r Calculating Turbulent
+      Boundary Layer Development in Super sonic and Hyper sonic Nozzles,
+      including t h e Effect of Heat Transfer, NAVORD Report $4200,
+      June 1956.
+
+15.   Shapiro, A. H., "The Dynamics and Thermodynamics of Compressible
+      Fluid Flow," Volumes I and 11. The Ronald P r e s s Company, New
+      York.
+
+16.   Schlichting, H. , "Boundary Layer Theory, ' I McGraw Hill Book
+      Company, Inc., New York.
+
+
+
+
+                                 27
+                              XI.   APPENDIX
+
+
+                          Supersonic Channel Design
+
+                                      by
+                                     R. Chin
+                                                                            0
+             In a supersonic V( = 1.5, MGD channel operating at T o = 1500 K with
+a channel height of 3 cm., the Hartmann number, which e x p r e s s e s the ratio
+of magnetic to viscous forces, is of the o r d e r one f o r a typical g a s conductivity
+of 1 mho/m. It is not c l e a r f r o m past experience whether enough power can
+be generated t o produce a Lorentz body force of sufficient strength t o affect
+seriously the following design calculations. In view of this uncertainty, it
+has, for the present, been entirely neglected. The design, however, in-
+c o r p o r a t e s compensation for viscous effects only. Thus the MGD channel
+r e s e m b l e s a conventional supersonic wind tunnel f o r which the design pro-
+cedure i s well established.
+
+       The total channel length consists of a nozzle, a constant Mach number
+section with two divergent walls to c o r r e c t f o r the viscous effects, and a
+diffuser where a fraction of the total p r e s s u r e is recovered (figure 15a).
+
+        In the nozzle, Foelsch's (10) analytic method was employed and t h e
+calculation was particularly simple. It consisted of constructing a suitable
+contour to convert a radial supersonic flow into a uniform parallel one through
+wave cancellation at the wall past t h e inflection point. A third o r d e r poly-
+nomial was used for the initial part of the contour up to the inflection point,
+and it was assumed that a radial flow existed in this region.
+
+        The viscous channel calculations w e r e performed by the method of
+influence coefficients (1 1) i n a one-dimensional supersonic flow. T h i s
+technique involves the viscous effect in terms of a section-averaged friction
+coefficient and the hydraulic radius of the c r o s s -section.
+
+       P r e s s u r e recovery was assumed t o b e accomplished by a normal
+shock standing at t h e entrance t o the diffuser and followed by a 6 O divergent
+subsonic diffuser.
+
+        In the ensuring calculations, t h e following assumptions w e r e made:
+
+             1)   perfect gas with y = 5 / 3
+             2)   one-dimensional, adiabatic flow
+             3)     x   body f o r c e neglected
+             4)   the exit p r e s s u r e , pe = 1 atm.
+             5)   T o = 1500°K
+             6)   standing normal shock at the entrance t o the diffuser.
+
+                                       28
+          In addition, the design had t o satisfy the following requirements:
+
+                1)    the generator channel length was t o be 40 cm. with a n e n t r y
+                      c r o s s section of 2 cm. x 3 cm. ,
+                2)    an estimated maximum argon mass flow rate f r o m t h e heater
+                      of 0.3 lb. / s e c . at T i = 1500°K,
+                3)    t h e electron beam equipment and microwave horns w e r e t o
+                      incorporate into the system.
+
+          A detailed analysis of the methods employed is as follows.                          F o r the
+nozzle, A is the wall inflection point as shown i n figure 15b. Foelsch
+a s s u m e d a r a d i a l flow t o exist t h e r e , so that AO, t h e a r c of a c i r c l e of
+radius rA around the apparent source, is an equipotential line along which
+t h e Mach number is constant. Thus,
+
+                0     = AO/rA
+                  A
+It can be shown by t h e method of c h a r a c t e r i s t i c s that
+
+
+
+
+             F o r a given Mach number, the s m a l l e r the expansion angle 8 (to
+                                                                                A
+a c e r t a i n limit, see below) the l e s s critical is the contour design in pro-
+ducing_ a uniform velority in the t e s t section; O n +he ether hand, a smaller
+expansion angie r e s u l t s in a ionger nozzie iength and an increased boundary
+l a y e r growth. It is suggested (12) that
+
+
+
+
+F r o m references 10, the terminal length x
+                                                           D
+                                                               - xA i s given by
+          x     - x. ; @ l t + - [ l -
+
+                yD
+                                                            A ~ / ~ *
+                                                            AD/A*
+                                                                  cos e A
+                                                                                 1
+                                                [*
+and
+
+
+          -
+           "A I
+           yD         AD
+                      A*
+                            %
+                             tan   eA
+                                                             (57.3) sin 8
+
+                                                                  9A
+                                                                         A
+                                                                                  - 1
+                                                                                        I
+Combining (1) and (2),
+
+
+
+                                                  29
+                                                                             1
+
+                                                     (57.3) sin 9 A        -1]
+                       4D
+                t                                                                      (3)
+                    -
+                    AD
+                    A
+                       t a n tIA
+                                                           eA
+
+
+where A       is the section a r e a at any point N and A* i s the t h r o a t area.
+          N
+             Thus, f o r any design Mach number, one can s e e that t h e length of t h e
+nozzle,                            .,9   Foelsch chose a cubic f o r the initial supersonic
+              xPDdepends upon
+portion since it satisfies the boundary conditions imposed on t h i s p a r t of
+the contour. However, the u s e of such an analytical curve does not e n s u r e
+r a d i a l flow at t h e inflection point, but i n practice, the resultant flow is
+generally satisfactorily c l o s e t o design.
+
+        Therefore, for y'g         y 5 yA
+
+              -
+              y z l - A
+               Y"
+                       X
+
+                        Y*   tan eA                 [I   -+(231                        (4)
+
+
+        Integrating along the c h a r a c t e r i s t i c in t h e region A D E ,
+                              c                                        1
+
+
+
+
+with
+
+
+
+
+                                             30
+        In addition, the Mach number distribution along A - D can be calculated
+by realizing that
+
+                V   - 8 = constant = V                                                 ( 7)
+                                         D
+since 8       = 0-
+          D
+Thus, the computation procedure may be summarized a s follows:
+
+        1)      F o r a given design 9?l , AD/A* can be obtained f r o m standard
+                compressible flow tables (12).
+                                                        1
+        2)      Chose a F )
+                            A
+                                for 1 / 4 Y       <8 < - u
+                                              d     A   3   d
+        3)      Select a s e r i e s of values for 6, 0 S 9 5 F)   and apply equations
+                                                                 A
+                (5)s (6), and (7).
+
+        4)      A s a check, compute the t e r m i n a l length f r o m equation (3) and
+                compare with the result obtained in steps (2) and (3).
+
+        A .rniigh estimate of the boundarv laver development (14) along the
+        _
+
+nozzle walls showed that 6 D * / Y was
+                                     ~ of t h e o r d e r of for a boundary
+layer thickness assumed t o be z e r o at the throat. Thus, the viscous effect
+in the nozzle section was neglected.
+
+        n.. t h e c ~ ~ t r z r . ;the
+                                    , channel design must be corrected for the viscous
+effect, e. g . , Shapiro (15) gives a maximum length-diameter ratio of 14 before
+choking for an initial Mach number of 1.5 in a constant a r e a duct with a
+friction factor f = 0.0025. The frictional effect i s computed in t e r m s of an
+a v e r a g e friction coefficient over a section length and the hydraulic radius
+of the cross-section.
+
+       Neglecting the 3 x   f o r c e and considering one dimensional, perfect
+gas flow, one can write the axial Mach number distribution as,
+
+
+
+
+              F o r a constant Mach number channel (dR = 0), with a rectangular
+c r o s s - s e c t i o n of constant width w and a variable height 4 , one obtains,
+
+                -
+                d 4.
+                ttw  = r n
+                           2
+                             ' dx
+                             -      W
+
+
+
+
+                                                  31
+On integrating
+                                    2
+              I n ( & +w) =   -
+                              y m
+                                w
+                                  cr x
+        F u r t h e r m o r e , the static p r e s s u r e distribution i s
+
+              p .C = constant
+
+Similarily, the stagnation p r e s s u r e i s also related t o the channel shape a s
+
+                C = constant
+              PO
+f o r a constant axial Mach number.
+
+        In addition, it can be shown that the static t e m p e r a t u r e and the flow
+velocity along the flow direction a r e constant.
+
+        To complete the calculation, one needs t o know C, , the average
+friction coefficient. It i s suggested by Schlichting (16) that no appreciable
+difference exists in friction factor for a fully developed subsonic and super -
+sonic flows.
+
+          A measurement of the representative friction factor was performed
+on the existing subsonic channel with a c r o s s - s e c t i o n of 1 cm. x 3 cm. It
+was found t o be .0067 approximately. Moreover, the flow was constricted
+by numerous voltage measuring pins which t r a v e r s e the channel width.
+Attributing 50% of the p r e s s u r e drop t o these protruding wires, and scaling
+f o r the difference in hydraulic radius of the c r o s s - s e c t i o n of the two channels,
+produced a friction coefficient of 0 . 0 0 3 . This approximate value was used
+throughout the calculation.
+
+       Incorporating the listed restrictions into the above calculation methods
+produced the following final design:
+
+              the transition length (connecting the exit of the nozzle t o the
+              entrance of the t e s t section) was 40 cm.
+                                                                                 0
+              the m a s s flow r a t e at a stagnation t e m p e r a t u r e of 1500 K was
+              approximately . 3 0 lb. /sec.
+
+              the channel wall shape was
+                            .5625 x             x
+                       = 4 e                        -2
+              where x i s measured f r o m the exit of t h e nozzle.
+
+              the nozzle shape i s shown i n t h e table of figure 15b.
+
+
+                                               32
+                        XII. ACKNOWLEDGMENT
+
+
+       M r . A. Ruess gave valuable assistance by obtaining and reducing
+the microwave interferometer data.
+
+         The part played by M r . G. Crolius and his staff of the machine shop
+i s gratefully acknowledged.
+
+       Thanks a r e due t o Mr. T. Shust and M r . S. F. D'Abbene for t h e i r
+essential help during the preparation and the running of the experiments.
+
+
+
+
+                                       33
+                                J
+                                W
+                                z
+                                          g
+                                z
+                                a
+                                I
+                                          5 a-
+                                0         In0
+                                          m
+                                          (0
+                                (3
+                                E         0    5
+                                z
+                                z         z -  Q)
+
+
+                                3         0    ".
+                                               0
+                                v)        2
+                                W
+                                          n    z
+                                E         z    fz   v)
+                                                    W
+                                3         W         J
+                                          I-   W    0
+                                I         v)
+                                          0    n    z
+                                3         z    m
+                                z
+                                W
+                                          3
+                                          I-
+                                               3    20
+                                               0
+I
+t
+                                0
+                                m
+                                >
+                                J
+                                          n
+                                          W
+                                               I
+                                               n
+                                                    W
+                                                    a
+
+2                               0
+                                I         2a   W
+                                               t-
+                                                    5z
+t
+                                E         0    a    W
+                                                    n
+u?                                        I    0
+cu                              E         I-   0    m
+                                In                  3
+?                               (0
+                                0
+                                          $
+                                          cu
+                                               0
+                                               0
+                                               m
+                                                    0
+                                                    I
+
+                                          F t
+                                                    t
+     A   A    A   :
+             v v v-
+                           G
+                           cd
+                                     r0
+                           t
+
+
+                                     I
+                                     I-
+                                     o
+                                     3
+
+
+
+
+                      II   1         O n
+    a
+
+t- 71            s
+                 0
+                 (u
+                 I
+        W        I-
+        -
+        0
+        a        -
+                 o
+                 3
+        c        J
+                      c,
+                      2
+                 W
+        I=       z    0
+                      h
+        1        z
+                 a
+                 I
+                      3
+                 0    a,
+                      a
+                 I-   0
+                 z    k
+                 za   c,
+                      V
+                      a,
+                      d
+                 z    W
+             i
+             0
+               o
+               0       I
+
+
+             -
+             z        h
+                      Ln
+
+             a        d
+
+             z
+                      3
+                      Y
+
+                      d
+                      a,
+4                      d
+                       P
+                      Au
+                       k
+                       0
+                      +I
+                       rd
+                       k
+                       a,
+
+                      u
+                       fi
+                       u
+                      .r(
+
+                       c
+                       0
+                       m
+                       k
+                       a,
+                       2
+                        a
+                       rn
+                       m
+                       a,
+                           3M
+                       .r(
+
+
+                       b
+                       4
+a,
+a
+0
+5cd
+u
+c
+aJ
+c,
+v)
+M
+c
+3
+b
+a
+a,
+c,
+cd
+
+$
+h
+d
+c,
+V
+0
+k
+ii
+                                              GAS TEMPERATURE =lOOO°K
+      IO                                      -Qen = 4.7 x 10-'7crn*
+
+
+51.
+\*
+ U
+
+
+
+
+      lo-'
+
+
+
+
+      Io-z      I   I     I     I     I       I   I    1    I    I    1   I     I     I
+                I   1.2   1.4   1.6   1.8    2    2.2 2.4   2.6 2.8   3   3.2   3.4   3.6
+                                          ELECTRON TEMP. OK x 10-3
+
+
+             Figure 5A.   Ratio of Non-equilibrium t o Equilibrium Seed
+                          Concentration V s . Electron T e m p e r a t u r e A s
+                          Function of Gas P r e s s u r e .
+                                        GAS PRESSURE = I ATM
+                                        - Qen = 8 x 10-17 C M 2
+                                        --- Qen = 4 . 7 ~ CM2
+I                           \
+
+
+
+
+ I     I     I     I    I       I   I   I   I        I     I    I   I   I    I   J
+.7    .9    1.1   1.3   1.5' 1.7    1.9 2.1 2.3 2.5 2.7 2.9 3.1         3.3 3.5 3.7
+
+                            ELECTRON TEMP       OK   x   IO-^
+
+
+F i g u r e 5B.   Ratio of Non-equilibrium to Equilibrium Seed
+                  Concentration vs. Electron Temperature As Function
+                  of Gas Temperature
+                          CONDITIONS AT
+            13             BEAM ENTRY
+           IO            P E 34 PSlA (STATIC)
+                         Ms 0.4
+                         U 300M/SEC.
+                         X& 0.29 %
+                         BEAM CURRENT 0. I MA
+                         AT 17,000 VOLTS
+
+
+
+
+            12
+           IO
+
+
+
+
+rr)
+
+ '€                       BEAM OFF MEASUREMENT
+  0                                              0
+      Q,
+  c
+
+                             SAHA EOUlLlBRlUM CURVE
+
+           Io"
+
+
+
+
+                                                                   MICROWAVE INTERFEROMETER
+                                                                    EASUREMENT 19 CM. DOWNSTREAM
+                                                                   OF ELECTRON BEAM PORT
+
+                                                 ELECTRON TEMPERATURE
+                                                 COMPATIBLE WITH SAHA
+                                                 EOUATION IN REF. 5
+
+
+
+
+                  1200                 1300                 1400                     STATIC * O K
+
+
+
+                Figure 6.     Electron Beam Enhancement of Electron Density
+                           CONDITIONS AT
+                            BEAM ENTRY
+    IC
+                     P P 34 PSlA (STATIC)
+                     M P 0.4
+                     U P 300 M/SEC
+                     XcsM0.29%
+                     BEAM CURRENT O.lmA
+                     AT 17,000 VOLTS
+
+
+
+
+                                                                  ASSUME0 CROSS SECTIONS
+                                                                  FOR u pCALCULATIONS
+E
+3
+r
+-
+E
+n
+b                   BEAM OFF MEASUREMENT
+                                            0
+                                                                 /
+                                                                    /
+
+
+
+    IO                     SAHA EQUILIBRIUM CURVE
+
+
+
+
+                                                           MICROWAVE INTERFEROMETER
+                                                                   MENTS 19 CM. DOWNSTREAM
+                                                           OF ELECTRON BEAM PORT
+
+
+
+
+    IC                              I                I                                   *
+         I200                     I300              1400                         r ° K
+                                                                        STATIC
+
+
+          F i g u r e 7.     Electron B e a m Enhancement of Conductivity
+                                     Te    ELECTRON TEMPERATURE
+                                     Tg     GAS TEMPERATURE
+                                               ne0 = 8.18 x 1012/CM3
+         I8O0i                       ---- "eo = 1.38 x l 0 l 2 / C M 3
+         I
+
+
+         I
+
+x
+OI       I
+w
+a
+3
+$    1
+w
+n
+z
+w
+k        I 300                                        /
+
+
+
+                     I     II   I I   I  I I I I
+                 0   2 4 6 8 IO 12 14 16 18 20
+                      DISTANCE DOWN CHANNEL-CM
+
+
+
+             Figure 8A.   Electron T e m p e r a t u r e Variation Along Channel
+                                   EXPERIMENTAL POINT
+
+
+
+       -
+                                                            A7
+                  ACTUAL ELECTRON DENSITY (THEORY 1
+
+
+
+
+                     ELECTRON DENSITY IN SAHA EQUILIBRIUM AT Te
+
+
+
+
+         .
+             I   I    I   I    I  I   I    I            I    I
+     0       2   4    6   8   IO 12 14 16              18   20
+                  DISTANCE DOWN CHANNEL -CM
+
+
+
+F i g u r e 8B. Electron Density Decay Along Channel F o r T g = 1273OK
+      IO 13
+
+
+
+
+Ir)
+ z
+ 0
+ \
+ v,
+ W
+ J                                   ACTUAL ELECTRON DENSITY (THEORY)
+ -
+ 0
+ I-
+ a
+ zI
+ >
+ k    1o12
+ v,                                        ELECTRON DENSITY IN SAHA
+ z
+ W                                         EQUILIBRIUM AT Te
+ n
+ z
+ 0
+ a
+ I-
+ YJ
+ W
+
+
+
+
+      IO'   '
+                        I       I     I    I      I     I     I        I    I      I
+                0       2       4     6    8     10    12    14       16   18     20
+                                 DISTANCE DOWN CHANNEL CM         -
+      F i g u r e 8C.       Electron Density Decay Along Channel F o r T       = 1405OK
+                                                                           g
+    r"
+    1v
+         5
+         .r(
+
+
+         3
+
+
+         .r(
+
+         k
+         a,
+         a
+         4
+         a,
+         M
+         ld
+         c,
+         r(
+         0
+
+
+
+
+     \
+
+
+
+
+I
+                 W
+                 n
+                 0
+                 I
+                 I-
+                 a
+                 0
+                 0
+                 0
+                 m
+                 0
+                 W             v1
+                 2             a
+                 W
+                 I
+                 4
+
+
+                 W
+                 5
+                 l-
+                 o             c
+                 a             M
+                 a
+                 I-
+                 t
+                 2
+                  n            3-
+                 v)            a
+                               c
+                               rd
+                 Q
+
+
+
+
+                               Q)
+                               rn
+                                E5
+                               .d
+
+
+
+
+9            Y
+cu
+     (9
+             -   aq
+                 0
+                      Q.
+                      0
+                           0
+
+      dWV-   I
+                                       ~~
+
+
+
+
+                            1. Low C u r r e n t Density
+
+
+
+
+                            2 . High C u r r e n t Density
+
+F i g u r e 11. Typical Single F r a m e Cine P h o t o g r a p h s of Glow D i s c h a r g e
+                i n Cesium-Seeded Argon. T n ~ 1 3 0 0deg. K, X c r O . 370
+               cn
+               3
+               0
+               >
+               z
+               >
+
+
+
+
+0
+        ,cu-
+W
+cn
+\
+E
+0       - a
+0
+U
+
+z       - u
+    >
+    0
+3
+                  To   -   1300° K , p N 2 0 psia
+                  UNHEATED CATHODES,ZERO MAGNETIC FIELD
+                  FLAGGED SYMBOLS DENOTE                    DECREASING CURRENT
+    4 .O         A 0 a O CATHODE                            MERCURY, X H~~ 0.75%.
+
+                 o 2v. THORIATED TUNGSTEN CATHODE J u a v " 4 0 0 m / ~ E c .
+                                                                               SUBSONIC TESTS
+    3.6                MOLYBDENUM CATHODES,                                        IN
+                                                            9 uov" 180 m ISEC} SUPERSON~C
+                                                 XCs-   1.0%
+                                                                               CHANNEL
+
+
+    3.2
+
+
+    2.0
+
+
+    34
+
+
+* 2.0
+a
+H
+a
+                                                    X
+     1.6
+2
+w
+
+     I .2
+                                                        X
+
+
+
+      .0                                           X
+
+
+
+
+      .4
+
+
+      0
+       0            IO        20
+                                 V   -   30
+                                         VOLTS
+                                                 40         50       60         70
+
+
+
+
+            F i g u r e 13. Applied Voltage vs. C u r r e n t for Different
+                            Seed and Cathode Materials
+..
+c,
+w
+a,
+
+
+ c
+ 0
+.,-I
+c,
+ V
+ a,
+m
+ E
+ Id
+ a,
+ k
+c,
+ v)
+ c
+                                                                 -
+                                                                 1
+                                                                   t-
+
+
+
+
+      NOZZLE --w*
+                     *          TRANSITION
+                                  LENGTH
+                                   4 0 cm
+                                              -1
+                                              c -
+
+
+
+
+                                             M HD
+                                                      TEST
+                                                     SECTION
+                                                      40 cm
+
+                                                                   --
+                                                                   b
+
+
+
+
+                                                                           DIFFUSER   1
+                     a)        ASSEMBLY OF CHANNEL COMPONENTS
+
+
+
+
+  x    I 0 I .281 . 5 6 2 I .843 11.124 11.40511.84612.34812.91313.5391
+  Y    I .a75 I .a79 .888 I .902I . S I 8 1 .938f 3631 .Sa61 ,9981!.GOO/
+                                    tY
+
+ t                                                                                    YD
+
+
+
+
+APPARANT
+SOURCE
+
+
+
+
+                          b)    NOZZLE
+
+
+
+                    F i g u r e 15.   Supersonic Channel Design
+
+
+
+                                                                                           .
+                                      DISTRIBUTION LIST F O R
+                                       CONTRACT NAS3 -6260
+
+
+
+NASA H e a d q u a r t e r s                                   NASA - L ewi s R e s e a r ch C e n t e r
+F O B - 10B                                                    21 000 B r o o k p a r k Road
+600 Independence Avenue, S. W.                                 Cleveland, Ohio 441 35
+Washington, D. C. 20546                                        Attention: John H. D e F o r d (1)
+Attention: RNT/ J a m e s L a z a r ( 2 )                                     J. H. C h i l d s (1)
+            R P E / D r . H. H a r r i s o n (1)                              N. J. S t e v e n s ( 4 )
+            R N P / D r . F. Schulman (2)                                     B e r n a r d L u b a r s k y (2)
+            R N P / J. Lynch (1)                                              L. D. Nichols (1)
+            R N P / D r . K. H. T h o m ( 1 )                                 W. E. M o e c k e l ( 1 )
+                                                                              H e n r y Sloan (1)
+Office of Naval R e s e a r c h                                               R e p o r t s C o n t r o l Office (1)
+P o w e r B r a n c h (Code 429)                                              L i b r a r y (2)
+Washington, D. C. 20025                                                       Technology Utilization Office (1)
+Attention: D r . Ralph R o b e r t s (1)
+                 John Satkowski/Rm. 2509 (1)                   A e r o n a u t i c a l S y s t e m s Division
+                                                               Flight Accessories Laboratory
+USAF Office of Scientific R e s e a r c h                      W r i g h t - P a t t e r s o n AFB, Ohio
+Washington, D. C. 20025                                        Attention: R o b e r t B a r t h e l e m y A P I E - 2   (1)
+Attention: Dr. M. Slawsky (1)
+
+AVCO/Everett R e s e a r c h Laboratory                        E l e c t r i c a l Engineering Department
+2385 R e v e r e B e a c h P a r k w a y                       M a s s a c h u s e t t s Institute of Technology
+Everett, Massachusetts                                         C a m b r i d g e 39, Mas s a c h u s e t t s
+Attention: T. B r o g a n (1)                                  Attention: Dr. J. K e r r e b r o c k (1)
+                                                                                   P r o f . H. H. Woodson(1)
+
+MHD R e s e a r c h Inc.                                       TRW Inc. ,
+P. 0. Box 1815                                                 TAPCO Group
+Newport Beach, C a l i f o r n i a                             23555 E u c l i d Avenue
+Attention: D r . V. H. B l a c k m a n ( 1                     C l e v e l a n d , Ohio 441 17
+                                                               Attention: W. C. D a v i d ( 1 )
+
+Radio C o r p o r a t i o n of A m e r i c a                   Republic Aviation C o r p o r a t i o n
+A s t r o E l e c t r o n i c s Division                       P l a s m a Propulsion Laboratory
+P r i n c e t o n , New J e r s e y                            F a r m i n g d a l e , Long I s l a n d
+Attention: W. H. H e n d e l ( 1 )                             New York 11735 (1)
+
+M e l p a r , Inc.                                             Westinghouse R & D C e n t e r
+3000 Arlington Blvd.                                           B e u l a h Rd. , C h u r c h i l l B o r o
+Falls Church, Virginia                                         Pittsburgh, Pennsylvania
+Attention: D r . R o g e r C. J o n e s (1)                    Attention: Dr. E. V. S o m e r s (1)
+
+Westinghouse A s t r o n u c l e a r L a b o r a t o r i e s   G e n e r a l A t o m i c Division
+P i t t s b u r g h 34, P e n n s y l v a n i a                General Dynamics Corporation
+Attention: M r . H. W. Szymanowski (1)                         P. 0. Box 608
+                    Electric Propulsion Laboratory             S a n Diego, C a l i f o r n i a
+                                                               Attention: Dr. M. 0. S t e r n ( 1 )
+
+Giannini Scientific C o r p o r a t i o n                      Martin- Marietta Corporation
+3839 South Main S t r e e t                                    B a l t i m o r e , M a r y l a n d 21203
+Santa Ana, C a l i f o r n i a                                 Attention: Dr. B i e n e r t (1)
+Attention: Phillip J. Wyatt (1)
+
+Aerospace Corporation                                          Hughes R e s e a r c h L a b o r a t o r i e s
+P. 0. Box 95085                                                Plasma P h y s i c s D e p a r t m e n t
+L o s Angeles, C a l i f o r n i a 90045                       301 1 Malibu Canyon R o a d
+Attention: L i b r a r y / T e c h n i c a l Documents         Malibu, C a l i f o r n i a
+            Group (1)                                          Attention: Mr. R. C. Knechtli (1)
+Stanford University                                A m e r i c a n - Standar d
+M. E. D e p a r t m e n t                          R e s e a r c h Division
+Stanford, C a l i f o r n i a                      P. 0. Box 2003
+Attention: Dr. R. H. E u s t i s (1)               New B r u n s w i c k , New J e r s e y
+                                                   Attention: E. O k r e s s (1)
+
+J e t Propulsion Laboratory                        NASA Scientific & T e c h n i c a l Information F a c i l i t y
+4800 Oak Grove D r i v e                           Bethesda, Maryland, Box 5700
+P a s a d e n a , C a l i f o r n i a 91 103       Attention : RQT-2448/NASA R e p r e s e n t a t i v e (6)
+Attention: D. G. E l l i o t t (1)
+
+AFWL                                               The G a r r e t t Corporation
+K i r t l a n d AFB, New Mexico                    A i r R e s e a r c h Manufacturing Division of Phoenix
+Attention: WLPC/Capt. C. F. E l l i s (1)          402 South 36th S t r e e t
+                                                   Phoenix, A r i z o n a (1)
+
+Mr. T h o m a s F. S t r a t t o n                 CASE Institute of Technology
+University of C a l i f o r n i a                  Engineering Division
+L o s A l a m o s Scientific L a b o r a t o r y   University C i r c l e
+P. 0. Box 1663                                     Cleveland, Ohio 441 06
+L o s Alamos, New Mexico 87544 (1)                 Attention: Dr. E l i Reshotko (1)
+

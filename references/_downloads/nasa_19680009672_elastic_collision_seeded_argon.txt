@@ -1,0 +1,948 @@
+c
+
+
+
+
+    NASA TECHNICAL                                            NASA TM X- 52190
+         MEMORANDUM
+
+
+    0
+    2
+    cv
+    n
+    A
+    z
+    c
+    a
+    v)
+
+    z
+
+                          m
+                          Ln
+                          0
+                          t
+
+
+    SOLUTION OF THE BOLTZMANN AND RATE EQUATIONS
+    FOR THE ELECTRON DISTRIBUTION FUNCTION AND
+    STATE POPULATIONS IN NONEQUILIBRIUM MHD PLASMAS
+    by J. V. Dugan, Jr., F. A. Lyman, and L. U. Albers
+    Lewis Research Center
+    Cleveland, Ohio, U.S. A.
+
+    TECHNICAL PAPER proposed for presentation at
+    International Symposium on Magnetohydrodynamic
+    Electrical Power Generation sponsored by International
+    Atomic Energy Agency and European Nuclear Energy Agency
+    Salzburg, Austria, July 4-8, 1966
+
+
+
+    NATIONAL AERONAUTICS AND SPACE ADMINISTRATION. -WASHINGTON,      D.C.   1966
+SOLUTION O F THE BOLTZMANN AND RATE EQUATIONS FOR
+
+  THE ELECTRON DISTRJBUTION FUNCTION AND STATE
+
+    POPULATIONS IN NONEQUILIBRIUM MHD PLAShUS
+
+   by J. V. Dugan, Jr., F. A. Lyman, and L. U. Albers
+
+                 Lewis Research Center
+                 Cleveland, Ohio, U. S. A.
+
+
+
+
+      TECHNICAL PAPER proposed for presentation at
+
+ International Symposium on Magnetohydrodynamic Electrical
+      Power Generation sponsored by International Atomic
+     Energy Agency and European Nuclear Energy Agency
+               Salzburg, Austria, July 4-8, 1966
+
+ NATIONAL AERONAUTICS AND SPACE ADMINISTRATION
+                                                                                             SM-741191
+
+
+
+
+ SOLUTION OF THE BOLTZMANN AND RATE EQUATIONS FOR THE EL;ECTRON DISTRIBUTION
+
+           FUNCTION AND STATE POWLATIONS I N NONEQUILIBRIUM MHD PLASMAS
+
+                      J. V . Dugan, Jr., F. A. Lyman, and L. U. Albers
+                                   Lewis Research Center
+                       National Aeronautics and Space Administration
+                                  Cleveland, Ohio, U.S.A.
+
+
+
+
+        Many c a l c u l a t i o n s of t h e e l e c t r i c a l conductivity of nonequilibrium
+MHD plasmas have been based on a simple two-temperature theory. This theory
+assumes that ( a ) t h e e l e c t r o n number d e n s i t y has t h e equilibrium (Saha)
+value corresponding t o t h e e l e c t r o n temperature Te, and ( b ) t h e f r e e e l e c -
+t r o n energy d i s t r i b u t i o n f u n c t i o n f ( u ) i s maxwellian.
+
+          The v a l i d i t y of assumption ( a ) has been s t u d i e d by s e v e r a l authors
+who, however, used assumption ( b ) i n t h e i r analyses. Assumption ( b ) has
+been less thoroughly s t u d i e d . Because both e x c i t a t i o n and i o n i z a t i o n r a t e s
+a r e s e n s i t i v e t o f ( u ) and bound s t a t e s may be out of equilibrium due t o
+r a d i a t i v e t r a n s i t i o n s , it i s u n r e a l i s t i c t o t r e a t t h e s e two assumptions
+s e p a r a t e l y . This paper r e p o r t s preliminary r e s u l t s of a n i n v e s t i g a t i o n
+undertaken t o e s t a b l i s h t h e range of v a l i d i t y of t h e two-temperature theory
+f o r MHD plasmas by solving the Boltzmann equation f o r f ( u ) and t h e steady-
+s t a t e r a t e equations f o r t h e bound e l e c t r o n i c s t a t e s . The problem w a s
+a t t a c k e d i n t h e following t h r e e stages.
+
+          F i r s t , f ( u ) w a s c a l c u l a t e d from a Boltzmann equation including only
+t h e e l e c t r i c f i e l d and t h e e l a s t i c c o l l i s i o n terms. The r e s u l t s showed
+that f o r t y p i c a l MHD systems ( e . g . , A r + K a t 1 atm) e l e c t r o n - e l e c t r o n
+c o l l i s i o n s drkve f ( u ) t o maxwellian.
+
+          Second, t h e s o l u t i o n of t h e r a t e equations f o r a maxwellian f ( u ) ,
+u s i n g a f i v e - l e v e l cesium atomic model, demonstrated t h e importance of
+r a d i a t i v e t r a n s i t i o n s i n determining t h e bound-state populations and
+magnitudes of t h e i n e l a s t i c c o l l i s i o n terms. The model atom c o n s i s t e d of
+f o u r d i s c r e t e s t a t e s , ( 6 s ; 6P,P'; 5D,D'; 7s) and a lumped state, which was
+a s s i g n e d various binding energies and degeneracies. C r i t e r i a f o r se-
+l e c t i n g t h e l a t t e r were based on the maximum s t a b l e o r b i t r a d i u s t h a t
+would be l i k e l y f o r t h e plasmas of i n t e r e s t . Both t h e c l a s s i c a l Bohr-
+F   Thomson and Gryzinski c r o s s s e c t i o n s were used t o c a l c u l a t e t h e r a t e coef-
+I
+    f i c i e n t s and c o l l i s i o n terms f o r e x c i t a t i o n , d e e x c i t a t i o n , i o n i z a t i o n , and
+    three-body capture. Many c a l c u l a t i o n s were a l s o performed u s i n g r e c e n t
+    experimental data f o r t h e 6s 4 6P,P' e x c i t a t i o n . Known values of radia-
+    t i v e p r o b a b i l i t i e s were used f o r t r a n s i t i o n s between d i s c r e t e s t a t e s .
+
+              F i n a l l y , t h e simultaneous s o l u t i o n of t h e Boltzmann equation ( including
+    a l l r e l e v a n t e l a s t i c and i n e l a s t i c c o l l i s i o n terms) and t h e bound-state r a t e
+    equations was attempted by an i t e r a t i v e technique. Plasmas of various
+    o p t i c a l thicknesses t o resonance r a d i a t i o n were considered. I n t h e extreme
+    case of a gas t r a n s p a r e n t t o a l l l i n e r a d i a t i o n , t h e departure of t h e s t a t e
+    populations from equilibrium causes a l a r g e r e d u c t i o n i n t h e f r e e e l e c t r o n
+    number density, e s p e c i a l l y a t low values of Te. Because e x c i t a t i o n c o l l i -
+    s i o n s a r e not balanced by s u p e r e l a s t i c c o l l i s i o n s i n t h i s case, they cause
+    f ( u ) t o depart s i g n i f i c a n k l y f r o m maxwellian a t high energies. Numerical
+    d i f f i c u l t y w a s encountered i n t h e i t e r a t i v e scheme i n t h i s c a s e . The
+    e f f e c t of i n e l a s t i c c o l l i s i o n s is much l e s s pronounced f o r plasmas that
+    a r e o p t i c a l l y t h i c k t o resonance r a d i a t i o n , and it disappears a l t o g e t h e r
+    for a plasma o p t i c a l l y t h i c k t o a l l r a d i a t i o n . The d i s t r i b u t i o n f u n c t i o n
+    w a s c a l c u l a t e d f o r a range of e l e c t r i c f i e l d s and gas d e n s i t i e s f o r t h e
+    case where resonance r a d i a t i o n is completely trapped, the most r e a l i s t i c
+    s i t u a t i o n f o r l a r g e MHD g e n e r a t o r s . The dependence of t h e e l e c t r i c a l con-
+    d u c t i v i t y on t h e c u r r e n t d e n s i t y was a l s o c a l c u l a t e d , and where p o s s i b l e
+    c o m p r e d w i t h experimental r e s u l t s .
+ SOLUTION OF THE BOLTZMANN AND RATE EQUATIONS FOR THE ELECTRON DISTRIBUTION
+
+           FlTNCTION AND STATE POPULATIONS I N NONEQUILIBRIUM MHD PLASMAS
+
+                     J. V . Dugan, Jr., F. A . Lyman, and L. U. Albers
+
+                                   L e w i s Research Center
+                       National Aeronautics and Space Administration
+                                  Cleveland, Ohio, U.S.A.
+
+
+INTRODUCTION
+
+         A fundamental problem of gas discharge theory i s t h e p r e d i c t i o n of t h e
+f r e e e l e c t r o n number d e n s i t y and v e l o c i t y d i s t r i b u t i o n function, which
+t o g e t h e r determine t h e e l e c t r i c a l p r o p e r t i e s of t h e gas. I n t h e case of
+c e r t a i n low-voltage atmospheric-pressure glow discharges i n a l k a l i - s e e d e d
+noble gases, which are being s t u d i e d f o r nonequilibrium magnetohydro-
+dynamic (MHD) power generation, t h i s problem i s f o r t u n a t e l y somewhat
+a l l e v i a t e d . For such discharges, a simple two-temperature conduction
+theory due t o Kerrebrock [l] has shown reasonable agreement w i t h experi-
+ment a t s u f f i c i e n t l y high c u r r e n t d e n s i t i e s (above lo4 amps-m-2).
+Kerrebrock's theory assumes t h a t ( a ) t h e f r e e e l e c t r o n energy d i s t r i b u -
+t i o n f ( u ) i s maxwellian, w i t h a temperature Te t h a t may considerably
+exceed t h e gas temperature Tg, and ( b ) t h e f r e e e l e c t r o n number d e n s i t y
+N e i s given by t h e Saha equation applied a t temperature Tee
+         There remains, however, t h e question of t h e range of v a l i d i t y of t h e
+two-temperature theory. Kerrebrock and Hoffman [ 2 1 a t t r i b u t e d t h e l a c k
+of agreement between theory and experiment a t low c u r r e n t d e n s i t i e s
+(below 3 ~ 1 0      amps-me2
+                      ~          ) t o t h e fact that e l e c t r o n - e l e c t r o n c o l l i s i o n s
+could n o t preserve a maxwellian v e l o c i t y d i s t r i b u t i o n i n t h e presence of
+e l a s t i c electron-atom c o l l i s i o n s , due t o t h e low value of N e . They
+supported t h e i r hypothesis by estimating average frequencies of energy
+t r a n s f e r through t h e s e c o l l i s i o n s .
+
+          Archambault and Cuenca [31, on t h e o t h e r hand, concluded that t h e
+d i s t r i b u t i o n function would be maxwellian under MHD conditions. This con-
+c l u s i o n w a s based on a d e t a i l e d comparison of t h e various e l a s t i c and in-
+e l a s t i c c o l l i s i o n frequencies i n an argon-cesium plasma, u n f o r t u n a t e l y f o r
+only one s e t of values of Ne, Te, Tg, and argon and cesium number densi-
+t i e s . The a u t h r s of [3] r a i s e d doubts concerning t h e v a l i d i t y of t h e
+Saha equation, however - a p o s i t i o n which i s c o n t r a r y t o t h e conclusions
+of an e a r l i e r study by Ben Daniel and Tamor [41.
+
+         The p r e s e n t work a t t e m p t s t o a s c e r t a i n t h e v a l i d i t y of t h e two-
+temperature theory f o r alkali-seeded argon MHD plasmas by c a l c u l a t i n g f ( u )
+and Ne s e l f - c o n s i s t e n t l y from the Boltzmnn and r a t e equations. Such a
+s e u - c o n s i s t e n t c a l c u l a t i o n i s n e c e s s i t a t e d by t h e f a c t that f ( u ) depends
+s t r o n g l y on Ne 151, which i n t u r n i s very s e n s i t i v e t o t h e behavior of
+f ( u ) above t h e e x c i t a t i o n and i o n i z a t i o n thresholds [ 6 ] .
+
+
+THEORY
+
+E l e c t r o n Boltzmann equation
+
+      The energy d i s t r i b u t i o n function1 f ( u ) i s defined such t h a t
+ul/'f(u)du   i s t h e f r a c t i o n of e l e c t r o n s having e n e r g i e s i n t h e range from
+u t o u + du e l e c t r o n v o l t s ; hence,
+
+
+               f u1l2f(u)du = 1
+                 0
+
+       For a s t e a d y - s t a t e discharge i n a uniform, p a r t i a l l y ionized gas flow-
+i n g through crossed e l e c t r i c and magnetic f i e l d s , t h e a p p r o p r i a t e equation
+f o r f ( u ) is2 [5,7,81
+
+
+
+
+                                  h=a, i
+
+
+
+
+        +
+                   m (u){g[z
+            z Neu Qee    du 3
+
+                     (iii)
+                              f                 ( ~ ' ) ~ / ~ f ( u ' ) +d $
+                                                                           u u' 3 l 2   f f(u')du'
+                                                                                        U
+                                                                                             O3
+
+                                                                                                        3
+                                                   + f(u)      /"
+                                                               0
+
+
+
+
+                                       7
+         Equation ( 2 ) i s some imes c a l l e d t h e g a i n equation, because when
+m u l t i p l i e d by Ne(2e/me)l 2 i t s terms give t h e r a t e s ( i n m-3-sec-1)
+a t which e l e c t r o n s a r e added t o ( o r l o s t from) t h e energy range u t o                      03.
+
+The tei'ius are as foiiows :
+
+        ( i )Energy gain from t h e e f f e c t i v e e l e c t r i c f i e l d         3*
+
+        l S t r i c t l y speaking, ul/'f ( u ) is t h e energy d i s t r i b u t i o n function,
+b u t t h e above terminology w i l l be used f o r b r e v i t y .
+        zSymbols a r e defined i n appendix A.
+
+
+
+                                                           2
+          ( i i )Energy loss t o atoms and ions i n e l a s t i c c o l l i s i o n s
+
+        ( iii) Energy exchange i n electron-electron c o l l i s i o n s
+
+          ( i v ) Energy gain ( l o s s ) i n i n e l a s t i c ( i n c l u d i n g s u p e r e l a s t i c )
+                    c o l l i s i o n s with atoms and ions
+
+         The i n e l a s t i c gain term I ( f ) i s t h e sum of the following expressions
+obtained by i n t e g r a t i n g t h e i n e l a s t i c c o l l i s i o n terms given i n [8,91 from
+u t o 03, making simple transformations, and using t h e microscopic
+r e v e r s i b i l i t y r e l a t i o n between e x c i t a t i o n and d e e x c i t a t i o n c r o s s s e c t i o n s
+(Klein-Rosseland r e l a t i o n ) and between i o n i z a t i o n and three-body capture
+c r o s s s e c t i o n s [91:
+
+        ( a ) E x c i t a t i o n and deexcitation by e l e c t r o n impact
+
+
+
+
+         (b) I o n i z a t i o n by e l e c t r o n impact
+
+
+
+
+                                                                    +     - - EL,u') du"
+                                                                        UP(,'          U"
+                                                                                                         3
+         ( c ) Three-body ion-electron-electron capture3
+
+
+
+
+                                                         u'-EL
+
+                                                                                                     c
+                                                                    f ( u l ' ) f ( u 1 - ut' - E ~ u) p ( u l t , u l )
+
+
+                                                                  +     UP(,'
+                                                                          - - EL,u') du"
+                                                                                      U"
+
+
+        3Three-body c o l l i s i o n s i n which t h e t h i r d body i s an atom or ion w i l l
+                                                                                                       3j                  (5)
+
+
+ n o t be considered.
+                                                                3
+          ( d ) Radiative capture4
+
+
+
+
+         When      u = 0, t h e excitation-deexcitation term ( 3 ) vanishes because
+Q g K ( u )= 0        for      u 5 L X ~ ~ ,while
+                                             ~ ,  the terms ( 4 ) , ( 5 ) , and ( 6 ) , when
+m u l t i p l i e d by Ne( 2e/m,)1/2, become t h e t o t a l i o n i z a t i o n and capture rates.
+Also, when t h e bound and f r e e e l e c t r o n s a r e i n equilibrium, t h e term ( 3 )
+vanishes while ( 4 ) and ( 5 ) cancel.
+
+
+Rate equations f o r bound e l e c t r o n s
+
+         The r a t e of change of t h e number of bound e l e c t r o n s i n l e v e l           L        is
+
+
+N       = -NL(Nx        +A ) + N                                         + N N.(K;'        + pJ                 (7)
+    L            e L           L
+
+
+For t h e s t e a d y - s t a t e problem t r e a t e d herein, NL = 0.           Equation ( 7 ) together
+with t h e normalization condition
+
+                 Ni +     1L
+                                   NL = N:
+
+
+and the condition of charge n e u t r a l i t y (Ne = N i ) serve t o determine
+                                                                                                      Ne
+and NL f o r a s p e c i f i e d f ( u ) and i n i t i a l seed number d e n s i t y N g .
+
+E l e c t r i c a l conductivity
+
+         The e l e c t r o n c u r r e n t d e n s i t y   7 i n t h e plane perpendicular t o B      -+
+
+is [ 7 ]
+
+
+
+where
+
+
+
+
+a r e t h e perpendicular and H a l l conductivities, r e s p e c t i v e l y          .
+                                                                              ~
+
+
+
+
+         %e      inverse process t o             ( 1   ), photoionization, i s ignored.
+
+
+
+
+                                                             4
+E l e c t r o n energy equation
+                                                            1
+         The e l e c t r o n energy b a l m e equatioh may be derived from equation ( 2 )
+by multiplying by Nee(2e/me)’P2                and i n t e g r a t i n g from u = 0 t o 03.
+A f t e r considerable transformation, the r e s u l t may be w r i t t e n as
+
+
+
+
+                  L             h=a, i
+
+
+
+
+Equation ( 1 2 ) can, of course, a l s o be derived from elemen%ary considera-
+t i o n s . By multiplying equation ( 7 ) by EL and summing over a l l bound
+l e v e l s L, one can show t h a t t h e i n e l a s t i c terms i n ( 1 2 ) , ( t h e l a s t t h r e e
+on t h e r i g h t ) a r e e q u a l t o t h e power loss per u n i t volume through l i n e and
+continuum r a d i a t i o n ; t h a t i s ,
+
+
+WR =
+       c
+       L, K<L
+                e m    ~    ,    ~+ NN
+                                     eN1. ~
+                                          e e rA
+                                               ’2 ~   1lwL
+                                                             ~
+                                                                 ”
+                                                                     (EL+u)uf(u)<-CaP(u)du
+
+
+                                                                                                        (13)
+        For a maxwellian f ( u ) , t h e e l a s t i c l o s s term ( t h e f i r s t on t h e r i g h t
+of ( 1 2 ) ) i s p r o p o r t i o n a l t o t h e temperature d i f f e r e n c e Te - T , and equa-
+t i o n ( 1 2 ) provides a means of c a l c u l a t i n g Tee If f ( u ) i s nof maxwellian,
+t h e temperature can be determined from t h e r e l a t i o n
+
+
+
+
+CALCULATIONS AND RESULTS
+
+Computational procedure
+
+          An i t e r a t i v e technique w a s employed t o s o l v e equations ( 2 ) and ( 7 ) .
+The c o e f f i c i e n t s of t h e r a t e equations ( 7 ) a r e f i r s t c a l c u l a t e d f o r a n
+assumed f ( u ) ( u s u a l l y a maxwellianwith a guessed T e ) . Solution of t h e s e
+equations y i e l d s Ne and NL. When t h e s e number d e n s i t i e s and t h e
+assumed f ( u ) a r e used, t h e i n e l a s t i c term I ( f ) and t h e i n t e g r a l s i n t h e
+e l e c t r o n - e l e c t r o n c o l l i s i o n term a r e t h e n c a l c u l a b l e . This reduces t h e
+equation f o r t h e next approximation t o a f i r s t - o r d e r l i n e a r d i f f e r e n t i a l
+equation i n f ( u ) , which i s i n t e g r a t e d numerically. The s o l u t i o n i s then
+normalized t o s a t i s f y equation (1)and an e l e c t r o n temperature c a l c u l a t e d
+from equation ( 1 4 ) . When f ( u ) i s very c l o s e t o maxwellian, equation ( 1 4 )
+becomes an i d e n t i t y , and it i s necessary t o determine Te by s a t i s f y i n g
+
+
+
+                                                        5
+t h e energy equation ( 1 2 ) . Otherwise, t h e process i s repeated u n t i l con-
+vergence is obtained i n f ( u ) , Te, and Ne.
+
+
+Results of e l a s t i c - c o l l i s i o n problem
+
+          I n i t i a l c a l c u l a t i o n s were concerned with determining f ( u ) from equa-
+t i o n ( Z ) , n e g l e c t i n g t h e i n e l a s t i c term I(f )     .
+                                                                       These c a l c u l a t i o n s were
+performed f o r argon seeded with potassium and cesium under t h e conditions
+of Kerrebrock and Hoffman's experiment, t o see whether a non-maxwellian
+d i s t r i b u t i o n would be obtained a t low c u r r e n t d e n s i t i e s , as hypothesized
+i n [ 2 ] . For t h e s e c a l c u l a t i o n s there w a s no magnetic f i e l d , and Ne was
+assumed t o be given by t h e Saha equation. E l a s t i c c r o s s s e c t i o n s f o r
+argon, potassium, and cesium were taken from [lo, 11, 121, r e s p e c t i v e l y .
+
+          It w a s found t h a t f ( u ) i s maxwellian over t h e e n t i r e range of c u r r e n t
+d e n s i t i e s measured i n [ 2 ]                 The computed e l e c t r i c a l c o n d u c t i v i t y i s
+p l o t t e d as a f u n c t i o n of c u r r e n t density i n f i g u r e 1 along with Kerrebrock
+and Hoffman's data. The lowest c a l c u l a t e d value of Ne w a s 3X1Ol8 m-3, as
+noted on the f i g u r e , whereas Kerrebrock and Hoffman estimated t h a t
+e l e c t r o n - e l e c t r o n c o l l i s i o n s could not maintain a maxwellian f ( u ) i f Ne
+were below 3XlQE9 m-30 Neither t h e present theory nor Kerrebrock's theory
+shows t h e d i p i n conductivity observed a t lo3 amp-m'2.
+
+
+Cesium atomic model
+
+         For i n v e s t i g a t i o n of t h e e f f e c t of i n e l a s t i c c o l l i s i o n s , a f i v e - l e v e l
+model cesium atom, which contained three d i s c r e t e e x c i t e d s t a t e s , w a s
+chosen. These s t a t e s (6P, PI; 5D, D'; 7 s ) were t r e a t e d a s s i n g l e t s ,
+n e g l e c t i n g t h e s l i g h t s p l i t t i n g of the 6P and 5 D s t a t e s due t o s p i n - o r b i t
+coupling. A l l t h e remaining excited s t a t e s of cesium were collapsed i n t o
+a lumped s t a t e whose degeneracy and binding energy were v a r i e d t o explore
+t h e s e n s i t i v i t y of t h e c a l c u l a t i o n t o t h i s atomic model. Various c r i t e r i a
+were employed t o estimate t h e maximum s t a b l e e l e c t r o n i c o r b i t r a d i u s . The
+f e a t u r e s of t h e atomic model a r e summarized i n Table I.
+
+
+I n e l a s t i c c r o s s s e c t i o n s f o r electron-cesium atom c o l l i s i o n s
+
+( a ) Excitation-deexcitation
+
+         Experimental [13,14] and t h e o r e t i c a l [15,16] curves f o r t h e f i r s t
+(6s 6P) and t o t a l e x c i t a t i o n cross s e c t i o n s of cesium a r e shown i n
+f i g u r e 2 . I n computations t h e experiment$ [13] curve was used above
+2 eV, w i t h a l i n e a r segment of slope 7 1 A2 - eV-l [E41 f o r
+1.42 <   - u <- 2 eV.
+          The conventional Gryzinski cross s e c t i o n s [16] were used f o r t h e
+remaining o p t i c a l l y allowed t r a n s i t i o n s , and t h e Gryzinski exchange formula
+[17] w a s used f o r o p t i c a l l y forbidden t r a n s i t i o n s . The c l a s s i c a l Bohr-
+Thomson c r o s s s e c t i o n s [91 provided a check on t h e accuracy of t h e compu-
+t a t i o n s , s i n c e t h e i r use enables a n a l y t i c a l evaluation of t h e c o l l i s i o n
+terms f o r a maxwellian f ( u )               .
+( b ) Ionization-capture
+                                                                               $
+
+
+         The Gryzinski i o n i z a t i o n c r o s s s e c t i o n s [16] were employed f o r t r a n s i -
+
+
+                                                                6
+    t i o n s from a l l bound e l e c t r o n i c s t a t e s t o t h e continuum. The m a x i m u m c r o s s
+    s e c t i o n p r e d i c t e d f o r i o n i z a t i o n from t h e ground (6s) s t a t e i s 20 percent
+    lower than t h e b e s t experimental value [181.
+
+
+    Radiative t r a n s i t i o n s
+
+    ( a ) Deexcitation
+
+              The r a d i a t i v e t r a n s i t i o n p r o b a b i l i t i e s l i s t e d i n Table I were taken
+    from [19]. The o p t i c a l thickness of t h e plasma can be v a r i e d simply by
+    a l t e r i n g t h e s e values, thus simulating d i f f e r e n t plasma dimensions and
+    o p t i c a l absorption c o e f f i c i e n t s .
+
+    ( b ) Radiative capture
+
+              A t low Ne and Te, r a d i a t i v e capture becomes important.                             Cross
+    s e c t i o n s f o r t h i s process were taken from [ 2 0 ] .
+
+
+    S o l u t i o n of r a t e equations f o r maxwellian d i s t r i b u t i o n
+
+             Figures 3 and 4 show t h e r e s u l t s of solving t h e s t e a d y - s t a t e r a t e
+    equations ( 7 ) f o r a maxwellian f ( u ) . I n f i g u r e 3 t h e degree of i o n i z a -
+    t i o n of t h e cesium i s p l o t t e d a s a function of t h e i n i t i a l cesium number
+    d e n s i t y N&         f o r kTe/e = 0.2 eV. The r e s u l t s a r e q u a l i t a t i v e l y s i m i l a r
+    t o t h o s e of [ 4 ] . For a n o p t i c a l l y t h i n plasma, Ne i s determined a t very
+    low N&             by t h e balance between r a d i a t i v e capture and c o l l i s i o n a l i o n i z a -
+    t i o n from t h e ground s t a t e . With increasing Ngs, three-body capture
+    becomes important, and i n t h e o p t i c a l l y t h i n case, t h e curve r i s e s t o a
+    maximum as i o n i z a t i o n from e x c i t e d s t a t e s becomes s i g n i f i c a n t , t h e r e a f t e r
+    approaching t h e Saha curve. For a plasma o p t i c a l l y t h i c k t o resonance
+    r a d i a t i o n , i o n i z a t i o n from e x c i t e d s t a t e s i s important a t lower N&
+    because t h e populations of t h e s e s t a t e s a r e higher. Figure 3 also demon-
+    strates t h e r e l a t i v e i n s e n s i t i v i t y of t h e r e s u l t s t o t h e degeneracy and
+    binding energy of t h e lumped state.
+
+             Figure 4 shows t h a t t h e Saha equation i s a good approximation when
+    Te 2 3000° K, r e g a r d l e s s of t h e o p t i c a l thickness of t h e plasma. Below
+    t h i s temperature, t h e o p t i c a l thickness of t h e plasma t o resonance r a d i a -
+    t i o n i s t h e c o n t r o l l i n g f a c t o r i n determining the magnitude of t h e i n -
+    e l a s t i c term I ( f ) . When resonance r a d i a t i o n completely escapes, t h e
+    l a c k of d e t a i l e d balancing of c o l l i s i o n a l t r a n s i t i o n s between t h e 6s and 6P
+    s t a t e s r e s u l t s i n a l a r g e ( n e g a t i v e ) c o n t r i b u t i o n t o I ( f ) , which i s
+    comparable i n magnitude t o t h e e l e c t r o n - e l e c t r o n c o l l i s i o n term,. For a
+    plasma o p t i c a l l y t h i c k t o resonance r a d i a t i o n , c o l l i s i o n a l t r a n s i t i o n s
+    between t h e s e s t a t e s a r e more n e a r l y i n balance, and I ( f ) i s an order of
+    magnitude smaller and due mainly t o t h e 6P                        +       5D and 5 D        7s t r a n s i t i o n s .
+5
+    D i s t r i b u t i o n function and e l e c t r i c a l c o n d u c t i v i t y - i n e l a s t i c case
+
+          Preliminary r e s u l t s obtained by i t e r a t i v e s o l u t i o n of equations ( 2 )
+    and ( 7 ) a r e shown i n f i g u r e s 5 and 6 f o r an atmospheric-pressure argon-
+    cesium plasma o p t i c a l l y t h i c k t o resonance r a d i a t i o n , t h e most r e a l i s t i c
+    case f o r an MHD generator [ 2 1 1 . These c a l c u l a t i o n s were performed f o r a
+    seed f r a c t i o n (NgS/NAr)  of 0.0015, gas temperature of 1500° K, and no
+
+
+
+                                                                 7
+magnetic f i e l d , as i n t h e experiments of [21. The conductivity - current
+curve of f i g u r e 5 displays t h e same g e n e r a l f e a t u r e s as t h e experimental
+argon-potassium r e s u l t s . O f p a r t i c u l a r i n t e r e s t i s t h e f a c t that the
+t h e o r e t i c a l curve drops o f f more rapidly with decreasing c u r r e n t than i n
+t h e e l a s t i c case. The reason i s t h a t t h e states a r e out of equilibrium a t
+low c u r r e n t s and e l e c t r o n temperatures, and t h e r e i s an appreciable i n -
+e l a s t i c energy l o s s from the electrons, as w e l l as a s i z a b l e reduction of
+Ne below t h e Saha value. A t t h e higher values of j , t h e two-temperature
+theory i s a good approximation, as shown by t h e d i s t r i b u t i o n f u n c t i o n p l o t
+of f i g u r e 6 where t h e c a l c u l a t e d f ( u ) a t Te = 3000' K i s i n d i s t i n g u i s h -
+a b l e from a maxwellian. A t 2000' K, however, f ( u ) departs from maxwellian
+above the f i r s t excikation p o t e n t i a l . Since convergence d i f f i c u l t i e s were
+encountered f o r Te < 2300' K, t h e r e s u l t s i n t h i s range a r e uncertain,
+and t h e i r questionable nature i s indicated by t h e dashed portion of the
+t h e o r e t i c a l curve i n f i g u r e 5. I n the o p t i c a l l y t h i n case, convergence
+d i f f i c u l t i e s were experienced a t even higher values of Te.
+
+
+Conclusions
+
+         ( a ) E l a s t i c c o l l i s i o n s cannot alone account f o r anomalies i n t h e
+e l e c t r i c a l conductivity observed a t low c u r r e n t d e n s i t i e s .
+
+          ( b ) The Saha equation i s a good approximation when e i t h e r the cesium
+number d e n s i t y i s above l O z 4 m-3 or t h e e l e c t r o n temperature above 3000° K,
+r e g a r d l e s s of t h e o p t i c a l thickness of t h e plasma. A t lower d e n s i t i e s o r
+temperatures, t h e o p t i c a l thickness t o resonance r a d i a t i o n c o n t r o l s the
+e l e c t r o n number d e n s i t y and t h e magnitude of t h e i n e l a s t i c c o l l i s i o n terms.
+Fortunately, t h e e l e c t r o n number density proves t o be r e l a t i v e l y i n s e n s i -
+t i v e t o t h e assumptions made concerning t h e lumped s t a t e .
+
+          ( c ) Preliminary r e s u l t s of a s e l f - c o n s i s t e n t c a l c u l a t i o n of t h e e l e c -
+t r o n number d e n s i t y and d i s t r i b u t i o n function show trends t h a t agree w i t h
+a v a i l a b l e experimental data, but more work i s required t o obtain r e l i a b l e
+r e s u l t s a t low e l e c t r o n temperatures, where i n e l a s t i c e f f e c t s dominate.
+
+
+
+
+[11 KERREBROCK, J. L., "Conduction i n gases with elevated e l e c t r o n temper-
+    a t u r e , '' Engineering Aspects of Magnetohydrodynamics (MANNAL, C                                .,
+    MATHER, N . W . , E d s . ), Columbia Univ. Press, New York (1962) 327.
+
+[21 KERREBROCK, J. L., HOFFMAN, M. A., Nonequilibrium i o n i z a t i o n due t o
+    e l e c t r o n heating: 11. Experiments, AIAA J. -
+                                                      2 (1964) 1080.
+
+[31 ARCHAMBAULT, Y.,      CUENCA, N., Fonction de d i s t r i b u t i o n e t d e n s i t e
+      electronique d'un plasma hors d ' e q u i l i b r e thermodynamique, Proc. I n t .
+      Symposium MHD Elec. Power Generation, Vol. 1, P a r i s (1964) 349; D i s -
+      cussion, V o l . 4 (1964) 1793.
+
+[ 4 ] BEN DANIEL, D. J., W O R , S., Nonequilibrium i o n i z a t i o n i n magneto-
+      hydrodynamic generators, Rept. 62-RL-( 2922-E), General E l e c t r i c Research
+      Lab (1962).
+
+ [ 5 ] DREICER, H.,Electron v e l o c i t y d i s t r i b u t i o n s i n a p a r t i a l l y ionized
+                                -
+      gas, Phys. Rev. 1 1 7 (1960) 343.
+
+
+
+
+                                                            8
+[6] DEWAN, E. M., Generalizations of the Saha equation, Phys. Fluids 3
+    (1961) 759.
+
+ [7] ALLIS, W. P., Motions of ions and electrons, Handbuch der Physik
+     (FLUGGE, S., Ed.), Vol. XXI, Springer-Verlag, Berlin (1956) 383.
+
+ [8] HOLSTEIN, T., Energy distribution of electrons in high frequency gas
+     discharges, Phys. Rev. 70 (1946) 367.
+
+ [9] FOWmR, R. H., Statistical Mechanics, 2nd ed., Cambridge Univ. Press
+     (1936) 17,4, 17.6.
+
+[lo] FROST, L. S., PKELPS, A. V., Momentum-transfer cross sections for
+     slow electrons in He, Ar, I(r, and Xe from transport coefficients,
+               -
+     Phys. Rev. 136 (1964)A1538.
+
+[ll] BRODE, R. Bo, The absorption coefficient for slow electrons in alkali
+     metal vapors, Phys. Rev. -
+                              34 (1929) 673.
+
+[12] CROWN, J. C., RUSSEK, A., Electron-alkali-atom interaction potential
+     and elastic-scattering cross section, Phys. Rev. -
+                                                      138 (1965) A669.
+
+[13] ZAPESOCHNY, I. P., SHIMON, L. L., Absolute excitation cross sections
+     of the alkali metals, IVth Int. Conf. on the Physics of Electronic
+     and Atomic Collisions, Science Bookcrafters, Inc., Hastings-on-Hudson,
+     New Pork ( 1965) 401.
+
+[14]NOLAN, J. F., EMMERICH, W. S., Electron collision cross sections in
+    metal vapors, Rept. No. U5-MHDIN-R1, Westinghouse Electric Co.
+    (NASA CR-54474) ( 1965).
+
+[I51 HANSEN, L. K., Cross section of the electron-induced 6s-6p transi-
+     tion in cesium, J. Appl. Phys. -
+                                    35 (1964) 254.
+
+[161 GRYZINSKI, M., Classical theory of electronic and ionic inelastic
+     collisions, Phys. Rev. -
+                            115 (1959) 374.
+[17] GRYZINSKI, M., Classical theory of atomic collisions. I. Theory of
+                               .
+     inelastic collisions, Phys Rev. -138 ( 1965) A336.
+
+[181 SHEDON, J. W., DUGAN, J. V., Jr., Semiclassical calculation of
+     inelastic cross sections for electron-cesium atomic collisions,
+     J. Appl. Phys. -
+                    36 (1965) 650.
+
+[19] ROBERTS, T. G., HALES, W. Le,Radiative transition probabilities
+     and absorption oscillator strengths for the alkali-like ions of the
+     alkaline earths and for calcium I, Rept. AN!-RR-TR-62-8, Redstone
+                   .
+     Arsenal ( 1962 )
+
+[201 NORCROSS, D. W., STONE, P. M., Radiative recombination in cesium,
+     Rept. SRRC-RR-65-95,Sperry Rand Res. Center (1965).
+
+[21] BYRON, S., BORTZ, P. I., RUSSELL, G. R., Electron-ion reaction rate
+     theory: Determination of the properties of nonequilibrium monatomic
+     plasmas in MHD generators and accelerators and in shock tubes,
+     Proc. 4th Symposium on the Engineering Aspects of Magnetohydrodynamics
+     (1963) 93.
+
+
+
+                                      9
+APPENDIX A - SYMBOLS~
+
+kK p r o b a b i l i t y (sec'l) of
+                spontaneous r a d i a t i v e
+                                                                                                JJ
+                t r a n s i t i o n L+K
+                                                                            X & p ( u ) d u , rate     coef-
+                                                                            f i c i e n t f o r ionization
+                                                                            from l e v e l L
+--f
+B           magnetic f i e l d
+                                                             xz         E    1K
+                                                                                   KIrK    +
+3           electric field
+                                                             k          Boltzmann constant
+2"          E   Z + "u x 5, e f f e c t i v e
+                electric field                               m          p a r t i c l e mass
+
+EL          binding energy of l e v e l L,
+                                                             N          number d e n s i t y
+              eV
+
+
+
+e           e l e c t r o n charge
+                                                             Qm
+                                                              ej(U)
+f(u)        energy d i s t r i b u t i o n func-                        c r o s s s e c t i o n f o r momentum
+              t i o n ( c f . footnote 1)                                   t r a n s f e r between e l e c -
+                                                                            t r o n s and species j
+g           degeneracy                                                      ( j = a,e,i)
+
+h           Planck constant                                  QbK( u 1   t o t a l cross s e c t i o n f o r
+                                                                           collision-induced t r a n -
+ I(f)       i n e l a s t i c gain                                         s i t i o n L+K
+
+ 3          c u r r e n t density
+
+
+                                                                            t o t a l cross section f o r
+                                                                            i o n i z a t i o n from l e v e l L
+
+                x QbK(u)du, r a t e coef-                        T      temperature
+                f i c i e n t ( m 3 - sec-1)                     --f
+
+                f o r collision-induced                          U      gas v e l o c i t y
+                transition b K                                          e l e c t r o n energy ( m v2 / 2 e ) ,
+                                                                 U
+                                                                                                  e
+                                                                            eV
+
+                                                                        e l e c t r o n speed
+                X   a y P ( u f,u)du'du, e f f e c -
+                t i v e two-body rate coef-                      WR     r a d i a t i v e power l o s s per
+                                                                            u n i t volume
+                f i c i e n t ( m 3 - sec-1) f o r
+                capture i n t o l e v e l L
+
+        5Mks u n i t s a r e used f o r a l l q u a n t i t i e s
+
+
+
+
+                                                        10
+                rate c o e f f i c i e n t                    Subscripts and s u p e r s c r i p t s :
+                  ( m3-sec-l) f o r r a d i -
+                   a t i v e capture i n t o                  Ar         argon
+                   level L
+                                                              a          atom
+€0
+                p e r m i t t i v i t y of vacuum
+                                                              cs         cesium
+A               = 12n( cokTe)3/2e-3N,1/2,
+                   r a t i o of Debye radius                  cap        capture
+                   t o impact parameter
+                   f o r 900 s c a t t e r i n g              dex        deexc i t a t ion
+                   r                      1
+                                                              e          electron
+
+                                                              ex         excitation
+                   path f o r e l a s t i c a l l y
+                   scattered electron                         g          gas
+
+U               e l e c t r i c a l conductivity              H          Hall
+
+Upp(u ' , u )   p r o b a b i l i t y (m4-sec) f o r
+                    capture of u ' -
+                                                              h          heavy p a r t i c l e (atom
+                                                                           or i o n )
+                    e l e c t r o n i n t o l e v e l L,
+                   w i t h u-electron gain-                   i          ion
+                    ing excess energy
+                   U ' + EL
+                                                              ion        ionization
+
+u p ( u",u' )   d i f f e r e n t i a l c r o s s sec-        K          potassium
+                    t i o n (m2-ev-1) for
+                   producing a u"                             K, L       atomic l e v e l i n d i c e s
+                    secondary e l e c t r o n by
+                    impact of a u ' p r i -                   r-cap      r a d i a t i v e capture
+                   mary e l e c t r o n
+                                                              S          seed
+                = A(u)/v, c o l l i s i o n time
+                                                              0          i n i t i a l number d e n s i t y
+                = eB/me,     e l e c t r o n cyclo-
+                                                              1          perpendicular
+                   t r o n frequency
+
+
+
+
+                                                         11
+                 TABU I. - PARAMETERS OF CESIUM ATOMIC MODEL
+              ~-                                                                              ~~
+
+
+
+
+State     Level                 Degeneracy,       Radiative t r a n s i t i-o n p r o b a b i l i t y ,
+            L                       gL                     AK+:      107 s e c - 1
+
+                                                             K = 2                  K = 4 K = 5
+
+6s                   3.89              2                                                           0. 306c
+
+6P,P’                2.47              6                                                            .564
+
+5D, D ’              2.09             10                                                            .378
+
+7s                   1.59              2                                                            .849
+
+Lumped              Varieda        Varied”                                                          ----
+aE5 = 0.4, 0.6, 0.8 eV.
+bg5 = 50, 100, 150.
+‘For plasmas o p t i c a l l y t h i c k t o resonance r a d i a t i o n , t h e s e are equated
+  t o zero.
+dForbidden t r a n s i t i o n (AZ # 21).
+                       lo3F                                                                   I            /
+
+
+
+
+m
+ri
+d                                                                         Experimental data of Kerrebrock and
+M
+                                                                            Hoffman for A r + K       ([?I,
+                                                                                                      r u n XIA,
+
+
+
+
+                                                                          -
+w                                                                           Tg = 1510" K, N$NAr * 0.0015)
+                                                                          Theory of [2] including only elastic
+                                                                            collision losses
+                                                                          Present theory for A r + K, elastic
+                                                                            collisions only; Saha Ne
+                                                                          Present theory for A r + Cs, elastic
+                                                                            collisions only; Saha Ne
+
+                           102                103                  104                        Id                      16
+
+
+
+
+                                                   -
+                                                        Current density, j, ampslm2
+                            Figure 1. - Comparison of present theory with theoretical and experimental results
+                              of Kerrebrock and Hoffman [Z]. Gas temperature, 150" K; seed fraction, Nf/NAr,
+                              0.0015.
+
+
+
+
+                 120   -                                            total excitationD41
+                       -
+                 1M) -
+
+     N
+                       -                /
+     0       4
+
+
+         3- 80 -
+         x
+         -
+         a
+         0             -
+         c'
+         0
+         5        60-
+         4
+         VI
+         v)
+
+         e             -
+         V
+
+         .- 40-
+         2:: -
+         W
+
+
+                  20 -
+
+                        -
+                       1111              I     I    I     1     '     I    I     I        I       I    '      1   '    J
+Figure 3. - Degree of ionization of cesium as function of initial seed num-
+  ber density. kT$e, 0.2 eV.
+
+
+
+
+                Saha   //I
+
+
+       resonance
+       radiation-...
+
+
+
+
+                       Optically thin to
+                   I at1 tine I'adiation
+
+
+
+ I        I            I         I         I        I
+0        1000      2000     3OOO      4OOO      5ooo      6000
+                Electron temperature, Te, "K
+  Figure 4. - Degree of ionization of cesium as function of electron tem-
+    perature. Atmospheric pressure; gas temperature, ls00" K; seed
+                            -                   -
+    fraction, 0.0015 ( N A ~ 4. 89x1d4 m-3, NEs 7.34x1d1 m-3).
+       103 - =-
+             -                                               "K                              3500
+             -
+             --
+             -
+E
+             -
+E
+E      102=
+6            -
+             -
+s;           -
+.->e
+.            -
+3c           -
+U
+0
+-u           - '"WJ'                         //       -+-Experimental data of Kerrebrock and
+P      l0lr-
+             --          Q,       21"0.;(                              -
+                                                                  Hoffman for Ar + K ([Z], run XIA,
+                                                                  Tg 1510" K, N$NAr = 0.0015)
+i
+-
+Y            -
+              -
+                                'pc,
+                                 /
+                                                              Present theory for A r + Cs, including
+                                                                inelastic collisions; optically thick
+             -                  0                               t o resonance radiation
+             - 2ooo.('                                ----    Present theory for A r + Cs, elastic
+                                                                collisions only; Saha Ne
+       lo0         I     I    I I I IIII    I     I111111l         I       I   IIIllll   I   I   I I I IIII
+
+
+
+
+                       0                          1                            2                    3
+                                                  Electron energy, u, eV
+                             Figure 6. - Normalized distribution function. Argon seeded with
+                               cesium; atmospheric pressure; gas temperature, 1500" K; seed
+                               fraction, 0.0015, optically thick to resonance radiation.
+

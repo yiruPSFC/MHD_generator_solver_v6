@@ -1,0 +1,2565 @@
+N AS                                                                     NASA TN D-2873
+
+
+m
+h
+a0
+
+
+     3
+            N65-26260                                    iI
+     h         (ACCESSION NUMUER)
+                                             WHRUJ
+
+
+
+
+ro
+a
+z
+     +c
+     L
+          (NASA CR O R TMX O R AD NUMBER)
+                                              /
+                                                  ~l
+                                            ~E~TEGORYI
+                                             (&DE)       t
+
+
+
+
+                                                                                             I
+                                                       GPO PRICE
+                                                       ff5Y/
+                                                              PRICE(S1
+                                                                         s
+                                                                         s   ~Auz-           I
+                                                                                             i
+                                                                                             I
+
+
+
+
+                                                         Hard copy (HC)
+
+                                                         Microfiche (MF)
+
+
+
+
+                                                                                             1
+SEEDING CRITERION FOR NONEQUILIBRIUM                                                         1
+
+MAGNETOHYDRODYNAMIC GENERATORS                                                               1
+
+
+                                                                                             1
+                                                                                             I
+
+
+
+
+by Frederic A. Lyman und Eli Reshotko                                                        1
+
+
+
+                                                                                             1
+
+
+
+
+UATIUNAL AERONAUl1CS AffD SPACE AOlUltllSTRATtON          WASXI16TO11, 0. C.     IU#E 1961
+                                                                                                 I
+.
+
+
+
+
+       SEEDING CRITERION FOR NONEQUILIBFUUM
+
+         MAGNETOHYDRODYNAMIC GENERATORS
+
+            By Frederic A. Lyman and E l i Reshotko
+
+                           Lewis Research Center
+                              Cleveland, Ohio
+
+
+
+
+      NATIONAL AERONAUT ICs AND SPACE ADMlN ISTRATI ON
+    For sale by the Clearinghouse for F e d e r a l Scientific and T e c h n i c a l Information
+                                                          -
+                       Springfield, V i r g i n i a 22151 P r i c e $3.00
+           b
+
+
+     .
+                           SEEDING CRITERION FOR NONEQUILIBRIUM
+                           MAGNETOHYDRODYNAMIC GENERATORS*
+                             by Frederic A. Lyman and Eli Reshotko
+                                     Lewis Research Center
+
+                                           SUMMARY
+
+
+
+
+         Calculations of the break-even condition for various noble carrier gases with alkali
+    seed have been performed and are presented in graphical form. The results indicate
+    that ion slip very strongly affects the break-even conditions. Generally speaking, seed-
+    ing is desirable, and the most beneficial effects a r e obtained for heavy seed materials.
+
+                                         INTRODUCTION                               k;lfM
+       One of the key factors in obtaining high power density in magnetohydrodynamic
+    (MHD)power generators is the achievement of high electric conductivity in the working
+
+        "he principal results of this investigation were reported at the ASME Winter
+I
+    Annual Meeting, New York City, Nov. 29-Dec. 4, 1964. The present report is a con-
+fluid. In closed-cycle electric-power systems where seeded combustion plasmas a r e
+inapplicable, this problem is particularly severe because, at the highest working fluid
+temperatures currently contemplated for nuclear reactors or heat exchangers, the equi-
+librium electric conductivity of even a seeded gas is far below that required for a rea-
+sonable power density. A nonequilibrium means of obtaining high electric conductivity
+is accordingly of great interest.
+      The contemporary studies of nonequilibrium conductivity began with that of Kerre-
+brock (ref. 1). He considered the case of direct current gas discharges and showed that
+the electron temperature, at which the energy received by electrons from the electric
+field is balanced by that lost in collisions, can be considerably above the bulk gas tem-
+perature. He has in fact demonstrated the results to be well represented by a theory
+that assumes the ionization and recombination processes to be in equilibrium at the elec-
+tron temperature s o that the electron population is that corresponding to equilibrium at
+the electron temperature. The validity of Kerrebrockrs hypothesis has been established
+for a cesium plasma by Ben Daniel and Tamor (ref. 2).
+      Hurwitz, Sutton, and Tamor (ref. 3) noted that the electron heating effect might also
+be obtained using the induced electric fields present in MHD generator channels. In
+their paper, as in KerrebrockPs analysis, the electron temperature was determined by
+balancing the energy gained by the electrons from the induced electric field with the en-
+ergy lost by them in elastic collisions with the neutral atoms. They assumed that at the
+low degrees of ionization attained in generators, the electron-ion collisions would occur
+infrequently enough to be considered negligible.
+      Reference 4 showed, however, that at the elevated electron temperatures resulting
+from electron heating, a degree of ionization might be attained where the dominant proc-
+ess for momentum and energy exchange is electron-ion collisions. This was found to be
+particularly the case in noble gases displaying the Ramsauer effect. The addition of
+easily ionizable seed to a carrier gas has the two effects of (a) increasing the electron
+density of the working fluid and (b) increasing the electron energy losses through colli-
+ sion with seed atoms and ions, thus limiting the electron temperature. The first effect
+tends to augment the electric conductivity, while the second tends to decrease it. It was
+ shown in reference 4 that in many cases for argon c a r r i e r gas with cesium seed the sec-
+ond effect was predominant, causing an overall reduction in electric conductivity. In
+ fact, it was recommended in reference 4 that argon be used without seed as the working
+ fluid i n an MHD generator. This result is, however, sensitive to the values of the per-
+tinent collision cross sections. The correct calculation of the electrical conductivity
+ depends on the average rate of momentum transfer in collisions, which in turn requires
+ the averaging of the momentum transfer rate over the velocity distributions of the col-
+ liding particles. In the previous investigations (refs. 1, 3, and 4), a value of the mono-
+ energetic cross section corresponding to the average electron energy was chosen, which
+
+2
+is tantamount to ignoring the distribution of electron velocities. Furthermore, the prior
+investigations did not quantitatively consider the effect of the presence of both seed and
+carrier gas ions on ion slip.
+     It is the purpose of the present report t o examine in an orderly manner the various
+consequences of the addition of seed to a c a r r i e r gas, including the aforementioned
+effects, and to establish a criterion to determine whether seed addition augments o r de-
+creases the power density. The formulated criterion may be separately applied to each
+successive station of a segmented electrode Faraday generator. The formulation is
+given in general terms and may be used for arbitrary combinations of monatomic carrier
+and seed materials.
+
+
+
+                                          ANALY S IS
+
+     The criterion mentioned in the INTRODUCTION will now be obtained. The basic
+idea is to determine the condition for which the addition of a vanishingly small amount of
+seed either increases or does not change the power density (power generated per unit
+volume). The condition for which the power density is unchanged by the addition of seed
+will be called the break-even point.
+
+
+
+                                       Basic Equations
+
+        In reference 4, Ohm's law and the electron energy equation are derived, including
+the effect of ion slip, for a slightly ionized gas containing only one type of ion (ions of the
+c a r r i e r gas). In the present report, it is necessary to include both c a r r i e r gas ions
+(c+) and seed ions (s+). (Symbols are defined in appendix A. ) The details of the deriva-
+tion are given in appendix By where it is shown that all the basic equations of reference 4
+still apply, provided that the definition of the ion-neutral collision frequency via is
+appropriately modified (see eq. (B19)).
+        The energy balance equation for the electrons is (ref. 4)
+
+
+                                                           2
+                                    J 2 = 3 -e2k6 (Te - TINe
+                                            mC
+
+
+where J is the current density, e is the electron charge, k is the Boltzmann constant,
+mc is the mass of an atom of the carrier gas, Te is the electron temperature, T is
+the static gas temperature, and Ne is the number density of electrons. The factor 6,
+which is sometimes called the mean loss factor, is a dimensionless quantity defined for
+
+                                                                                               3
+                                                                \
+
+
+
+elastic collisions as
+
+
+
+
+where the subscript t denotes each species of atom or ion that may be present, and vet
+is the average collision frequency for momentum transfer between the electrons and
+species t. The collision frequency is written
+
+
+
+
+where ( ve) is the average thermal speed of the electrons
+
+
+
+
+and Qet, the average cross section for momentum transfer, is
+
+
+
+
+                         ( )9 lm
+             Qet( Te ) = 3- -me
+                            2kTe     v5Q
+                                      e m(v e)exp ( g ) d v e       (t = i, a)    (C11)
+
+
+The quantity Qm(ve) appearing in the integrand of equation (C11)is the momentum
+transfer cross section for a monoenergetic beam of electrons of speed ve. Equation
+(C11)is the result of averaging the rate of momentum transfer in collisions over the
+velocity distributions of both the electrons and the species t of heavy particles (atoms
+o r ions) in the manner described in appendix C. When the average momentum transfer
+cross section is calculated from equation (C11)for any one of the noble gases for some
+ranges of Te, the result is found to be as much as an order of magnitude larger than the
+value of Qm at beam energies equal to kTe. The difference between Qec(Te) and
+Qm is due to the large variation in Qm with ve for the noble gases displaying the
+Ramsauer effect. (If Qm were independent of ve, this difference would not be signif-
+icant, since in that case Qec(Te) = (4/3)Qm. ) Therefore, the use of the monoenergetic
+cross section instead of the average c r o s s section, as was done in references 1, 3,
+and 4, can lead to significant errors.
+
+4
+    For a segmented-electrode MHD generator, Ohm's law is (ref. 4)
+
+
+                                  J=        "         uB(l - K)                        (5)
+                                       1 + BeBi
+
+
+where u is the gas velocity, B is the intensity of the magnetic field (Wb/sq m), and K
+is the load parameter, which is the ratio of the actual voltage across the generator elec-
+trodes to the open-circuit voltage,
+
+
+                                             Kr-E
+                                                      uB
+
+    The conductivity uo is
+
+
+                                                 - Neez
+                                            OO   -q
+
+where
+
+
+
+
+is the total collision frequency for electrons. The electron Hall parameter Be is de-
+fined as
+
+                                          w
+                                       B =-=-e - el3
+                                        e        'e    meVe
+
+where we is the electron cyclotron frequency. The parameter       pi is
+
+
+
+
+where uia is the effective ion-neutral collision frequency. The value of Pi is a meas-
+ure of the slip of the ions through the neutral gas. The ion slip varies inversely with the
+gas density (through via) and directly with the magnetic field. The expression for via
+is derived in appendix B (see eq. (B19)).
+
+
+                                                                                          5
+    The power density for the segmented electrode generator is 1
+
+
+
+                             P = JE =   NeIF -               (Te         T) KuB
+
+
+The seed fraction s, defined as
+
+
+                                                     NO
+                                            sr- S
+                                                     %
+is the parameter of main interest. The number densities of seed and c a r r i e r gases in
+the absence of ionization a r e denoted as N: and                %,
+                                                    respectively, where
+
+
+                                        N i = Ns + N
+                                                                 S+
+
+
+                                        N0c = N c + N                +
+
+
+
+
+                                                                 C
+
+
+The degrees of ionization of the seed and carrier gas a r e
+
+                                                        N
+                                           x       5-
+                                                            C+
+                                               C
+
+
+
+
+                                                        N S+
+                                           x       r-
+                                               s N OS
+
+respectively.   The condition of charge neutrality is
+
+
+     'This is equivalent to the conventional formula
+
+
+                                          001.12B 2K(l - K)
+                                    P=
+                                                   14-Pepi
+
+
+Equation (11) is more convenient for subsequent manipulations.
+
+6
+                              Ne = Ni = N      +   +N        = (xC+ SX,)~$               (17)
+                                              S         C+
+
+
+     It is assumed that the various ion and atom populations are in equilibrium with the
+free electrons at the electron temperature Te. Then the Saha equations (eqs. (4) and (5)
+of ref. 4) may be written for the seed as
+
+
+                     (xc + sxs)xs    =--( 1
+                                              2gs+      2nmekTe 3/2
+
+                         1 - xs          NE gs               h2       )   e-(%)
+
+and for the carrier gas as
+
+
+
+                        1 - xc
+
+
+where gs and gc are statistical weights for the ground states of the seed and c a r r i e r
+atoms, respectively, g and g
+                         +       are statistical weights of the ground states of the
+                                      +
+
+
+
+
+                        S            C
+seed and carrier ions, respectively, and Vs and Vc are the first ionization potentials
+of the seed and carrier gas, respectively.
+
+
+
+                             Condition for Operation Without Seed
+
+     The power density, current, conductivity, electron density, and temperature all
+depend on the seed fraction s. Suppose that the generator is operating without seed
+with a prescribed load parameter K, magnetic field By and gas velocity u. The prob-
+lem is to determine the direction in which the power density varies when a small amount
+of seed is added. For this the sign of dP/ds in the neighborhood of s = 0 must be de-
+termined. When dP/ds = 0, the break-even condition will be attained, and this condi-
+tion will require a certain relation between the operating parameters.
+     With the aforementioned assumptions, the electric field E is fixed, and the frac-
+tional change in the power density caused by the addition of seed is, from equation ( l l ) ,
+
+                       -1- d_ _P ---l d J - --+---+--
+                                             1 me        1        1   dTe    1 dd
+
+
+
+    From equations (l), (5), and (7), it follows that for fixed K, u, and B
+
+                                                                                              7
+                                                                                           4
+
+
+
+
+                                   2 + Pepi) 2'(Te - T)6 = const
+                                  ve(l
+
+
+Logarithmic differentiation of equation (21) gives
+
+
+                   2                                         1     + - - = o1 d 6
+                                                                 -dT-
+                1 + Pep,                                 Te - T ds        6ds
+
+
+Since ve, via, and 6 a r e known functions of s and Te(s), equation (22) may be used to
+determine dTe/ds. Then the resulting expression for dTe/ds can be substituted into
+equation (20) to yield an expression for dP/ds. The details of this derivation a r e given
+in appendix D, where it is shown that dP/ds 2 0 if
+
+
+
+
+                           2eVc
+
+
+
+
+                                  L         G
+                                                     C
+                                                         (
+                                                         3 + - 2eVc + A)]
+                                                                kTe Te - T
+
+
+
+
+The number n is simply the exponent in a semiempirical relation for the cross section
+    -
+Qec T: for scattering of electrons by c a r r i e r gas atoms. Typically, n is of the
+order 1. The quantity \k, which is defined in equation (D18), is related to the differ-
+ence in mobilities of the two ion species in the c a r r i e r gas.
+     The aforementioned relation (eq. (23)) is derived for the limit of zero seed. It has
+been assumed that as s approaches zero, the degree of ionization of the seed ap-
+proaches one; hence, the ionization potential and cross section of the seed do not appear.
+From equations (18) and (19), it can be shown that for s = 0, xs M 1 to a high degree of
+approximation.
+     The inequality (23) is an implicit relation between Te,       q,
+                                                                    B, and T, which estab-
+lishes a range of electron temperatures in which the power density is not increased by
+seeding. It is not possible to obtain an explicit relation, because the various t e r m s of
+
+8
+equation (23) are not simple functions of Te. It is convenient for calculational purposes
+t o assign NE, Te, and T and to calculate pepi, which is proportional to B2 For .
+fixed values of Te and T, the limiting magnetic field is then calculated over the allow-
+able range of gas densities  %.     From curves of B against NF, the break-even value
+of I$corresponding to any given magnetic field may be found for prescribed values of
+Te and T.
+     The electron temperature is, of course, not an independent parameter, because it
+depends on the rate of Joule heating through equation (1). Thus it is necessary to estab-
+lish whether or not any prescribed electron temperature is actually attainable. The cri-
+terion for this is the value of the gas velocity u required to produce a given electron
+temperature. The required gas velocity is obtained from the relation
+
+
+
+                        uB(l - K) =   :Gc     (1 + f l e p i ) v e i F
+
+
+which follows from equations (l), ( 5 ) , and (7). (Note that 6 = 1 in the limit of zero
+seed. ) Finally, the break-even condition is conveniently expressed as a family of
+curves of uB(1 - K) against   %   for various values of B and T. In appendix E, a
+sample calculation is given in order to clarify the details of the calculational procedure.
+
+
+
+                               RESULTS AND DISCUSSION
+
+    Although the break-even condition (the equality in relation (23)) is utilized in the
+manner just described to obtain numerical results, it is of interest to consider the
+simpler forms t o which it reduces in special cases so that the physical meaning of the
+condition may become clearer.
+
+
+
+                                       Zero Ion Slip
+
+     A useful limiting case is that in which ion slip is neglected. Then Pi = 0, and the
+right side of relation (23) must also be zero. The break-even condition for zero ion slip
+is further simplified for small degrees of ionization. For this case (xc << 1 and
+s = O), equation (19)may be written
+where
+
+
+
+                                                               eXP      (s)
+From equations (3), (13), and (17), for xc << 1,
+
+
+                                 -_---
+                                 'ei - C       Qei        Qei
+                                                     - xc -
+                                 "ec    1 - xc Qec             Qec
+
+Thus, for xc << 1 and s = 0, equation (23) yields the following quadratic equation for
+the ratio vec/vei:
+
+
+
+
+where
+
+
+                                       a=2n+l+-     Te
+                                                  Te - T
+
+
+
+                         ( E):
+b = 2 n + l + Te - 3 + 1 - -
+             Te - T                     kTe
+                                                                :r(+2 )
+                                                               --         + T Te
+                                                                              e-T   (29b)
+
+
+
+                                                     +  T 2)
+                                                  kTe Te - T
+
+
+Break-even operation of course corresponds to the equality sign in the relation (28).
+Since a and c a r e positive, equation (28) has only one positive root, namely,
+
+
+                                              G   c        -        b
+                                                      2a
+
+
+The corresponding gas density is
+
+10
+I
+                which is the gas density for break-even operation with zero ion slip. At higher gas
+1
+                densities, vec/vei > (vec/vei)lim, and inequality (28) is not satisfied. Hence, seeding
+                increases the power density. At gas densities below (q)lim, seeding will decrease the
+~
+                power density. It is not difficult to understand why the ratio of collision frequencies is
+                the critical parameter for break-even operation without seed. At gas densities larger
+1               than that given by equation (31), electron-atom collisions account for most of the re-
+                sistivity of the gas. According to equations (3), (7), and (8), the conductivity in that case
+    1           is proportional to the degree of ionization. Seeding would then increase the degree of
+    '           ionization and therefore improve the conductivity and power. At gas densities lower than
+    l           break-even, where vei is much larger than uec, the conductivity becomes independent
+                of the electron density and increases with the electron temperature. In this case, the
+    1           addition of seed would lower the electron temperature (cf. eq. (D21))and consequently
+                decrease the conductivity and power density more than could be offset by the ionization
+                of the seed.
+                      Equation (31) sets an upper limit on the gas density, above which the addition of seed
+                will increase the power density. Strictly speaking, it is an implicit relation for
+        I       inasmuch as the gas density also enters into Qei through the term In A (see eqs.
+                (C19)and (C20)). Equation (31) is used in the following manner to establish the break-
+                even condition for zero ion slip. The electron and gas temperatures are assigned, a
+                value for In A between 5 and 10 is assumed, and (NE)lim is calculated from equa-
+        '       tion (31). The value of In A is recomputed with this density, and the calculation is re-
+                peated a few times until i t converges. The corresponding value of uB(l - K) is then
+                calculated from equation (24). Appendix E contains a sample calculation.
+                      The results of such a calculation are conveniently represented in a graph of the
+                voltage uB(l - K) plotted against the gas density . :N    This form is convenient because
+                the variation of the gas dynamic properties along a duct can easily be traced. For a
+                constant velocity generator for which B and K are also constant, the state of the gas
+                would be represented by a horizontal line, while a constant area generator with constant
+                B and K would be represented on a log-log plot by a straight line of slope -1, since pu
+                is constant. In general, K is not constant, and the generator operating curve is not
+                straight, as will be seen subsequently.
+                      The zero-ion-slip break-even condition for some of the noble gases is shown in fig-
+                u r e 1, where the atomic mass of the seed is assumed to be equal to that of the c a r r i e r
+            1   gas in order to reduce the number of parameters. For some combinations of gas and
+            l
+                seed such as argon and potassium or xenon and cesium, this is very nearly the case.
+
+                                                                                                           11
+                                                                                                       Helium
+
+
+
+
+                  1011           I   I   lllllll              I      I   1   1   1    1   1   1        I   I    I 1 1 1 1 1 1
+
+                   1022                           1023                       1024                                           1025
+                                                   Gas density, Ng, atomslcu m
+
+                           1         I   I   I I I Ill1              I       I       I I I ,111            I    I   I   I   I IIII
+                          ,001                        . 01                                        .1                               1
+                                                                  Gas pressure, atm
+                         Figure 1. - Break-even curves for zero ion slip and equal atomic masses of carrier
+                           gas and seed. Static gas temperature, 5Oo0 K.
+
+
+When mS = mc, b = a - c and equation (30) becomes
+
+                                                          C                           3
+                                                                                                Te
+                                                                    2n+1+
+                                                                                              Te - T
+
+since Qec/Qei   is usually of the order 10-3                       . Equation (32) can also be obtained quite
+directly from the right side of equation (23) by setting mc = mS and xc = 0. From
+equation (32), it is clear that the electron-ion and electron-atom collision frequencies
+a r e of the same order at break-even.
+      The break-even curves in figure 1 a r e for all practical purposes straight lines.
+There is no obvious reason why this should be so, but it is most likely due to the fact
+that the exponential variation of g(Te) in the formula for (No)       (eq. (31)) is much more
+                                                                C lim
+significant than the purely algebraic variation of the other terms. To the right Of any one
+of these lines, NE > (NE)      , and the power density is increased by seeding, whereas
+                           lim
+12
+                  loll          1       I   I I lllll        I       I   I       1 1 1 1 1 1        I   I   I       I       iIilJ
+                   1ozL                             1023                                 IC?~                                    ld5
+                                                     Gas density, N!, atomsku m
+
+                           I        I       I   I I I Ill1       I           I     I I I Ill1           1       I       I    I   I I I J
+                         .a31                           .01                                    .1                                          1
+                                                 Gas pressure, atm
+                          Figure 2. - Effect of seeding with material whose atomic mass is greater than that of
+                            carrier gas. Argon; static gas temperature, C!@ K.
+
+
+
+seeding decreases the power density to the left of the line.
+     There is no easily discernible pattern in the location of the break-even curves for
+different gases. It is evident from equations (31) and (26) that for a given electron tem-
+perature           will increase exponentially with decreasing ionization potential and
+varies as the inverse square of the cross section Qec. F’urthermore, uB(l - K) is
+proportional to Qec, since in the present case ve vec(l + a/c). Therefore the break-
+even curve for the gas with the lowest ionization potential should be closest to the lower
+right corner of the graph. Unfortunately, for the noble gases a low ionization potential
+does not go hand in hand with a low electron scattering cross section. In fact xenon,
+which has the lowest ionization potential, has one of the highest cross sections. The
+conflicting requirements on the ionization potential and cross section a r e responsible for
+the location of the curves shown in figure 1.
+     The obvious way to use the curves of figure 1 is to choose a particular gas and the
+values of the operating parameters u, B, K, and I$and to decide whether seeding is
+required by where the point representing the operating condition falls relative to the
+
+                                                                                                                                               13
+                                                                                           ,
+
+
+
+
+break-even curve. If the break-even curve is below the operating point, addition of seed
+with atomic mass equal to that of the c a r r i e r gas will decrease the power density;
+however, the addition of seed with atomic mass different from that of the c a r r i e r gas
+may move the break-even curve to the other side of the operating point, which indicates
+that such seed will increase the power density. Examination of equations (28) to (30)
+shows that if the seed atoms a r e heavier than the c a r r i e r gas atoms, then the ratio
+( ~ ~ ~ and      / (NZ)lim
+                     v ~ ~a r e )decreased
+                                    ~ ~ and    ~ the break-even curve is moved to the left.
+This behavior may be accounted for by the behavior of the elastic loss factor 6 defined
+by equation (2). If ms > mc, then the addition of seed decreases 6. Figure 2 illus-
+strates this effect when argon (atomic weight, 39.944) is seeded with cesium (atomic
+weight, 132.91).
+
+
+
+                                       Effect of Ion Slip
+
+     For pi # 0 the break-even condition is evaluated numerically, as described pre-
+viously and i n appendix E. It is instructive to consider first the simplest case, where
+both the atomic masses and the mobilities of the seed and c a r r i e r gas a r e equal. In this
+case, the loss factor 6 is unchanged by the addition of seed; and the quantity       +,
+representing the difference in ion mobilities, vanishes. The break-even condition
+becomes
+
+
+
+
+                        'e    'e            Te - T
+               PePi =                                                           c              (33)
+                                                     2eVc
+                                   Te - T
+
+
+When NE = (No)        as defined in equation (31), the numerator vanishes and pepi = 0.
+               c lim:
+Suppose that for a fixed Te, NE is continually decreased below (No)          It is clear
+                                                                     c lim'
+from equations (25) and (27) that the degree of ionization will then increase, as will the
+ratio vei/vec.    Therefore, Pepi will increase with decreasing NE. (The t e r m contain-
+ing xc in the denominator is generally of less importance for small xc. ) Physically,
+the increase in Pepi is due to an increase in ion slip. Because of the lower gas density,
+ion-neutral collisions become l e s s frequent, and the mechanism for extracting part of
+the mechanical energy from the gas and using it to Joule heat the electrons becomes l e s s
+effective. A s shown in figure 3, the effective electric field uB(l - K) required f o r elec-
+tron heating is everywhere above that f o r pepi = 0, the difference between the curves
+increasing as Pepi increases (see eq. (24)). This difference becomes large enough to
+
+14
+     .
+
+
+
+
+                    104            I   1   I I I1111             1   I   I I I IIIl          1   I   l l l l l l l
+
+                     1022                         1023                           1024                           lou
+                                                      Gas density, N,: atDmslcu m
+
+                             I         I    I   l l l l l l 1        I    1   I I I Ill1         I    I   I I IIIJ
+                            .001                           .01                          .1                            1
+                                                                 Gas temperature. atm
+                            Figure 3. - Effect of ion slip on break-even curve for argon. Static gas temperature,
+                              so00 K; ms = mc; equal ion mobilities.
+
+turn the break-even curve upward at low density. The range of parameters over which
+seeding is advantageous is increased, since dP/ds > 0 everywhere below the break-
+even curve.
+        For unequal atomic masses and mobilities of seed and c a r r i e r gases, the situation
+changes markedly from that of the preceding example, because the variations of the loss
+factor 6 and of the effective ion-neutral collision frequency via become appreciable.
+This can be ascertained from the numerical magnitudes of the second and fourth terms
+on the left side of equation (23), since eVc/kTe >> 1. Because the general break-even
+condition is quite sensitive to the ratios of ion mobilities and atomic masses of the seed
+and c a r r i e r , as well as to the cross section and ionization potential of the carrier, i t is
+difficult to draw general conclusions from equation (23). Each combination of seed and
+c a r r i e r must be considered separately. The results are shown in figures 4 to 9 for a
+static gas temperature of 500' K (which is typical of supersonic generators) and for
+various magnetic fields. Figure 4, for cesium-seeded argon, and figure 9, for cesium-
+seeded helium, a r e of a different character than figures 5 to 8. The break-even curve
+
+                                                                                                                          15
+I
+
+
+
+    .
+    0
+\
+
+
+
+
+        17
+                                                 4
+
+
+
+
+                                                          s
+                                                          c
+
+                                                     F&
+                                    '                     'CI
+                                                          m
+                                                          'I)
+
+                                                          L3
+
+
+
+                                             JM      8
+
+
+
+     \
+         \
+
+
+
+
+             0                                   1
+                     III I I   111,1,1   I   I       N
+
+                                                 - 8
+     4           3             N
+                               0
+                               A                  8
+
+
+
+
+18
+of figure 4 has an upper and a lower branch corresponding to high o r low electron tem-
+peratures, respectively. In the regions above the upper branch and below the lower
+branch, seeding decreases the power density, while between the branches seeding in-
+creases the power density. The upper branch is similar to the curve of figure 3 and may
+be interpreted physically in the same way. In the region below the lower curve, the
+electron temperature is low and collisions of electrons with carrier gas atoms limit the
+conductivity. The addition of very small amounts of seed changes the conductivity only
+slightly, but because the seed ions are more mobile than ions of the c a r r i e r gas, seeding
+causes ion slip to increase more rapidly than the conductivity, which causes the factor
+o0/( 1 + Pepi) in the power density to decrease. Although seeding is not required in the
+region below the lower branch, this region is of little practical significance because of
+the low electron temperature and consequently the small degree of ionization and low
+power density.
+        The break-even curves of figures 5 to 8 have also two branches. The upper branch
+corresponds to high electron temperatures and low gas densities (this branch is not
+shown in figs. 5(c), 6(c), and 7, since it falls outside the range of electric fields and
+gas densities of interest). The lower branch, corresponding to higher gas densities and
+lower electron temperatures, is below and to the right of the break-even line for zero
+ion slip. Instead of crossing the zero ion slip line, as in figures 4 and 9, this lower
+branch becomes tangent to it. The different character of the break-even curves of fig-
+ures 5 to 8 from those of figures 4 and 9 is due to the variation i n the mobilities of
+c a r r i e r and seed ions among the various combinations of c a r r i e r and seed.
+        Seeding increases the power density in two regions of figures 5 to 8, above the
+upper branch, and to the right of the lower branch. In the first region, the effective
+electric field uB(l - K) is generally too high to be attained in practice. The range of gas
+densities and field strengths in the second region are of more practical interest.
+        A typical generator operating curve is indicated by the short dashed curve in fig-
+ures 4(b) and 5(b) for argon. The generator operating conditions a r e taken from one of
+the cases that was extensively investigated in reference 5. In that reference the one-
+dimensional MHD equations were solved for a constant-area channel, where the nonequi-
+librium conductivities of seeded r a r e gases were calculated on the same basis as they
+are herein. The electric field E was taken to be constant in reference 5, as required
+by Maxwell's equation for the assumed one-dimensional situation. Since the gas velocity
+varies along the generator duct, f o r this case it is convenient to define a new constant
+load parameter K1 as
+
+                                                  E
+                                          K1 =-                                           (34)
+                                               ulB
+
+
+                                                                                            19
+where u1 is the gas velocity at the entrance section. When this definition is combined
+with conservation of mass, pu = p u the following equation for the operating curve is
+                                  1 1'
+obtained:
+
+
+
+
+The dashed curves shown in figures 4(b) and 5(b) are for an entrance Mach number of
+3.0 and an entrance stagnation temperature of 4000' R (2222' K), for which the entrance
+gas velocity u1 is 1316 meters per second. For a magnetic field strength of 2 webers
+                                                          5
+per square meter, a stagnation pressure of 1 . 6 4 ~ 1 0 newtons per square meter
+(1.62 atm) yields the optimum power density (ref. 5). The same conditions are assumed
+herein. In this case it can be seen that the addition of cesium will increase the power
+density except at the very end of the operating line. This conclusion is in agreement
+with reference 5, in which the addition of a very small amount of cesium seed
+(s = 0.000366) to argon c a r r i e r gas was found to yield the optimum total power output.
+Figure 5(b) shows that seeding with potassium is detrimental to the power density
+throughout the generator. Potassium seed was found to be inferior to cesium in refer-
+ence 5, but potassium-seeded argon still produced a higher total power than unseeded
+argon. The mobility of ions, however, was calculated on the basis of the polarizability
+of the carrier gas atoms in reference 5. Such a calculation gives equal mobilities of
+argon and potassium ions in argon, whereas the mobility of argon ions in argon is less
+than that of potassium ions in argon because of charge exchange. Inclusion of charge ex-
+                                                                                             .
+change in this report accounts for the difference in conclusions regarding seeding of
+argon with potassium.
+     The upper limit on the gas velocity is
+
+                                                                       U max =   )/2cpT0
+             TABLE I. - MAXIMUM GAS
+
+                    VELOCITIES                      where cp = 2   k is the constant pressure speci-
+     a s     1 Stagnation temperature, T ~ O, K ~                  mc
+         -    t                                     fic heat and T, is the stagnation temperature.
+I
+                                                                   U
+                  1500   2000   2500   3000         The values of umax a r e useful in interpreting
+I             I Maximum gas velocity, m/sec   ~     the results and a r e given in table I. The maxi-
+                                                    mum attainable electric field and voltage may be
+                         2030   2270   2486         estimated from these values of umax and the
+    Argon                                           magnitude of the available magnetic field. At the
+    Xenon
+                                                    present time, a magnetic field of 2 webers per
+
+
+    20
+                                         *----
+                                            550
+
+
+
+
+                    lo
+                     1 9                          1
+                                                  P                             Id4                      ld5
+                                                   cas density,N,:   a t ~ s l c um
+                         Figure 10. -Effect of gas temperature on break-even curves for cesium-seeded argon.
+                           Magnetic field strength, 2 webers per square meter.
+
+
+square meter (20 000 G) is typical of MHD generators. For this magnetic fie-1 and
+K = 0.5, the maximum attainable field uB(l - K) is equal to umax in magnitude and is
+of the order of 103 volts per meter. With a very high magnetic field, s a y B = 10
+webers per square meter (100 000 G), the magnitude of uB(l - I() may reach lo4.
+
+
+
+                                       Effect of Static Temperature
+
+    III figures 1 to 9 the gas temperature was taken to be 500'                            K, a typical value for
+supersonic generator. The effect of changing the gas temperature from 500' to 1500° K
+is shown in figure 10. The break-even curves for zero ion slip are very slightly af-
+fected by the gas temperature. However, the character of the curves for Bi # 0 varies
+significantly with gas temperature in the range from 500' to 600' K; and in fact, for gas
+temperatures of 600' K and higher, the break-even curves for cesium-seeded argon have
+the same character as the curves for the other combinations of gas and seed at 500' K
+shown in figures 5 to 8. Since there is insignificant variation of the alkali ion mobilities
+in the noble gases with temperature, the change in the character of the break-even
+curves that accompanies a change in gas temperature is due to the variation of the
+
+                                                                                                                    21
+                         t                                          ./
+                    Id
+                         1 /
+                           '.-/'
+                                                                                  Magnetic field
+                                                                                   strength,
+                                                                                       B, m
+                                                                                   Wblsq
+
+                                                                                        1
+                                                                        --              2
+
+
+
+
+                    loll         I     I   I   I   Illll        I   1   I I I Ill1          I   I   I I I Ill]
+                      1on                             1023                      1024                        1025
+                                                             Ng/B, Wb-km-')
+                             Figure 11. - Correlation of break-even curves when plotted as function of N",B
+                               for cesium-seeded argon. Static gas temperature, 500' K.
+
+
+mobility of the c a r r i e r ions with temperature, caused by charge exchange (see the dis-
+cussion in appendix E).
+
+
+
+                                               Effect of Magnetic Field
+
+     Finally, it is interesting to note that the break-even curves for various magnetic
+fields fall rather close together when u ( l - K) is plotted against Nz/B, as shown in
+figure 11 for a constant gas temperature of 500' K. This fact may be used to estimate
+roughly the location of the break-even curves for various magnetic fields when the shape
+of the curve for one magnetic field is known.
+
+
+                   GENERATOR PERFORMANCE WITH UNSEEDED GASES
+
+     The purpose of the preceding analysis was to establish the regions of operation of a
+generator where the addition of alkali seed to a given noble carrier gas would increase
+the power density. A comparison of various combinations of seed and c a r r i e r gases re-
+22
+                                                                                      l4
+                                                                                       O oOr                                                / /
+Y
+0   12 ooo
+        4 T
+                                                   Gas density,
+                                                       N,:              /                    t
+
+                                                                                 r
+                                                                                 e
+                                                                                 -v
+                                                                                 W
+
+
+                                                                                             t
+                                                                                      6
+                                                                                             (a) Electron temperature against effective electric field,
+              (a) Electron temperature against effective electric field.                  16-
+
+
+
+
+                                                                                 4
+                                                                                 m
+
+
+
+
+                      (b) Bgi against effective electric field.
+
+
+                                                                                      'o
+
+     :I
+     1012 r-
+
+
+     1010                                                                                              (b)      against effective electric field.
+                                                      /      /
+
+                                                                                 E
+                                                                                      l0l2r
+
+      104
+
+      102
+
+
+                                                                                 z
+                                                                                 L
+
+     100
+                                                                                 n
+
+     10-2
+        101                    102                  IC?                    104
+                       Effective electric field, uB(1 - K), Vlm                                         Effective electric field, uB(1 - K), Vlm
+
+                  (c) Power density against effective electric field.                              (c) Power density against effective electric field.
+
+            Figure 12. - Performance parameters as functions of electric                         Figure U. - Performance parameters as functions of
+              field for unseeded argon. Magnetic field strength, 2 webers                          electric field for unseeded neon. Magnetic field
+              per square meter; static gas temperature,      K.                                    strength, 2 webers per square meter; static gas
+                                                                                                   temperature, !j@ K.
+
+
+
+
+                                                                                                                                                          23
+Y
+0
+
++&        8000                                                                                                                                                                               Gas density,
+a
+L
+3
+                                                                                                                                                                                                  ,:N
+m                                                                                                                                                                                            atomslcu m
+'n
+ G        6000
+E,
+c
+c
+e         4000
+P
+W
+
+
+
+          20001          I         1       I       I l l 1 1 1   1       I       1 I 1 I111           I       I       I       I       I   ,I#l
+                                 (a) Electron temperature against effective electric field.
+           101 r-                                                                                                                                 4000
+                                                                                                                                                        (a) Electron temperature against effective
+                                                                                                                                                          electric field.
+                                                                                                                                                   102 r
+
+
+                                                                                                                                                   101
+
+
+
+
+                                                                                                                                                  10-1
+
+                  -
+                                                                     I   I       I    1   I ,III
+
+
+
+
+                -
+           1010 -
+                -
+            108 -
+                -
+            106 -
+                -
+            104 -
+                  -
+
+            102 -
+                -                                  I
+                             I         ,                I IIII                            I b l t l                       I               IIIII
+                                                                                                                                                         -
+            100                                1    I                I       I    I   1                   I       I               I
+
+                                                                                                                                                    100-     I   I   I   I   I 1 1 1 1   I    I    I    1   I ,Id
+
+
+
+
+                      Figure 14. - Performance parameters as functions of electric field for
+                        unseeded xenon. Magnetic field strength, 2 webers per square
+                        meter; static gas temperature, SOOO K.
+
+
+
+
+     24
+                  E
+
+
+                 J
+                 =
+                 Y
+
+
+
+
+                  L
+
+
+                 n
+                  6”
+
+
+
+
+                              1       I    I   I I I I Ill         1     I   I I I Ill1        I    I   I   I   I,l,j
+                             101                         ld                             Id                         roa
+                                                                       Xenon
+                                                                 w
+                                                                Id                           lo4
+                                                                               Helium
+                                                  Effective electric field, uB(1- K), Vlm
+                        Figure 16. - Comparison of power densities of unseeded noble gases on basis of equal stag-
+                          nation temperatures. Magnetic field strength, 2 webers per square meter; static gas
+                          temperature, X@ K; gas density, 1024 atoms per cubic meter.
+
+
+    quires the calculation of the power density for each combination at the operating condi-
+    tions of interest and-for various seed fractions. Since these calculations have been car-
+    ried out in reference 5, including the variation in properties along the generator channel,
+    extensive calculations of this nature are unwarranted for the purposes of this report.
+    However, the magnitude of the power density for zero seed does provide an idea of the
+    best choice of c a r r i e r gas. For assigned values of B, NE, Te, and T, uB(l - K) is
+    calculated from equation (24), and the result is substituted in equation (11) to yield the
+    power density parameter P(l - K)/K. The electron temperature Te, pepi, and
+    P(l - K)/K a r e plotted as a function of the effective electric field uB(l - K) in figures
+    12 to 15 for unseeded argon, neon, xenon, and helium. Note that the scale of uB(l - K)
+    i n the helium curves (fig. 15) extends one decade higher than the scales for the other
+    gases. At any specified value of uB(l - K), the power densities for argon equal or ex-
+    ceed those of the other gases. The single exception is xenon, which produces higher
+
+I                                                                                                                        25
+                                                                                  power at a gas density of        atoms
+                                                                                  per cubic meter because the mobility
+                                                                                  of xenon ions in xenon is smaller
+                                                                                  than that of argon ions in argon.
+                                                                                       A comparison of power densities
+                                                                                  on the basis of equal stagnation tem-
+                                                                                  peratures, rather than equal values
+                                                                                  of uB(l - K), is shown in figure 16.
+                                                                                  The curves shown a r e simply the
+                                                                                  curves of figures 12(c), 13(c), 14(c),
+                                                                                  and 15(c) for a gas density of 1024
+                                                                                  atoms per cubic meter, a magnetic
+                                                                                  field of 2 webers per square meter,
+                                                                                  and a static gas temperature of
+                                                                                  500' K. The scales of uB(l - K)
+                                                                                  are shifted s o that a single vertical
+                                                                                  line corresponds to the same stagna-
+
+
+           F
+     10- l7 1
+            i                       L temperature,
+                                Electron  10       T,      0
+                                                          OK
+                                                                                  tion temperature for all four of the
+                                                                                  carrier gases. The dashed lines in-
+                                                                                  dicate a few stagnation temperatures.
+                                                                                3 Any two of the abscissa scales a r e
+                                                                                  shifted with respect to each other by
+                Figure 17. - Momentum transfer cross sections of noble gases.
+                                                                                  an amount equal to the square root
+of the ratio of their atomic weights, since u = )/2c (T - T) and c       l/mc.
+                                                     P O             P
+     Figure 16 discloses that argon produces the highest power at low values of uB(1- K),
+but as uB(l - K) increases, the power production in neon and helium exceeds that of
+argon. Although helium yields the highest power densities when uB(l - K) is greater
+than about 4x10 3 volts per meter, argon and neon appear to be the best for operation
+over a wide range of uB(1 - K). The latter a r e in fact the carrier gases with the lowest
+electron elastic scattering cross sections at temperatures of the order of 1 electron
+volt. The complete channel calculations of Heighway and Nichols (ref. 5) showed that
+with regard to neon and argon carriers, the optimum overall power output for cesium-
+ seeded argon was 15 percent larger than that for cesium-seeded neon. At the entrance
+section of their generator, however, neon-cesium yielded a power density about twice
+that for argon-cesium. The overall power output of cesium-seeded helium was found to
+be considerably less than that of argon and neon. These results can be understood on
+the basis of figure 16, since the power density in neon and helium, although larger at
+high values of uB(l - K), fall off with decreasing uB(l - K) faster than it does in argon.
+
+26
+In a supersonic, constant-area generator, uB(1 - K) drops off rapidly, as shown by the
+operating curve of figure 4(b), because u decreases and K increases, and therefore
+argon, which produces the highest power density at low values of uB(l - I(), also pro-
+duces the highest overall power output. Although the gas density does not remain strictly
+constant through the generator, its variation is not significant, as can be seen from fig-
+u r e 4(b), and the interpretation of the results of reference 5 by means of the constant
+gas density curves of figure 16 should be qualitatively correct. The behavior of the
+curves of figure 16 is not surprising in view of the variation of the elastic-scattering
+c r o s s sections of the noble gases (fig. 17, p. 26) with decreasing electron temperature.
+       The vertical lines in figure 16 corresponding to various stagnation temperatures
+were drawn under the assumption that B(l - K) = 1 or K = 0.5 for the particular case
+shown of B = 2 webers per square meter.
+
+
+
+                                  CONCLUM NG REMARKS
+
+       The consequences of the addition of alkali seed t o a noble carrier gas in an MHD
+generator have been examined from the point of view of realizing magnetically induced
+nonequilibrium ionization. An examination of the physical bases of the results tends to
+identify the desirable properties of c a r r i e r and seed materials for this optimization of
+power density.
+       The important properties of c a r r i e r gases are that (1) they be of low molecular
+weight so as to yield large induced electric fields for a given stagnation temperature and
+(2) they have low cross sections to elastic scattering of electrons s o that the electrons
+will tend to higher temperatures, resulting in high electric conductivity. The seed on
+the other hand should have (1) low ionization potential so that in low concentrations i t is
+fully ionized, (2) high molecular weight to minimize electron energy loss, and (3) low
+c r o s s sections t o elastic scattering of electrons for the reason mentioned previously with
+regard to the c a r r i e r gas.
+       For the gas combinations considered herein, neon and argon appear to be the most
+suitable c a r r i e r gases while cesium is the most suitable seed. For reasonable generator
+operating conditions using these carriers, higher power densities will likely be obtained
+with seed rather than in the absence of seed and with cesium seed rather than with any
+lighter alkali gas.
+       It should be pointed out that the present analysis directly answers the question of
+whether the power densityincreases o r decreases with the addition of seed only in the
+limiting case where the seed fraction approaches zero. The conclusions cannot be ex-
+tended to arbitrary seed fractions since the power density does not necessarily vary
+monotonically with seed fraction. In fact, the results of reference 5 indicate that for a
+
+                                                                                            27
+                                                                                   ,
+
+
+
+case where the present analysis indicates the desirability of seeding there is an optimum
+seed fraction beyond which power density decreases with increase in seed fraction.
+    Another important restriction of the present analysis is due to the omission of in-
+elastic collisions and radiation losses. The analysis of the combined effect of these
+processes on nonequilibrium ionization in a seeded plasma is a formidable problem, but
+one which is important enough to warrant further study.
+
+Lewis Research Center,
+   National Aeronautics and Space Administration,
+        Cleveland, Ohio, January 12, 1965.
+
+
+
+
+28
+                                  APPENDIX A
+
+
+                                   SYMBOLS
+
+      Mks units a r e used except where explicitly noted otherwise.
+A     atomic weight                                    number of particles or
+                                         Nr
+a     defined by eq. (29a)                               rth species per unit
+                                                         volume
+B     magnetic field strength
+                                         NOr           sum of number densities
+b     defined by eq. (29b)
+                                                         of ions and atoms of
+      impact parameter for 90'                           species r
+        coulomb scattering
+                                                      defined by eq. (31)
+      defined by eqs. (B15)
+                                         NO            standard gas density,
+      defined by eq. (29c)
+                                                          2.69X10 19 atoms/cu c m
+      defined by eq. (D22)
+                                         n            exponent in eq. (Dll)
+      Debye length, eq. (C14)
+                                         P            power density
+      electric field
+                                         Qc           total cross section for
+      electron charge, '                                scattering of mono-
+         1. 602x10-19 C                                 energetic beam,
+      ground state degeneracy                            eq. (C25)
+      defined by eq. (26)                Qm           momentum transfer cross
+                                                       section for scattering
+      Planck constant,
+                                                       of monoenergetic beam
+         6 . 6 2 5 ~ 1 0 -J-sec
+                           ~~
+                                                       definedbyeq. (C6)
+J     current density
+                                         Qrt          collision cross section
+K     load parameter defined                            for momentum transfer
+         by eq. (6)                                     fromspecies r to
+      defined by eq. (C3)                               species t averaged
+Krt
+                                                        over Maxwell distribu-
+k     Boltzmann constant,
+                                                        tion, eq. (C10)
+        1.380xio-~~     JPK
+                                                      defined by eq. (D13)
+mr    mass of particle of rth            Rrt
+         species                         S            seed fraction defined by
+      reduced mass of particles                         eq. (12)
+mrt
+         r and t                         T            static gas temperature
+
+                                                                                 29
+           temperature of rth species           A      ratio of Debye radius to impact
+Tr
+                                                         parameter for 90' scattering
+U          gas velocity                                  defined by eq. (C16), eq. (C19)
+Vr         ionization potential of r th         h      defined by eq. (B20)
+             species
+                                                P      ion mobility
+V          relative speed of particles
+                                                       ion mobility at 300' K and gas
+           velocity of particle of r th         10
+                                                         density of 2. 69x10 19
+vr
+             species                                     atoms/cu cm
+Wd
+           difference in ion drift velocities          total electron collision frequency,
+             defined by eq. (19)                'e
+                                                         eq. (8)
+wi
+           mean ion drift velocity defined             effective ion-atom collision fre-
+                                                'ia
+             by eq. (B8)                                 quency defined by eq. (B19)
+wr         drift velocity of rth species               mean collision frequency for
+                                                'r t
+           degree of ionization of carrier              momentum transfer from
+xC
+             gas defined by eq. (15)                    species r to species t
+                                                P      gas density
+X          degree of ionization of seed de-
+    S
+             fined by eq. (16)                         electrical conductivity
+                                                OO
+    (11)   cross section for momentum           X      scattering angle in center of
+'rt
+             transfer from species r to                  mass coordinates
+             species t averaged over            P!     defined by eq. (D18)
+             Maxwell distribution defined
+                                                52     scattering solid angle
+             by eq. (C5)
+a!         mean thermal speed, eq. (C4)         we     electron cyclotron frequency
+
+           electron Hall parameter defined      Subscripts:
+Pe
+             by eq. (9)
+                                                a      atom
+Pi         ion slip parameter defined by
+                                                C      c a r r i e r gas atom
+             eq. (10)
+6          mean elastic energy loss factor      C+     carrier gas ion
+            defined by eq. (2)                  e      electron
+€          defined by eq. (B31)                 i      ion
+
+€0
+           permittivity of free space,           max   maximum
+             8. 854X1O-l2 F/m                    min    minimum
+
+
+
+ 30
+     ,
+
+
+
+r        rth species                        t   tth species
+           ( r = e, i, a, c , c+, s , s+)           (t = e, i, a, c, c +, s, s+)
+
+s        seedatom                           0   stagnation conditions
+s+       seedion                            1   conditions at generator entrance
+
+
+
+
+                                                                                   31
+                                                   APPENDIX B
+
+
+                            CALCULATION OF ION SLIP FOR TWO ION SPECIES
+
+          The d r i f t motion of a species r of charged particles in crossed electric and magne-
+     tic fields is described by the momentum equation (ref. 4)
+
+                                                               (r = e, s+, c+; t = e, s+, c +, s, C)
+           e,(:*   + G~ x 5) =       mrtvrt(Gr   - Gt)                                                                (B1)
+                                 t
+
+     where
+                                                   -
+                                                   E*-E+UXB
+                                                           4     4     -
+
+
+
+
+._
+     is the effective electric field measured in a coordinate system moving with the mean gas
+     velocity      c,
+                  and mrt is the reduced mass of particles r and t, defined as
+
+                                                               m m
+                                                                 r t
+                                                   mrt-          +mt
+                                                               r
+
+         When written out in full for the electrons e, c a r r i e r gas ions c+, and seed ions s+,
+     equation (Bl) becomes
+
+
+     e:
+
+
+
+     C+:
+
+
+                                                                                             -
+                                                                                          = e(E* +           x   5)
+                                                         ~ c + s + v c + s + ~ c +- GsJ
+                                                                                                         +
+
+
+
+
+                                                    +                                                C
+
+
+     S+:
+
+
+
+                                                    + m + +v
+                                                           s c
+                                                                     +
+
+
+
+
+                                                                     s c
+                                                                           +ts+
+                                                                             -
+                                                                                             4
+
+
+                                                                                  Gc+) = e(E* + %
+                                                                                                     S
+                                                                                                         +   X   g)
+
+
+     32
+    .
+
+As in reference 4, the atom drift velocities a r e neglected, an assumption that is valid
+for small degrees of ionization.
+     In reference 4, the drift motion of a single ion species for an unseeded plasma in
+crossed electric and magnetic fields was described by the momentum equation
+
+
+
+
+The aim here is to derive a similar equation for the combined drift motion of the two ion
+species in the seeded plasma. To accomplish this, it is convenient to define a m e G ion
+drift velocity as
+
+                                   4      Nc+Gc++ Ns+Ss+
+                                  w.
+                                    1
+                                               Nc+ + Ns+
+
+The difference in ion drift velocities
+
+                                         Wd   = wc+ - wS+
+
+is also a convenient quantity.
+     The following equation is obtained by multiplying equation (B5)by Nc+, equa-
+tion (B6) by Ns+, adding and making use of the definitions of Gi and Gd (eqs. (B8)
+and (B9),respectively):
+
+
+
+
+                                    +ms+s”s+s)     1.   1
+                                                                  N#S+
+                                                            + Nc+ + N,+ )2 p C + C Y C + C
+                                                              ~                              +   mc+s’c+s~
+
+
+                                    - (ms+cvs+c + ms+svs+sj G~ = e(E* + S~x E)                       (BIOI
+
+
+In reducing the first term of equation (B10) to this form, use was made of the fact that
+
+
+
+
+                                                                                                        33
+since the ion-electron collision frequency involves only the electron number density and
+electron temperature and not the properties of the individual ions (provided all the ions
+are singly charged), Also, ion-ion collisions cancel out because of conservation of
+momentum in collisions.
+    An equation for the difference velocity Gd is formed by subtracting equation (B6)
+from equation (B5). The resulting equation becomes
+
+
+
+
+If
+
+
+
+
+then the ions drift with the same velocity. Since urt is proportional to Nt, equa-
+tion (B13) can be satisfied for arbitrary seed and c a r r i e r gas densities only i f the col-
+lision coefficients for each ion species with the seed and c a r r i e r gas atoms a r e the same,
+that is, only if
+
+                                    mc+cvc+c = ms+cvs+c                                    (B14a)
+
+
+                                             - ms+svs+s
+                                    mc+svc+s -                                             (B14b)
+
+
+     Unfortunately, conditions (B14) a r e generally not satisfied. Therefore, it is neces-
+sary to solve equation (B12) for Gd in terms of       ciand substitute the result in equa-
+tion (B10). The following abbreviations a r e introduced:
+
+                                                                                           (B15a)
+
+
+                                                                                           (B15b)
+
+
+
+34
+                           c3 E mc+s+v,+s+        + ms+c+vs+c+ + mevie
+
+
+
+
+When compared to the other terms in equation (B15c), mevie is of the order (me/mi)
+and therefore may be neglected. Then equation (B12)may be rewritten as
+
+
+
+
+which may be easily solved by premultiplying both sides by the operator
+
+                                                ei5
+                                             1--
+                                                c4
+
+and using the fact that   zd is perpendicular to ii. Then
+                                c1 - c2            1
+                                     c4
+                                             1+   ($
+If equation (B17) is substituted into equation (BlO), the resulting equation can be
+written in a form quite similar to that of equation (B7),namely,
+
+
+                                     - T,) + 2 v i a ~ i = e [E* + (1 + A ) G ~x G]
+                                              mC
+                          mevie(Gi
+
+
+where now the effective ion-neutral collision frequency is defined as
+                  r
+
+
+                                       sxS
+         v.ia =                                                                       I
+
+                                 + xc   + sxS c2 -
+                                                       (xc + sxs)    c4       l+($J
+
+
+
+and
+
+                                                                                          35
+The collision frequency for electrons with any single ion species A+ in a mixture of
+singly charged ions is
+
+
+
+
+where the electron-ion collision cross section Qei is determined by the coulomb inter-
+action between electron and ion and is therefore the same for all singly charged ions
+(see appendix C for the exact expression). In the present case, the total electron-ion
+collision frequency is
+
+
+
+
+where
+
+
+
+
+If the total electron-atom collision frequency is written
+
+
+
+
+and use is made of the definition of Gi (eq. (B8))and equations (B22)and (B23),equa-
+tion (B4)may be written in the form
+                                                         -c
+
+                       me v ei.(we - wi) + me v eaWe = -e(E*- + 5, X
+                              -    4            4
+
+                                                                       G>
+which is identical to equation (36)of reference 4.
+     Ohm's law and the expression for the electron heating rate a r e obtained from equa-
+tions (B18)and (B25). The total current
+
+
+
+
+and the electron current
+
+36
+                                               0
+
+                                               Je = - N eew',
+
+
+are introduced into equations (B25) and (B18), which become
+                                           -                          - -
+                                -m e uei. J - m e ueaJe =-Nee 2-*E + e J e x B           (B28)
+
+
+                            -
+                     me uei.J +-mc uia(J - Je) =Nee 2-E* + e ( l + A)(J - Je) X B
+                                                                         -   0   -   .   (B29)
+
+
+Addition of equations (B28) and (B29) and solution of the resulting equation for     ze by
+the same device as employed in the solution of equation (B16) yield
+
+           -
+           J =
+             e
+                     ( 1 + € )2 + A 2Pi2
+
+where
+
+
+                                               E G 2 - - me "ea
+                                                      mc u.ia
+
+
+and
+
+                                                     2eB
+                                                8. = -
+                                                      mc u.ia
+
+
+muation (B30) is substituted into equation (B28), which may then be put in the following
+form:
+
+
+  -*
+(JOE =
+                 1
+
+
+
+
+                                                    +A(l+X)pf-~
+
+
+where (Jo is the conductivity
+
+
+                                                                                             37
+                                                                  2
+                                                              Nee
+                                                         00 = -
+                                                              meu e
+
+
+and the electron Hall parameter                Pe is defined as
+                                                           w
+                                                     p
+                                                         e
+                                                           =e3--
+                                                             eB
+                                                           'e   meVe
+
+The electron heating rate Je
+                                  - E*              is, from equations (B30) and (B32)
+
+          J2                 1
+Je . E* = -
+4    -
+
+
+
+               [(l + E ) 2   + X 2Pi]2 2
+
+
+                                           +   3 [1+ + x ( l + X ) P Y } + pepiE [1+ (1 +
+                                                           E                             E
+                                               'e
+
+     Since E and Pi2 a r e both much smaller than 1, and h for small seed fractions
+( s < 0. 1)is of order 1 or less, terms of order E , E X , and X 2Pi2 can be neglected in
+equations (B32) and (B33). Thus, the simplified equations a r e
+
+                                               "* = ( I+Pet)?- P e -5X J -                   (3334)
+                                       OOE                             B
+
+
+
+
+which are formally identical to equations (49) and (51) of reference 4. The only modifi-
+cation is that via is defined differently now (eq. (B19)). In the limit of zero seed, via
+reduces to v ~ + as~ , it should.
+
+
+
+
+38
+                                        APPENDIX C
+
+
+        MOMENTUM TRANSFER CROSS SECTIONS AND COLLISION FREQUENCIES
+
+    The collision frequencies vrt used in this report refer to the average rate of
+momentum transfer from species r to species t per particle of species r. The
+average rate of momentum transfer from species r is
+
+
+                                 Jm3.      (2)    coll d3vr
+
+
+where (6fr/6t)coll denotes the rate of change of the distribution function f r due to col-
+lisions. Burgers (refs. 6 and 7) has obtained an explicit expression for (Cl)by assum-
+ing that the distribution function is close to Maxwellian. In the first approximation, he
+obtains
+
+
+
+
+where   Tr and Tt a r e the drift velocities. The friction coefficient Krt is defined as
+
+
+
+
+where mrt is the reduced mass
+
+
+                                                 mrmt
+                                        mrt =
+                                                mr + mt
+
+
+a is a mean thermal speed2
+
+
+
+
+    2As noted in reference 4, Burgers? results apply to only the case Tr = Tt = T, but
+equation (C4)represents the proper generalization of Burgers? work to the case of d i f -
+ferent temperatures.
+                                                                                           39
+and Z
+    )':    is an averaged cross section for momentum transfer, defined as
+
+
+
+
+where v = Ivr - vtl is the relative speed.
+            -   4
+
+
+
+
+                                             ( 1)) appearing in the integrand is the
+     The quantity Qm (which Burgers denotes Srt
+momentum transfer collision cross section for a beam of particles of velocity v and is
+defined as
+
+
+
+
+where ~ ( vx), is the differential cross section for scattering through the angle x and
+dS1 the element of solid angle.
+     The relation between vrt and Krt is (refs. 4 and 8)
+
+
+                                        Krt  - -2 aNtZrt
+                                             -        (11)
+                                "rt =
+                                        mrtNr 3
+
+More often, the 2/3 factor is absorbed into the c r o s s section, and the average value of
+the relative speed, which is
+
+
+
+
+is used in place of     Then
+                      CY.      vrt is written in the conventional definition as
+
+                                        v r t = Nt( V) Q r t
+
+Clearly,
+
+40
+        For collisions between electrons and atoms or ions, the relative speed v is very
+    nearly equal to ve, and a ( Z k T , / ~ n ~ ) l / ~hence
+                                                        ;    equations (C10) and (C5)may be re-
+    duced to     ‘
+
+
+
+
+        The well-known Rutherford cross section
+
+
+
+
+    is used to calculate Qm for collisions of electrons with singly charged ions. When
+    equation (C12) and the formula dS2 = 27r sin x dx are substituted into equation (C6)and
+    the integration is performed over all scattering angles from 0 to n, the result is
+
+
+
+
+    Due to the long range nature of the coulomb potential, this integral diverges at the lower
+    limit. Actually, the maximum range of the electrostatic field of an ion is of the order of
+    the Debye length, which is (ref. 9)
+
+                                      ,   d=($)        1/2
+
+
+
+
+    At distances larger than d, electrons almost completely screen the field of the ion.
+    Hence it is customary to replace the lower limit in equation (C13)by the minimum scat-
+1   tering angle Xmin, which is determined from the relation
+
+
+                                                                                              41
+where A is the ratio of the Debye length to the impact parameter bo for 90' scattering
+(ref. 9)
+
+
+
+
+                                               e2    1
+                                             4ne0 m v
+                                                       2
+                                                     e e
+
+Ions also contribute to the screening effect, but as pointed out in reference 10, the time
+involved in an encounter between an electron and an ion is much smaller than the period
+of oscillation of the ions; hence, there is not enough time for the ions to respond to the
+fluctuation in charge caused by the passing electron, and the ions therefore cannot pro-
+vide effective screening for electron-ion collisions.
+     The result of cutting off the integral in Qm at xmin is therefore
+
+
+
+
+o r since A 2 >> 1
+
+
+
+                                                         1nA
+
+
+                                                                                      2
+On account of the slow variation of In A with ve, i t is also customary to replace meve
+in equation (C16) by its average value, 3kTe, so that A becomes
+
+                                         12n(e0kTe)3/2
+                                    A=
+                                             3 1/2
+                                            e Ne
+
+
+
+42
+Int gration of th- expression (C18) according to equation (C11) yields finally the average
+momentum transfer cross section for electron-ion collisions
+
+
+
+
+     The ion-ion cross section for singly charged ions is derived from equations (C5)
+and (C10) by using a Rutherford cross section similar to equation (C12), but with me
+replaced by the reduced mass of the ions and ve by the relative speed v of the ions.
+The screening due to ions must also be included, since the ion-ion collision time is of
+the same order as the ion oscillation period. The correct Debye length d‘, including the
+effect of ion screening, is (ref. 10)
+
+                                        -1
+                                         - - -1
+                                              +-        1
+                                        dt2 d2        di2
+
+
+where
+
+
+
+
+The result for the ion-ion cross section is
+
+                                                 2
+                                                     l n ( h f 2 + 1)
+                                Qii= E(&)4“0            (kTi) 2
+
+
+where A’ is the ratio of the Debye length d y to the average impact parameter for 90’
+scattering of ions (e2/4mO)/3kTi
+
+
+                                    12a(~,kT~)
+                                            3/2
+                             At =
+                                      e3N.il/’
+
+
+    The ion temperature is assumed to be equal to the gas temperature T. Since
+
+                                                                                         43
+Te >> T, the last factor in equation (C24) may be set equal to one. However, A' << A,
+and it is generally incorrect to make the approximation A' >> 1 in equation (C23).
+     For electron-atom collisions, experimental values of the momentum transfer cross
+section Qm were used. The authors of reference 5 have evaluated Qet(Te) numerically
+for a number of gases in the range of Te from 100' to 15 000' K. Where experimental
+values of Qm were not available, they used the total cross section
+
+
+
+
+instead. The difference between Qm and Qc for most gases is l e s s than 10 percent
+(ref. 11, p. 31). The results for Qec(Te) for the noble gases a r e summarized in fig-
+ure 17 onpage 26.
+     In reference 4, it was assumed that electron-atom collisions could be treated by the
+hard-sphere model, in which Qm is independent of ve. In that case, equation (C11)
+yields
+
+                                            4
+                                      Qec = 3 Qm
+
+
+A constant value of Qm = 2. 0X1O-l7 square centimeter was used for argon in refer-
+ences 1, 3, and 4. This value w a s inferred from monoenergetic cross section data
+(ref. 11, p. 19), which showed little variation over a range of electron energies below
+1 electron volt. From figure 17 it can be seen that this value w a s far too low. The
+average momentum transfer cross section also r i s e s rather rapidly with electron tem-
+perature. The necessity of using the properly averaged cross section is apparent.
+     The momentum transfer frequencies for ion-atom collisions a r e calculated from
+ionic mobility data. The mobility prt of an ion of species r in a gas of species t is
+defined as
+
+
+
+
+where Tr is the drift velocity and E is the electric field. Comparison of equations
+(Bl) and (C27) shows that the mobility for singly charged ions is related to the average
+momentum transfer urt by the formula
+
+                                                 e
+                                      prt =
+                                              "rt'rt
+
+
+
+44
+Note that vrt is proportional and prt is inversely proportional to the density Nt. Ex-
+perimental mobilities are often referred to the standard gas density No = 2.69~1019
+atoms per cubic centimeter and the corresponding mobility denoted by p0, as in refer-
+ence 11, so that the mobility p at any other gas density N is
+
+
+
+
+                                                                                    45
+                                            APPENDIX D
+
+
+                          DERIVATION OF BREAK-EVEN CONDITION
+
+       The derivatives dNe/ds, dve/ds, dvia/ds, and dd/ds are required for the evalua-
+tion of dTe/ds and dP/ds f r o m equations (20) and (22). Since the former quantities
+a r e functions of the degrees of ionization xc and xs of the c a r r i e r and seed gases, it is
+convenient to first calculate dxc/ds and dxs/ds.
+       Differentiation of equations (18) and (19) with respect to s and solution of the r e -
+sulting equations for dxc/ds and dx,/ds yield
+
+
+&C                   xc(l - xc)
+--   -
+ds       xC(l - xC) + sxs(l - xS) + xC + sxS
+
+
+                                                  + sxs(l - xs)           ---
+                                                                          Te d s
+
+
+                   xs(l - xs)
+-&S- -
+ ds    xC(l - xC) + S X s ( l - xS ) + xC + sxS
+
+
+
+
+Only the limiting forms of these expressions for s = 0 will be used here. It will be as-
+sumed that, in the limit of zero seed, the degree of ionization xs of the seed approaches
+unity. Numerical calculations carried out in the course of the work reported in refer-
+ence 4 for s -< 0.01 support this assumption over the range of electron temperatures of
+interest. In fact, if s is set equal to zero in equations (18) and (19) for xc << 1, the
+following expressions a r e obtained for x and xs:
+                                          C
+
+
+
+
+                                                             1
+                                            xs    -
+                                                  N
+
+
+
+
+                                                             JT
+                                                      1 +-
+                                                             FS
+
+46
+where Fs amd F, are the right sides of equations (18) and (19), respectively. The
+ionization potential of the c a r r i e r gas is several times larger than that of the seed, so
+that Fc << Fs; and since Fs > 1 for the range of electron temperatures of interest
+here, xs = 1 to a high degree of approximation.
+     With the aforementioned assumptions, in the limit of zero seed, equation (Dl)r e -
+duces to
+
+
+
+
+Since dxs/ds appears everywhere multiplied by s, its limiting expression for s = 0 is
+not required.
+     From equation (17), for xs = 1,
+
+
+
+
+Substitution of equation (D5)into equation (20)yields the expression
+
+
+
+
+     The various derivatives in equation (22) will now be calculated.       The total electron
+collision frequency is written
+
+                                      v e = v ec   +   'es +"ei
+
+where
+The electron-ion cross section Qei is proportional to TL2, as can be seen from equa-
+tion (C20). For the electron-atom cross sections the variation with electron temperature
+is expressed by relations of the form
+
+                                            Qec = (const)Te
+                                                          n
+                                                                                        (D11)
+
+
+in the immediate vicinity of the electron temperature corresponding to zero seed. The
+exponent n is taken from the slope of a log-log plot of Qec as a function of Te. The
+method of deducing the average momentum transfer cross section Qec(Te) from experi-
+mental data on the momentum transfer cross section Qm(v,) for a monoenergetic beam
+of electrons is described in appendix C.
+     The derivative of ve with respect to s can be calculated in a straightforward man-
+ner using equations (D7) to (D11) and (D4). The slight variation of In A with s can be
+neglected. In the limit of zero seed the result becomes
+
+
+
+
+                    f 2(1 - xc)   ("- + -   evc]}kr%)            +-   1   :( +-- y )
+                                                                           -   1        (D12)
+                        2 - xC     2        kTe               s=o 2 - xc       xc   e
+
+    The calculation of dvia/ds      is also straightforward. It is convenient to use the ab-
+breviation
+
+
+                                        R = _ - - mrtvrt
+                                         rt
+
+
+where ion-ion and ion-atom collisions a r e involved, since this quantity is independent of
+s. Then the quantities C1, C2, and C3, which enter into the expression (B19)for via
+become
+
+
+
+
+48
+Substitution of equations (D14) to (D16) into equation (B19) and differentiation of the re-
+sult with respect to s yields in the limit of zero seed
+
+
+
+V.                                                                                2 - xc
+                                                                                           +-
+                                                                                                1
+                                                                                                     *
+ ia        s=o                                                              s=o             xC
+
+
+
+
+where the e q r e s s i o n (D4) has been used for (dxc/ds)      and the following notation has
+                                                            s=o'
+been introduced for brevity:
+
+
+
+
+In obtaining equations (D17) and @18), use was made of the approximation
+(eB/C4)2 << 1. This approximation is consistent with the assumptions of appendix B
+since the quantity (eB/C4)2 is of the same order as Pi.
+                                                     2
+      Finally, the derivative db/ds is calculated from the expression
+
+
+
+
+and the result in the limit s = 0 is
+
+
+
+
+     Substitution of equations (D12), (D17), and (D20) into equation (22) yields the follow-
+ing equation for (dTe/ds)s=O:
+
+
+
+
+                                                                                                    49
+where
+
+
+                                                              Te
+                                                            Te - T
+
+
+
+
+Substituting equation (D21) into equation (D6) and rearranging yields the result
+
+
+
+
+where the numerator N is defined as
+
+
+Nc&[
+  'e
+         2 n + 1 + - - x ,Te
+                     Te - T     (3 - - 2eV,
+                                       kTe    +&)I    - 3$+pepi{T::T
+
+
+           +\k   [ (             2eVc
+                 (1 - x c ) 3 + -kTe +T
+                                      ):T
+                                        :       I&+
+
+50
+     For the cases of interest in this report, the denominator D always turns out to be
+positive. Thus the sign of dP/ds is governed by the sign of N. For N S 0, seeding
+does not improve the power density.
+
+
+
+
+                                                                                          51
+                                            APPENDIX E
+
+
+                                 DETAILS OF THE CALCULATION
+
+     The break-even condition (eq. (23)) is rewritten as
+     #
+
+
+
+
+           --3 - -"ei
+                   -     "ec           Te
+                  "e     'e           Te - T
+
+
+
+              -   ( ~ ~( :) ) ~ {
+                   1--         - 3 1--        -+-
+
+
+where the magnetic field B enters only through          Pepi, which for s = 0 becomes
+
+
+
+
+The expressions for vec/ve       and vei/ve    in the limit s = 0 a r e obtained from equa-
+tions (D8) and (D10)
+
+
+
+
+                                    -"ei
+                                      - -           XcQei
+
+
+
+where from equations (C19) and (C20)
+
+
+52
+                             Qei. = 4.34X10- l8   In A   (sq m)
+                                                   -I”
+                                                  (kT,
+
+
+
+and the limit of zero seed
+
+                                          Ni= xC$                                      037)
+
+
+    The degree of ionization xc of the carrier gas is calculated from equation (19),
+
+
+
+                                            c)i*.Tei(32)/2
+which for s = 0 becomes
+
+
+                      - -xC2 - 6.04X1027 - -             exp - -
+                      1 - xc
+                                    %
+When xc << 1, a good approximation to xc is
+
+
+
+
+    Finally, the ingredients will be assembled for the quantity 9,which was defined in
+equation (D18). The quantities Rs+c and Rc+c for ion-atom collisions are calculated
+from data on ion mobilities. From the definition (D13) of Rrt and equations (C28) and
+(C29), it follows that
+
+
+
+
+                         ~ ~ per cubic meter is the s t a n a r d gas density and (pc
+where No = 2 . 6 9 ~ 1 0atoms
+                                                                                      rt
+the corresponding mobility. If p0 is given in square centimeters per volt per second,
+as is usually the case,
+
+
+                                                                                           53
+     For collisions between ions of species A+ and B+, equations (C9) and (C10) give
+
+
+
+
+if it is assumed that both ion species a r e at the temperature T of the gas. When equa-
+tion (E12) and the expression for Qii (eq. (C23)) a r e substituted into the definition for
+the ion-ion collision coefficient RA+B+ (eq. (D13)), the following expression is obtained:
+
+
+                                         -27 1/2 ln(A’2 + 1)
+                         RA+B+ = 1.38Xl.O   mA+B+
+                                                  1-kT \“/2
+
+where
+
+
+
+
+Then 4? may be written
+
+
+                                                     l+r
+
+
+
+
+where
+
+
+
+
+and A, and As a r e the atomic weights of c a r r i e r gas and seed, respectively. The
+units of (IJ’o)c+c a r e square centimeters per volt per second in equation (E16). Note
+
+54
+                                 TABLE II. - PROPERTIES O F NOBLE GASES
+
+             Gas               Atomic Ionization >round state [on mobility at 300' K anc
+                                                                  gas density of 2.69X10 19
+                               weight of potential, statistical
+                                carrier     VC,
+                                                     weight of     atoms per cubic centi-
+                                  gas,      eV      :arrier gas - meter (refs. 12 and 14),
+                                  AC                                                           PO'
+                                                                                     sq cm/(v)(sec)
+
+                          I
+
+
+           Helium                4.003         24.580                                      10.8
+                                20.183         21.559                                       4.2
+           Argon                39.944         15.755                                       1.60
+           Krypton              83.80          13.996                                        .go
+           Xenon               131.30          12.127                                        .58
+
+
+
+                              TABLE m. - ATOMIC WEIGHTS A N D MOBILITIES
+
+                                 O F ALKALI SEED IONS IN NOBLE GASES
+
+                              [Mobility data taken from table 9-2-2 of ref. 12.)
+
+                          Seed          Atomic                   Background gas
+
+                                    I
+                                        weight
+                                          nF     I
+                                                            I      I
+                                                     Helium Neon Argon
+                                                            I      I
+                                                                             I
+                                                                             f
+                                                                                 Krypton   I Xenon
+                                                                                           I          I
+
+
+                                         seed,
+                    I
+                                                     2 . 6 9 ~ 1 0 ~atoms
+                                                                    '     per cubic centimeter,
+                                          AS
+                                                                       PO'
+
+
+                        Lithium
+                        Sodium
+                                    1
+                                    I
+
+
+                                    6.94
+                                   22.991
+                                                 1
+                                                 I
+
+
+                                                      24.4 111.11 4.7
+                                                      22.8   8.2  3.0              Xi      1 t:; 1
+                                                                                                      I
+
+
+
+                        Potassium 39. 100             21.6   7.6  2.6              1.9         1.4
+                        Rubidium   85.48              20.2   6.8  2.2              1.5         1.0
+                        Cesium    132.91              18.5   6.1  2.1              1.3          .91
+
+
+that @ vanishes when the mobilities of the seed and carrier gas ions a r e equal.
+     With the previous expressions it is a simple matter to calculate BeBi from equa-
+tion (El)for prescribed values of Te, T, and .$I    Then the corresponding value of B
+is calculated from equation (E2),which upon insertion of the expression for vc+c in
+terms of pc+c (eq. (C28))and the relation between pc+c and the standard mobility
+@O)C+C
+         (eq. (C29))becomes
+
+
+
+                                                                                                          (E171
+
+                                                                                                            55
+                                        112
+                                       (T
+                       v = 6.69X10 5 e''  - 1 1,
+                                               - xc)Qec + xcQei]N:
+                        e
+
+
+The gas velocity required to attain the prescribed electron temperature is calculated
+from equation (24), which may be written
+
+
+
+
+     The pertinent properties of the r a r e gases a r e summarized in table II. Table III
+gives the atomic weights and mobilities of the alkali seed ions in the noble gases. The
+mobilities of the alkali ions in the noble gases a r e well predicted by classical collision
+theory in which the interaction of the ion and atom is assumed to be a polarization attrac-
+tion (ref. 12). In this case the theoretical mobility is independent of gas temperature, as
+will be assumed here, The available experimental data (ref. 13) indicate that this is a
+reasonably good assumption. The mobility of the noble gas ions in their parent gases,
+however, decreases slowly with increasing temperature because of the effect of charge
+exchange (ref. 14). The following theoretical expressions for the temperature depen-
+dence are given in reference 14 and a r e in good agreement with experiment:
+
+       1 (He+ in He) = 2.96X10- 3 T 1/ 2 + 3. 11X10-2 + 2. 11X10-2 T'l
+       -                                                                        + 6.66 T-2 (E20a)
+        PO
+
+
+          1 (Ne+ in Ne) = 8. 69x10- 3 T 1/ 2 + 9. 16X10-2 + 0. 20 T - l + 59. 7 T-2
+          -                                                                                (E20b)
+             PO
+
+
+             -1 (Ar+ in Ar) = 2 . 0 8 ~ 1 02- T 1/ 2 + 0.24 + 1.33 T - l + 1. 43X102 T-2   (E20c)
+             IJ.0
+
+These expressions, which a r e claimed to be valid for 50' to 1200' K, a r e used in the
+calculations. Unfortunately, no expression for the temperature dependence of xenon was
+given. For xenon the same temperature dependence as for argon is assumed (eq.
+(E20c)), but with the constant 0. 24 replaced by 1.36 in order to give the correct value of
+p o at 300° K.
+    To illustrate the procedure, a sample calculation for argon seeded with cesium
+(atomic weight = 132.91) is given. An electron temperature Te = 8000' K (0. 689 ev)
+
+56
+and a gas temperature of T = 500' K a r e chosen. First the break-even point for zero
+ion slip is determined from equation (31). From equation (E9)
+
+
+               g(T ) = 7 . 7 7 ~ 1 -0,/6 ~ (0.
+                  e
+                                           ~ 689)3/4exp   [- ;l:   = 1.57X109
+
+
+
+Let In A = 7.0 as a first approximation.       Then from equation (E5)
+
+
+
+
+The electron-atom cross section for argon at this temperature is Qec = 4 . 2 5 ~ 1 020    -
+square meter, s o that Qec/Qei = 0 . 6 6 4 ~ 1 0 - ~ The
+                                                     .   coefficients of equation (28)are
+a = 4.33, b = 16.06, c = 0.935 (for n = 1-13), and from equation (30)
+(vec/v .)       = 0.0582. The limiting gas density is from equation (31)
+       el lim
+(q)lim = 1 . 8 9 5 ~ 1 0 ~ ~ m - ~for
+                             and   , this gas density equation (E6) gives In A = 6.40. The
+calculation is repeated with this new value of In A. The ratio (vec/v .)            is essen-
+                                                                           el lim
+tially unchanged, while the new value of @ is 1 . 5 8 2 ~ 1 0 for ~ ~ ,which In A = 6.44.
+Another iteration gives  (l$)lim   = 1. 60x1022 and In A = 6.45, and further iterations are
+not required.
+      The value of(qlim     determines the point where Pepi = 0. For other gas den-
+sities, Pepi is calculated from equation (El). For I$ <                  both sides of equa-
+tion (El) a r e positive. For l$ >              the right side of equation (El) is negative,
+but as the gas density is increased, the coefficient of the left side changes from positive
+                                                                        22
+to negative. In the present example, this occurs at I$ = 4.69X10 per cubic meter.
+Since pepi must be positive, for the range of densities 1. 6X1022 <      l$   < 4. 69X1022 the
+break-even condition cannot be satisfied; hence seed increases the power. For
+    > 4. 69X1022, the coefficient on the left side of equation (El) is negative, and a posi-
+tive value of pepi may be found that satisfies the equality. Figure 18(a) shows the
+variationof pepi with    q.
+      The sign of dP/ds in regions off the break-even curve is determined from equa-
+tion (23) as follows. If both the right and left sides of equation (23) are positive and if
+Bepi is smaller than its break-even value (determined from eq. (El)), then inequality
+(23) is satisfied and dP/ds < 0. If pepi is larger than its break-even value, the in-
+equality cannot be satisfied and dP/ds > 0. Therefore, in figure 18(a) dP/ds is positive
+above the left branch of the break-even curve and negative below the curve. When both
+the left and right sides of equation (23) are negative, as in the present example for
+I$ > 4. 69X1022, then for Bepi < ((3 e(3.)1 break-even the inequality is not satisfied and
+                                                                                            57
+                                                       Gas density, N:,   atornslcu m
+          (a) Bpi against gas density.                (b) Magnetic field against gas density.       (c) Effective electric field against gas
+                                                                                                      density.
+        Figure 18. - Results of sample calculation for cesium-seeded argon. Electron temperature,         K; gas temperature, 5000 K.
+
+
+dP/ds > 0. In the region 1. 6X1022 < NE < 4. 69X1022, dP/ds > 0, as mentioned pre-
+viously.
+      Once Pepi has been calculated for assigned values of NZ, Te, and T, the cor-
+responding values of the magnetic field B and the effective electric field uB(l - K) a r e
+obtained from equations (E17) and (E19), respectively. The results for the example a r e
+shown i n figures 18(b) and (c). From figure 18(b) the values of NZ corresponding to a
+particular magnetic field may be picked off; for example, for B = 2 webers p e r square
+meter,       is 5. 8X1022 and 1. 15x1023 per cubic meter. The values of uB(1 - K) at
+these densities are read from figure 18(c) and a r e 7.3X10 2 and 5.25X10 2 volts per meter,
+respectively. These two points lie on the lower branch of the break-even curve of fig-
+u r e 4(b). Curves similar to those of figures 18(b) and (c) a r e constructed for each as-
+signed electron temperature, and the densities NZ and the electric field uB(l - K) a r e
+read from the curves for a specified magnetic field. The results for cesium-seeded
+argon are plotted in figure 4 for various magnetic fields. At high electron temperatures
+(above 9000' K), points on the upper branches of the break-even curves of figure 4 a r e
+obtained.
+
+
+
+
+58
+                                           REFERENCES
+
+     1. Kerrebrock, Jack L. : Conduction in Gases with Elevated Electron Temperature.
+          Engineering Aspects of Magnetohydrodynamics, C. Manna1 and N. W. Mather,
+          eds., Columbia Univ. Press, 1962, pp. 327-346.
+     2. Ben Daniel, D. J. ; and Tamor, S. : Nonequilibrium Ionization in Magnetohydro-
+          dynamic Generators. Rep. 62-RL-(2922-E), General Electric Co. , Jan. 1962.
+     3. Hurwitz, H., Jr. ; Sutton, G. W. ; and Tamor, S. : Electron Heating in Magneto-
+          hydrodynamic Power Generators. A R S Jour., vol. 32, no. 8, Aug. 1962, pp.
+          1237- 1243.
+     4. Lyman, Frederic A. ; Goldstein, Arthur W. ; and Heighway, John E. : Effect of
+          Seeding and Ion Slip on Electron Heating in a Magnetohydrodynamic Generator.
+          NASA TN D-2118, 1964.
+      5. Heighway, John E. ; Nichols, Lester D. : Brayton Cycle Magnetohydrodynamic
+           Power Generation with Nonequilibrium Conductivity. KASA TN D-2651, 1965.
+     6. Burgers, J. M. : Selected Topics from the Theory of Gas Flow at High Tempera-
+             tures. Ch. V. The Application of Transfer Equations to the Calculation of Diffu-
+             sion, Heat Conduction, Viscosity and Electric Conductivity. Tech. Notes BN- 124a,
+             b, Inst. Fluid Dynamics and Appl. Math., Univ. of Maryland, May 1958.
+     7. Burgers, J. M. : Statistical Plasma Mechanics. Ch. 5 of Symposium on Plasma
+          Dynamics, F. H. Clauser, ed., Addison-Wesley Pub. Co., Inc., 1960.
+     8. Burgers, J. M. : Some Problems of Magneto-Gasdynamics. Lectures on Fluid
+          Mech., by Sydney Goldstein, Intersci. Pub., Inc., 1960, p. 293.
+     9. Spitzer, Lyman, Jr. : Physics of Fully Ionized Gases. Second ed., Intersci. Pub.,
+          Inc., 1962, p. 127.
+    10. Delcroix, J. L. : Introduction to the Theory of Ionized Gases. Intersci. Pub., Inc.,
+          1960, p. 125.
+    11. Brown, Sanborn C. : Basic Data of Plasma Physics.      Tech. Press, M. I. T., 1959.
+    12. McDaniel, E. W. : Collision Phenomena in Ionized Gases. John Wiley & Sons, Inc.,
+          1964, ch. 9.
+    13. Dalgarno, A. : Diffusion and Mobilities. Atomic and Molecular Processes, ch. 16,
+          D. R. Bates, ed., Academic Press, 1962, p. 654.
+    14. Chanin, Lorne M. ; and Biondi, Manfred A. : Temperature Dependence of Ion Mobi-
+          lities in Helium, Neon, and Argon. Phys. Rev. vol. 106, no. 3, May 1, 1957,
+          pp. 473-479.
+
+~   NASA-Langley, 1965   E-2718                                                            59
+

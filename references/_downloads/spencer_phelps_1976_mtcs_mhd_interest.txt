@@ -1,0 +1,742 @@
+Momentum Transfer Cross-Sections And
+Conductivity Integrals For Gases Of MHD
+                 Interest
+            Author(s): F. E. Spencer and A. V. Phelps
+          Session Name: Plasma and Flow Phenomena
+                        SEAM: 15 (1976)
+     SEAM EDX URL: https://edx.netl.doe.gov/dataset/seam-15
+                       EDX Paper ID: 659
+                                                  SEAM #15 (1976), Session: Plasma and Flow Phenomena
+
+
+
+
+                                                 MOMENTUM TRANSFER CROSS-SECTIONS AND
+                                            CONDUCTIVITY INTEGRALS FOR GASES OF MHD INTEREST
+
+
+
+                                                                 F. E . Spencer, J r .
+                                                   P i t t s b u r g h Energy Research Center
+                                         U. S. Energy Research and Development A d m i n i s t r a t i o n
+                                                    P i t t s b u r g h , Pennsylvania 15213
+
+                                                                              A . V. Phelps
+                                                   J o i n t I n s t i t u t e f o r Laboratory A s t r o p h y s i c s
+                                        U n i v e r s i t y of Colorado and N a t i o n a l Bureau of S t a n d a r d s
+                                                                  Boulder, Colorado 80309
+
+
+                                 Abstract                                            mechanical c o n s i d e r a t i o n s .        T h i s approximation
+                                                                                     assumes t h a t t h e i n t e r a c t i o n between t h e e l e c t r o n
+      We g i v e our p r e s e n t b e s t e s t i m a t e s f o r t h e e l e c -   and t h e permanent d i p o l e i s t h e only s i g n i f i c a n t
+t r o n momentum-transfer c o l l i s i o n c r o s s - s e c t i o n s f o r        p r o c e s s and t h a t t h e c r o s s s e c t i o n is dominated by
+the principal gases occurring i n present laboratory                                 c o n t r i b u t i o n s from c o l l i s i o n s a t l a r g e impact
+and demonstration s c a l e MHD g e n e r a t o r s of t h e                         d i s t a n c e s . Such c a l c u l a t i o n s n e g l e c t v i b r a t i o n a l
+closed c y c l e t y p e and of t h o s e open c y c l e genera-                     and e l e c t r o n i c t r a n s i t i o n s and r o t a t i o n a l t r a n s i -
+t o r s running on a s h - f r e e combustion plasmas. Also,                         t i o n s o t h e r than ( A J ( = ~ . A l t s c h u l e r ' s formula (3)
+we g i v e t h e i n t e g r a l s of t h e s e c r o s s - s e c t i o n func-      gives the cross-section a s
+tions f o r d i r e c t incorporation i n t o the algorithm
+of Demetriades f o r c a l c u l a t i n g e l e c t r i c a l proper-
+t i e s of gas m i x t u r e s .
+
+                           I.    Introduction                                        where D i s t h e d i p o l e moment, h i s P l a n c k ' s con-
+                                                                                     s t a n t and v i s t h e e l e c t r o n speed.
+      Once t h e composition (64, 65, 66) of a combus-
+t i o n mixture i s known, e l e c t r i c a l p r o p e r t i e s                         More d e t a i l e d work s i n c e t h a t of A l t s c h u l e r (3)
+( p a r t i c u l a r l y s c a l a r c o n d u c t i v i t y and e l e c t r o n    h a s shown t h a t h i s hypotheses a r e u s u a l l y n o t
+m o b i l i t y ) must b e c a l c u l a t e d (1, 1 5 , 22, 27, 28,                 justified.              However, a log-log r e g r e s s i o n of known
+36, 38) i n o r d e r t o proceed w i t h modeling c a l c u l a -                   c o l l i s i o n f r e q u e n c i e s ( a t 300 k e l v i n s ) a g a i n s t
+t i o n s f o r MHD g e n e r a t o r s . We have attempted h e r e                  d i p o l e moments f o r t h i r t y - f o u r molecules (7) f o r
+t o give    one         more-or-less complete s e t of e l e c t r o n               which both measurements a r e a v a i l a b l e l e a v e s l i t t l e
+momentum-transfer c o l l i s i o n c r o s s - s e c t i o n s f o r use            doubt t h a t d i p o l e moment i s a primary v a r i a b l e i n
+                                                                                     d e t e r m i n i n g c r o s s - s e c t i o n , when t h e moment i s
+i n 3 of t h e c u r r e n t l y popular methods f o r calcu-
+l a t i n g t h e s e e l e c t r i c a l parameters.                                l a r g e . We a r e l e a d t o b e l i e v e t h a t 60% of t h e
+                                                                                     A l t s c h u l e r v a l u e (3) i s a r e a s o n a b l e e s t i m a t e f o r
+      I n Table 1 we g i                                                             h i g h l y p o l a r molecules when b e t t e r i n f o r m a t i o n is
+sections Q ( i n 10
+                             -Y6      2u r recommended c r o s s -
+                                   M ) f o r t h e g a s e s Ar, CO,
+                                                                                     u n a v a i l a b l e . We assume, a t low energy, t h a t t h e
+                                                                                     c r o s s - s e c t i o n v a r i e s a s t h e r e c i p r o c a l of t h e
+C02, C s , C ~ O H , H, Hz, H20, K , KOH, NO, N2, 0 , OH,
+                                                                                     e l e c t r o n energy, a s i n A l t s c h u l e r ' s formula. For
+0 2 , and SO a s a f u n c t l o n of i n c i d e n t e l e c t r o n
+                2
+energy E ( l n eV). The d a t a f o r t h e i n d i v i d u a l
+                                                                                     s m a l l d i p o l e moments, t h e A l t s c h u l e r v a l u e s a r e
+                                                                                     u s u a l l y low, so f o r molecular d i p o l e s of moment
+gases a r e d i s c u s s e d i n s e p a r a t e s e c t i o n s below,
+                                                                                     l e s s t h a n a b o u t 2.5 debyes ( e . g . , OH and SO ) , we
+a f t e r a b r i e f d i s c u s s i o n of our e s t i m a t i o n scheme
+                                                                                     have s c a l e d from t h e measured v a l u e s of Q $or
+f o r molecular d i p o l e s .                                                                                                                            m
+                                                                                     w a t e r , u s i n g t h e s q u a r e of t h e d i p o l e moment r a t i o
+     Much of t h e d a t a i s t h e same a s t h a t given
+e a r l i e r (55) f o r gases of atmospheric i n t e r e s t .
+                                                                                           Our t a b l e s which a r e e s t i m a t e d u s i n g t h e s e
+It i s worth n o t i n g t h a t s p e c i e s of r e l a t i v e l y low
+                                                                                     " t h e o r i e s " may be expected t o change a s more d e t a i l
+c o n c e n t r a t i o n , which have l a r g e c r o s s - s e c t i o n s ,
+                                                                                     becomes a v a i l a b l e . Work i s c u r r e n t l y i n p r o g r e s s
+may play a dominant                   in                          the plasma         at JILA (by Norcross              and C o l l i n s ) which may y i e l d
+conductivity.               Unfortunately, some of t h e s e s p e c i e s
+                                                                                     some changes.             The u s e r of our e s t i m a t e s i s espec-
+have t h e l e a s t w e l l determined c r o s s - s e c t i o n s ,
+                                                                                     i a l l y n o t i f i e d t o b e on t h e a l e r t f o r them.
+such a s H20 and KOH.
+                                                                                           The problem of measuring d i p o l e moments f o r MHD-
+      Several reviews (16, 32, 34) of e l e c t r o n c o l l i -
+                                                                                     r e l e v a n t g a s e s , becomes, i n l i g h t of t h e above, a
+s i o n frequency d a t a have appeared r e c e n t l y . By
+                                                                                     q u e s t i o n of some i n t e r e s t . The moment f o r KOH,
+comparison w i t h t h e s e , i t w i l l b e noted t h a t we
+                                                                                     f o r example, has n o t been p u b l i s h e d , b u t measured
+often refer to                 a limited        number of the data
+                                                                                     values        f o r LiOH ('1) and CsOH (39) are a v a i l a b l e .
+sources. This i s done f o r b r e v i t y , b u t we b e l i e v e
+                                                                                     A s we w i l l s e e i n s e c t i o n X I I , D(K0H) i s e s t i m a t e d .
+i t i s j u s t i f i e d by t h e r e l i a b i l i t y of t h e d a t a
+cited.
+                                                                                           A r e l a t e d oroblem which should b e mentioned i n
+                                                                                      t h i s c o n t e x t , i s t h a t of d i p o l e moment dependence
+11.     Estimating Cross-Sections f o r Molecular Dipoles
+                                                                                      upon t h e v i b r a t i o n s t a t e of t h e hydroxide.       Freund
+                                                                                      (21) shows t h a t t h e d i p o l e moment f o r LiOH i n c r e a s e s
+      When t h e d i p o l e moment f o r a molecule i s known,
+                                                                                      from 4.755 i n t h e ground s t a t e t o 5.133 (both,
+t h e plane-wave Born approximation (3) g i v e s a n
+                                                                                      debyes) i n t h e (J=1, 0 3 0 ) - s t a t e .        Assuming t h e
+approximate v a l u e f o r t h e e l e c t r o n momentum-
+                                                                                      A l t s c h u l e r dependence of c r o s s - s e c t i o n upon d i p o l e
+t r a n s f e r c o l l i s ' i o n c r o s s - s e c t i o n from quantum
+                          SEAM #15 (1976), Session: Plasma and Flow Phenomena
+
+
+
+
+                                               +20 2
+T a b l e 1.   Recommended Q,(E)        X   (10 )m
+                                                                            --
+                                                                            .
+                                                                            -
+
+
+      €/eV          Ar             CO          CO2     Cs        CsOH            H   H2   H2°
+                          SEAM #15 (1976), Session: Plasma and Flow Phenomena
+
+
+
+
+Table 1.   (continued) Recommended Qm(€) x (10
+                                               +20
+                                                     )m 2
+
+
+  E/eV         K           KOH           NO            N2        o          OH   O2   S02
+                                        SEAM #15 (1976), Session: Plasma and Flow Phenomena
+
+
+
+
+moment, t h i s means t h a t LiOH may have an increased                          r o l e of CsOH i n combustion MHD.
+c r o s s - s e c t i o n , by about 16.5%, i n i t s excited
+s t a t e s . T h i s p e r c e n t change i s well within our                       A t e l e c t r o n e n e r g i e s above 1 0 eV we have
+e s t i m a t i o n t o l e r a n c e s a t t h i s time, but may lead t o        assumed t h e c r o s s s e c t i o n t o have v a l u e s t y p i c a l
+i n t e r e s t i n g r e s u l t s when r e a l l y p r e c i s e data become    of o t h e r molecules i n Table 1.
+a v a i l a b l e : t h a t i s , c r o s s s e c t i o n s f o r the t r i a -
+tomic molecules may b e dependent on t h e gas temper-                                             VIII.       Monatomic Hydrogen (H)
+a t u r e . I n t h e c o n t r a r y d i r e c t i o n , Maki (43) shows
+t h a t some d i p o l a r t r i a t o m i c s ( v i z . : OCS) have                    Momentum t r a n s f e r c o l l i s o n c r o s s s e c t i o n s f o r
+decreased d i p o l e moments i n t h e i r excited s t a t e s .                 e l e c t r o n s i n H have been c a l c u l a t e d from theory
+                                                                                  and experiment by Luft and K i e f f e r (42) and a r e
+                                                                                  -
+                            111.    Argon (Ar)                                    l i s t e d i n Table 1.
+
+     The momentum t r a n s f e r c o l l i s i o n cross s e c t i o n s                                   IX.       Hydrogen (H,)
+                                                                                                                                 '.
+f o r e l e c t r o n s i n a r g o n have been and s t i l l a r e t h e
+s u b j e c t of c o n s i d e r a b l e controversy (14, 23, 26).                      The momentum t r a n s f e r c o l l i s i o n c r o s s s e c t i o n s
+The recommended v a l u e s f o r e l e c t r o n energies below                  given i n Table 1 f o r H2 f o r e l e c t r o n e n e r g i e s
+9 eV g i v e n i n Table 1 a r e from Crompton e t a l .                          below 2 eV a r e from Crompton, Gibson, and McIntosh
+(14). At e n e r g i e s above 9 eV we have given t h e                           (13). A t e l e c t r o n e n e r g i e s above 2 eV t h e v a l u e s
+r e s u l t s of F l e t c h e r and Burch (19).                                  l i s t e d a r e from Engelhardt and Phelps (17) s i n c e
+                                                                                  other d a t a (20) i s incomplete. A t t h e s e h i g h e r
+                      IV.     Carbon Monoxide (CO)                                e l e c t r o n e n e r g i e s i t has long been recognized (20)
+                                                                                  t h a t s i g n i f i c a n t changes i n Q ( E ) may be n e c e s s a r y
+      The momentum t r a n s f e r c r o s s s e c t i o n s given f o r
+                                                                                                                                m
+                                                                                  when t h e e l e c t r o n t r a n s p o r t d a t a f o r H2 i s r e -
+e n e r g i e s below 1 eV i n Table 1 a r e from Hake and                        analyzed t a k i n g i n t o account more r e c e n t t r a n s p o r t
+Phelps (29) and a g r e e w e l l w i t h t h e o r e t i c a l predic-           and s c a t t e r i n g r e s u l t s .
+t i o n s (12). Momentum t r a n s f e r c r o s s s e c t i o n s a t
+h i g h e r e n e r g i e s have been c a l c u l a t e d by Takayanagi                                          X.    Water (H,O)
+                                                                                                                                   L
+(69) f o r a few e n e r g i e s from e l a s t i c d i f f e r e n t i a l
+c r o s s - s e c t i o n d a t a and, t o g e t h e r with t o t a l cross-            The very l a r g e c r o s s s e c t i o n s f o r momentum
+s e c t i o n d a t a (55), have been used (29) to f i l l out                    t r a n s f e r c o l l i s i o n s f o r low energy e l e c t r o n s i n
+Table 1. I n d i v i d u a l v a l u e s i n t h i s energy range                 H 0 l i s t e d i n Table 1 a r e from Cohen and Phelps
+could e a s i l y be i n e r r o r by +40%.                                        (6).       These values a r e based on e l e c t r o n t r a n s p o r t
+                                                                                  d a t a a v a i l a b l e i n 1966 (54). Very r e c e n t e l e c t r o n
+                     V.     Carbon Dioxide (CO,)                                  t r a n s p o r t data (73) show s i g n i f i c a n t d e v i a t i o n s
+                                                                                  from c a l c u l a t e d v a l u e s ( 9 ) , so t h a t t h e h i g h e r
+      The momentum t r a n s f e r c r o s s s e c t i o n s l i s t e d f o r    energy momentum t r a n s f e r c r o s s s e c t i o n v a l u e s
+e l e c t r o n s i n C02 i n Table 1 a r e from Lowke e t a l .                  should be used with some c a u t i o n . One source of
+(41). The v a l u e s d i f f e r somewhat from those of                          concern i s t h e v a l i d i t y of t h e s p h e r i c a l harmonic
+Hake and Phelps (29) p r i m a r i l y because of d i f f e r -                   expansion technique f o r t h e s o l u t i o n of t h e
+ences i n t h e i n e l a s t i c c o l l i s i o n c r o s s s e c t i o n s     Boltzmann equation used t o analyze t h e nonthermal
+used i n t h e analyses of e l e c t r o n t r a n s p o r t data.                electron transport data f o r electrons i n gases,
+Although t h e r e 'is s t i l l not s u f f i c i e n t d a t a t o              such a s H 0 , i n which i n e l a s t i c ( r o t a t i o n a l
+                                                                                                    2
+a s s i g n a unique s e t of i n e l a s t i c ( v i b r a t i o n a l           e x c i t a t i o n ) c o l l i s i o n c r o s s s e c t i o n s exceed
+e x c i t a t i o n ) c r o s s s e c t i o n s (4) more recent analyses          e l a s t i c c r o s s s e c t i o n s (61).
+(57) have n o t suggested s i g n i f i c a n t changes i n t h e
+momentum t r a n s f e r c r o s s s e c t i o n s .                                                       XI.        Potassium (K)
+
+                            VI.    Cesium (Cs)                                          Between 0 and 5 eV, our s e l e c t e d d a t a f o r
+                                                                                   potassium i s based on r e c e n t , but p r e l i m i n a r y ,
+      Nighan and Postma (50) analyzed swarm data from                              d e t a i l e d quantum mechanical c a l c u l a t i o n s (53
+t h r e e s o u r c e s (8, 52, 59). The tabulated numbers                         and p r i v a t e communications, Norcross 1976). It
+a r e a d i g i t i z a t i o n of t h e i r reported curve.                       appears t h a t a v a i l a b l e determinations (31) of t h e
+Below - 0 2 eV, t h e i r d a t a a r e e x t r a p o l a t e d .                  c r o s s s e c t i o n s a r e measurements of e l e c t r i c a l
+                                                                                   conductivity over a l i m i t e d temperature r a n g e i n
+                  VII.      Cesium Hydroxide (CsOH)                                which t h e e l e c t r o n d e n s i t y is not measured d i r e c t l y .
+                                                                                   Below 1 . 0 eV t h e c a l c u l a t i o n s a r e by Norcross--
+      No swarm d a t a o r t h e o r e t i c a l c a l c u l a t i o n s a r e     above 1 . 0 eV by Moores. Their c a l c u l a t i o n s a g r e e
+a v a i l a b l e . Below 1 0 eV e l e c t r o n energy we estimate                between 0.5 and 1.0 eV. Between 0.2 eV and 2.0
+t h e c r o s s s e c t i o n as 60   +      20 percent of t h e values            eV, theory (33) agrees with experimental d i f f e r e n -
+g i v e n by t h e Born approximation ( 3 ) , using t h e                          t i a l c r o s s s e c t i o n s (25, 72).
+measured (39) d i p o l e moment of 7.1                +        0.5 debyes.
+Note t h a t t h e d i p o l e moment f o r CsOH is given i n                                      XII.      Potassium Hydroxide (KOH)
+terms of measured v a l u e s (49) f o r CsF and OH by
+D(CsF)     -     D(OH)/2 r a t h e r than D(CsF) -D(OH) a s                              Swarm d a t a , d i p o l e moment d a t a and d i r e c t
+suggested by Krauss (37). The u n c e r t a i n t y assigned                       cross-section c a l c u l a t i o n s a r e u n a v a i l a b l e , so we
+t o t h i s c r o s s s e c t i o n i s l a r g e enough t o include               r e s o r t t o t h e "theory" of s e c t i o n 11. From measure-
+v a l u e s of t h e e f f e c t i v e d i p o l e moment obtained by              ments (21, 39, 49), we have: D(Cs0H) = 7.1                             +
+                                                                                                                                                         0.5;
+i n t e r p o l a t i n g between v a l u e s obtained from mobility               D(CsF) = 7.88; D(OH) = 1.66; D(LiF) = 6.33;
+measurements (7) and t h e v a l u e obtained by f i t t i n g                     D(Li0H) = 4.76; D(KF) = 8.60, a l l given i n debyes.
+t h e c a l c u l a t i o n of A l l i s o n (2) t o t h e energy                  We a r e l e d t o e s t i m a t e D(K0H) = D(KF) - 0.5
+dependence gi.ven by t h e Born approximation ( 3 ) .                              D(0H) = 7.77 debyes, w i t h an u n c e r t a i n t y of 0.7
+Obviously, theory o r experiments which reduce t h i s                             debyes. Below 1 0 eV, t h e cross-sections i n Table
+u n c e r t a i n t y a r e c r u c i a l t o a n e v a l u a t i o n of t h e     1 a r e estimated a s 60 5 20 percent of t h e Born
+                                             SEAM #15 (1976), Session: Plasma and Flow Phenomena
+
+
+
+
+approximation v a l u e ( 3 ) . The u n c e r t a i n t y a s s i g n e d                                       XV.      Monatomic Oxygen (0)
+t o t h i s c r o s s s e c t i o n i s l a r g e enough t o i n c l u d e
+v a l u e s of t h e e f f e c t i v e d i p o l e moment obtained by                           The c r o s s s e c t i o n s given i n Table 1 f o r atomic
+i n t e r p o l a t i n g between v a l u e s o b t a i n e d from m o b i l i t y         oxygen a r e based p r i m a r i l y on t h e " t o t a l " c r o s s -
+measurements (7) and t h e v a l u e o b t a i n e d by f i t t i n g                      s e c t i o n measured by electron-beam t e c h n i q u e s (50,
+t h e c a l c u l a t i o n of A l l i s o n (2) t o t h e energy                          6 8 ) . These v a l u e s a r e about t h e mean of t h e two
+dependence g i v e n by t h e Born approximation ( 3 ) .                                   microwave measurements of t h e momentum-transfer
+Obviously, t h e o r y o r experiments which reduce t h i s                                c r o s s s e c t i o n a t t h e lower e l e c t r o n e n e r g i e s ( 4 0 ) .
+u n c e r t a i n t y a r e c r u c i a l t o an e v a l u a t i o n of t h e              U n f o r t u n a t e l y , t h e r e i s no b e t t e r agreement among
+r o l e of KOH i n c o a l - f i r e d MHD.                                                t h e o r e t i c a l c a l c u l a t i o n s (70) t h a n among e x p e r i -
+                                                                                           ments ( 4 0 ) , e s p e c i a l l y a t t h e lower e l e c t r o n
+     At e l e c t r o n e n e r g i e s above 1 0 eV we have assumed                       e n e r g i e s of i n t e r e s t h e r e .
+t h e c r o s s s e c t i o n t o have v a l u e s t y p i c a l of o t h e r
+molecules i n T a b l e 1.                                                                                            XVI.        Hydroxyl (OH)
+
+                     XIII.        N i t r i c Oxide (NO)                                         Since t h e r e a r e no experimental v a l u e s f o r Q (E)
+                                                                                           f o r OH we must r e l y e n t i r e l y on t h e o r y ( 3 ) . ~ h g
+      The momentum t r a n s f e r c o l l i s i o n c r o s s s e c t i o n s             v a l u e s l i s t e d i n Table 1 f o r e l e c t r o n e n e r g i e s
+f o r NO g i v e n i n T a b l e 1 a r e from a n a n a l y s i s by                       below 3 eV a r e o b t a i n e d by m u l t i p l y i n g t h e v a l u e s
+Cohen and Phelps (10). A t e l e c t r o n e n e r g i e s below                           f o r H 0 by t h e s q u a r e of t h e r a t i a of t h e d i p o l e
+0.02 eV t h e c r o s s s e c t i o n i s c a l c u l a t e d u s i n g t h e                        2
+                                                                                           moments ( 4 9 ) , i . e . , by (1.6611.8)             = 0.85.
+Born approximation developed by A l t s c h u l e r (3) and
+a permanent d i p o l e moment of 0.15 Debye. A t e l e c -                                                           XVII.        Oxygen (0,)
+                                                                                                                                            .L
+t r o n e n e r g i e s between a b o u t 0 . 1 and 2 eV, e l e c t r o n
+t r a n s p o r t d a t a (6) was used. Note t h a t t h e s e c r o s s                         The d e t e r m i n a t i o n of momentum t r a n s f e r c o l l i s i o n
+s e c t i o n s a r e a s much a s f i v e t i m e s t h o s e d e r i v e d               cross sections for electrons i n O2 is d i f f i c u l t
+from microwave measurements (45) .                                                         because of l a r g e r a t e s of e l e c t r o n a t t a c h m e n t .
+                                                                                           Recently (43) measurements of e l e c t r o n d r i f t
+                           XIV.      Nitrogen (N,)                                         v e l o c i t y have been made a t low enough e l e c t r i c
+                                                        ,.
+                                                                                           f i e l d t o g a s d e n s i t y r a t i o s (E/N) so t h a t t h e
+      The momentum-transfer c r o s s s e c t i o n d a t a (18)                           e l e c t r o n s should be i n thermal e q u i l i b r i u m w i t h t h e
+t a b u l a t e d f o r N 2 a r e expected t o be a c c u r a t e t o                      g a s . U n f o r t u n a t e l y , t h e c o n c u r r e n t measurements of
+about 210 p e r c e n t f o r e l e c t r o n e n e r g i e s between                      t h e r a t i o of l o n g i t u d i n a l d i f f u s i o n t o m o b i l i t y do
+0.003 and about 4 eV and f o r v i b r a t i o n a l tempera-                              n o t make p o s s i b l e a d e t e r m i n a t i o n of t h e e l e c t r o n
+t u r e s below 500 k e l v i n s .         For e l e c t r o n e n e r g i e s            energy s c a l e f o r t h e s e measurements and so do n o t
+corresponding t o t e m p e r a t u r e s between 150 and                                  a l l o w a n a c c u r a t e d e t e r m i n a t i o n of t h e energy
+2 0 0 0 ~ k e l v i n st h e momentum-transf e r c o l l i s i o n                         dependent momentum t r a n s f e r c r o s s s e c t i o n . An
+frequency i s r e a s o n a b l y w e l l r e p r e s e n t e d by a                       a n a l y s i s of t h e s e d a t a i s c u r r e n t l y underway (58)
+l i n e a r dependence on e l e c t r o n energy ( 5 6 ) . The                             and s u g g e s t s t h e somewhat l a r g e r and more r a p i d l y
+e f f e c t of v i b r a t i o n a l l y e x c i t e d s t a t e s of N                    v a r y i n g momentum t r a n s f e r c r o s s s e c t i o n a t e l e c t r o n
+                                                                           2 On
+t h e c r o s s s e c t i o n s expected a t e l e v a t e d gas temp-                     e n e r g i e s n e a r 0 . 1 eV given i n Table 1 t h a n t h a t
+e r a t u r e s h a s been assumed t o be s m a l l , i - e . , l e s s                    deduced from microwave measurements (45). At
+t h a n 20 p e r c e n t f o r v i b r a t i o n a l t e m p e r a t u r e s below         e l e c t r o n e n e r g i e s between about 1 and 1 0 eV t h e r e
+a b o u t 5000 k e l v i n s .                                                             i s no r e a s o n t o change t h e v a l u e s g i v e n by Hake and
+                                                                                           Phelps ( 3 0 ) . Again we must keep i n mind t h a t t h e
+      The q u e s t i o n a s t o t h e r o l e of v i b r a t i o n a l                   momentum t r a n s f e r c r o s s s e c t i o n of i n t e r e s t i n
+e x c i t a t i o n was r a i s e d by C o t t e r a u and V a l e n t i n                 c a l c u l a t i o n s of e l e c t r o n m o b i l i t y i n c l u d e s c o n t r i -
+( l l ) , who i n t e r p r e t a p p a r e n t low e l e c t r i c a l con-               b u t i o n s of i n e l a s t i c c o l l i s i o n s (71). The e f f e c t s
+d u c t i v i t i e s i n shock h e a t e d (6000 k e l v i n s ) n i t r o g e n          of v i b r a t i o n a l e x c i t a t i o n on t h e e f f e c t i v e momentum
+i n terms of a much l a r g e r momentum t r a n s f e r c r o s s                         t r a n s f e r c r o s s s e c t i o n v i a t h e s h a r p l y peaked c r o s s
+s e c t i o n f o r v i b r a t i o n a l l y e x c i t e d N2 t h a n f o r               s e c t i o n s (62) a r e unknown b u t w i l l be assumed t o be
+ground s t a t e N        .     While some change i n t h e d e r i v a -                   small.
+t i v e of t h e t o g a l s c a t t e r i n g c r o s s s e c t i o n has been
+observed i n v i b r a t i o n a l l y e x c i t e d N by Burrows                                               XVIII.        Sulphur Dioxide (SO,)
+                                                             2 .                                                                                 '.
+ (47) i t seems v e r y u n l i k e l y t h a t t h e l n c r e a s e i n
+t h e momentum t r a n s f e r c r o s s s e c t i o n i s more t h a n 20                        S i n c e t h e r e a p p e a r s t o b e no e x p e r i m e n t a l e l e c -
+p e r c e n t . Also, K l e p i s and Louis (35) a p p a r e n t l y                        t r o n t r a n s p o r t d a t a f o r SO2 t h e v a l u e s l i s t e d i n
+f a i l e d t o o b s e r v e a change i n t h e e f f e c t i v e momen-                   Table 1 f o r e n e r g i e s below 3 eV a r e c a l c u l a t e d from
+tum t r a n s f e r c o l l i s i o n frequency i n shock h e a t e d N                     t h e o r y (3) by m u l t i p l y i n g t h e v a l u e s f o r H20 by
+                                                                                2
+a t 4500 k e l v i n s .                                                                    t h e s q u a r e of t h e r a i o of t h e d i p o l e moments ( 4 8 ) ,
+                                                                                            i . e . , by (1.6311.85)
+                                                                                                                              5    = 0.78.
+     At e l e c t r o n e n e r g i e s above a b o u t 4 eV t h e r e i s
+disagreement a s t o t h e c o r r e c t c r o s s s e c t i o n s (and                                    XIX.       I n t e g r a t i o n of Parameters
+c o l l i s i o n f r e q u e n c i e s ) f o r momentum t r a n s f e r .
+Recent e x p e r i m e n t a l measurements of d i f f e r e n t i a l                            We have, due t o t h e p o p u l a r i t y of t h e method,
+scattering cross sections lead t o cross sections                                           integrated these cross-section data t o yield t h e
+s i g n i f i c a n t l y below (63) and i n f a i r agreement ( 6 7 )                      i n t e r a c t i o n parameters n e c e s s a r y t o apply t h e
+w i t h t h o s e (18) of T a b l e 1. It i s t o b e noted t h a t                         a l g o r i t h m of Demetriades and Argyropoulos (15) t o
+t h e c r o s s s e c t i o n s of T a b l e 1 i n c l u d e s i g n i f i c a n t          them when a composition is known. P l e a s e s e e t h e
+c o n t r i b u t i o n s from i n e l a s t i c c o l l i s i o n s a t e n e r g i e s    n e x t s e c t i o n , where e r r o r s i n m o b i l i t i e s c a l c u l a t e d
+n e a r 2 eV and above 1 0 eV.                                                              by t h i s method a r e c i t e d .
+
+                                                                                                 The p a r a m e t e r s c a l c u l a t e d a r e , i n o r d e r :
+                                           SEAM #15 (1976), Session: Plasma and Flow Phenomena
+
+
+
+
+                                                                                              XX.     Comments on A p p l i c a t i o n of Data
+
+                                                                                          Some advantage may o b t a i n from u s e of t h e s e d a t a
+                                                                                    i n an algebraic t r a n s p o r t property algorithm such
+                                                                                    a s was developed by Demetriades and Argyropoulos
+                                                                                    (15) i n a manner r e l a t e d t o t h e i d e a s of Grad ( 2 7 ,
+                   f o r r = 1, 2, 3;                                               28) and Kolodner ( 3 6 ) , r a t h e r t h a n t h e more w i d e l y
+                                                                                    a c c e p t e d methods r e l a t e d t o t h e i d e a s of A l l i s ( I ) ,
+                                                                                    F r o s t ( 2 2 ) , and Kruger, e t a l . ( 3 8 ) . Such
+                                                                                    advantages do n o t i n c l u d e g r e a t a c c u r a c y o r o v e r a l l
+                                                                                    computer speed.
+
+       QDA E      q (1) ;                                                                Kruger, e t a l . (38) have shown t h a t c o m p u t a t i o n s
+                                                                                    f o r e l e c t r o n s i n Argon may be s e r i o u s l y i n e r r o r
+                                                                                    i f t r e a t e d by a Chapman-Enskog t y p e of a p p r o a c h
+                                                                                    u n l e s s i t i s of v e r y h i g h o r d e r . On t h e o t h e r
+                                                                                    hand, Mitchner r e l a t e s i n a p r i v a t e communication
+                                                                                    t h a t c a l c u l a t i o n s f o r combustion m i x t u r e s may
+where t h e i n t e g r a t i o n va i a b l e i s t h e reduced                    y i e l d u s a b l e r e s u l t s even f o r a 1st o r d e r Chapman-
+                                      5.
+e l e c t r o n e n e r g y x E $ mv /kT, and t h e f u n c t i o n s               Enskog approach. Using t h e c r o s s - s e c t i o n s of t h e
+Q (x) a r e o b t a i n e d a s l i n e a r s p l i n e s f r o m T a b l e 1.      p r e s e n t work, J. Land of JILA h a s c a l c u l a t e d t h a t
+c%rnpare ( 5 ) .          Except f o r t h e l i n e a r s p l i n e f i t ,        t h e a l g o r i t h m of Demetriades (15) y i e l d s m o b i l i t i e s
+m i n i m a l n u m e r i c a l e r r o r s occur s i n c e o n e a c h             34% low f o r a p u r e Cesium g a s a t 2500 k e l v i n s and
+reduced energy i n t e r v a l a 5 x 5 b, t h e i n t e g r a l s                   30-40% low f o r Argon. F u r t h e r work on t h i s
+                                                                                    problem i s b e i n g pursued.
+
+
+
+             C        xJ e - X d x         forj =0,      ...,5
+
+a r e a l l e l e m e n t a r y and can b e i n t e g r a t e d e x a c t l y
+                                                                                         While a computer p r o c e d u r e f o r c a l c u l a t i n g
+                                                                                    e l e c t r i c a l t r a n s p o r t p r o p e r t i e s which e n t a i l s
+                                                                                    numerical q u a d r a t u r e ( 1 , 22, 38) i s n e c e s s a r i l y
+                                                                                    slower t h a n a p r o c e d u r e based on a n a l g e b r a i c
+                                                                                    approach ( I S ) , t h e a d v a n t a g e d i s a p p e a r s when one
+( t o machine p r e c i s i o n ) by t h e p a r t s f o r m u l a . I f            c o n s i d e r s t h e l a r g e amount of t i m e r e q u i r e d f o r
+t h e data ever were t o j u s t i f y , say, a n e s c a l a t i o n               c a l c u l a t i n g t h e c o m p o s i t i o n (64, 66) f o r a
+t o c u b i c s p l i n e f i t t i n g , t h e i n t e g r a l s would remain      combustion m i x t u r e . We e s t i m a t e t h a t q u a d r a t u r e
+e l e m e n t a r y w i t h j r a n g i n g up t o 7 r a t h e r t h a n 5.         r e q u i r e s about 1%         a s much computer t i m e a s i s
+I n c a s e s where t h e t a i l of t h e c r o s s - s e c t i o n func-          r e q u i r e d t o s o l v e t h e c o m p o s i t i o n problem.
+t i o n behaves a s l / x , t h e i n t e g r a l s a r e s t i l l of t h e
+above form w i t h j = 0 ,         ...,     4. For o u r p r e s e n t                                             References
+purposes t h i s l a s t observation has n e g l i g i b l e
+n u m e r i c a l impact.                                                            1. A l l i s , W. P . , "Motions of I o n s and E l e c t r o n s " ,
+                                                                                         i n Handbuch d e r P h y s i k 21, pp. 383f ( 1 9 5 6 ) .
+      T a b l e s of Q D A / ( ~ O - ~ ~A2,
+                                        M ~ and
+                                            ) , A5 a s a func-
+t i o n of e l e c t r o n temperature (Tikelvin) a r e given                         2.   A l l i s o n , A. C., J . Phys. B:            Atom. Molec.
+a s a n appendix.                                                                           Phys. 5, 325 (1975).
+
+      I n 1970, Argyropoulos and C a s t e e l (5) g a v e                            3.   A l t s c h u l e r , S . , Phys. Rev.     107, 114 ( 1 9 5 7 ) .
+s i m i l a r c o m p u t a t i o n s f o r a few of t h e i m p o r t a n t
+g a s e s i n MHD p l a s m a s based on t h e t h e n c u r r e n t                  4.    Andrick, A., D. Danner, and H. E h r h a r d t ,
+t a b u l a t i o n by one of u s (AVP). Maxwell, et a l . ,                                 Phys. L e t t .    a,  346 (1969); A. S t a m a t o v i c
+(44) g a v e c o m p u t a t i o n s f o r K and C s . To t h e e x t e n t                  and G. J. S c h u l z , Phys, Rev. A              7,
+                                                                                                                                       589 ( 1 9 7 3 ) ;
+t h a t o u r s p e c i e s l i s t c o i n c i d e s w i t h t h e s e two                  M. J. W. Boness and G. J. S c h u l z , Phys. Rev.
+s o u r c e s , we g i v e a ( h i s t o r i c a l ) comparison of                           A x , 1969 (1974).
+QDA(2500) i n T a b l e 2. N e i t h e r Argyropoulos n o r
+Maxwell e s t i m a t e d c r o s s s e c t i o n s f o r CsOH, H, H                  5.    Argyropoulos, G. S. and M. A. C a s t e e l , J.
+                                                                             2'
+KOH, 0 , OH, o r SO2. Our v a l u e f o r QDA(2900) f o r C s                                Appl. Phys. 61, No. 1 0 , pp. 4162-4165 (1970)
+i s 1 9 . 1 % below t h a t of ( 4 4 ) , and o u r v a l u e f o r
+QDA(2900) f o r K i s 39.1% below t h a t of ( 4 4 ) .                                6.    B a i l e y , V. A. and J . M. S o m e r v i l l e , P h i l ,
+                                                                                             Mag.    17,    1169 (1934); D . A. P a r k e s and T . M.
+   T a b l e 2.   - H i s t o r i c a l Comparison of QDA(2500)'s                            Sugden, J. Chem. Soc., Faraday T r a n s a c t i o n s
+                                                                                             11, 68, 600 (1972).
+Species           (44)          (5)            T h i s Work           A%
+                                                                                      7.    Christophorou, L. G'. and A. A. C h r i s t o d o u l i d e s ,
+                                                                                             J . Phys. B: Atom. Molec. Phys. 2, 71 ( 1 9 6 9 ) .
+
+                                                                                      8.    Chanin, L. M. and R. D. S t e e n , Phys. Rev.
+                                                                                             1 3 6 , A138 (1964).
+
+                                                                                      9.    Cohen, R. S. and A. V. P h e l p s ( u n p u b l i s h e d
+                                                                                             H20 d a t a ) . For t r a n s p o r t c o e f f i c i e n t s
+                                                                                             c a l c u l a t e d u s i n g t h e s e r e s u l t s s e e J. J.
+                                                                                             Lowke and J. H. P a r k e r , Jr., Phys. Rev. 181
+                                                                                             302 (1969).
+
+                                                                                     10.    Cohen, R. S. and A. V . P h e l p s ( u n p u b l i s h e d NO
+                                                                                             data).
+                                                                                 IX.9.6
+                                      SEAM #15 (1976), Session: Plasma and Flow Phenomena
+
+
+
+
+C o t t e r a u , M. J. and P. V a l e n t i n , C. R. Acad,                    Grad H.:   " K i n e t i c Theory and S t a t i s t i c a l
+ Sc. P a r i s 13272, 40 (1971).                                                 Mechanics", L e c t u r e n o t e s by I . I . Kolodner.
+                                                                                 N. Y . U. - Courant, (1948). C h a p t e r s I - I V .
+Crawford, 0. H . and A . Dalgarno, J . Phys. B
+ -
+ 4 , 494 (1971)        .                                                        Grad, H.:    " K i n e t i c Theory and S t a t i s t i c a l
+                                                                                 Mechanics", L e c t u r e n o t e s by I. I . Kolodner.
+Crompton, R. W . , D. K . Gibson, and A. I .                                     N. Y . U . - Courant, (1950).          Chapter V and
+ McIntosh, A u s t r a l i a n J . Phys. 22, 715 (1969).                         Appendices. ONR r e p o r t of c o n t r a c t         N6ori-
+                                                                                 201.
+Crompton, R. W . , H. B . M i l l o y , J. A. Rees,
+ and A. G. Robertson, i n A b s t r a c t s of P a p e r s                      Hake, R. D . , J r . and A. V . P h e l p s , Phys. Rev.
+ of t h e 9 t h I n t ' l . Conf. on P h y s i c s of                            1 5 8 , 70 (1967).
+ E l e c t r o n i c and Atomic C o l l i s i o n s , ed. J. S .
+ R i s l e y and R. G e b a l l e (Univ. of Washington                          Hake, R. D . , Jr. and A . V . P h e l p s , Phys. Rev.
+ P r e s s , S e a t t l e , 1975), Vol. 1, p. 457.                              158, 70 (1970). Note t h a t t h e momentum-
+                                                                                 t r a n s f e r and i n e l a s t i c c r o s s s e c t i o n s f o r 0
+Demetriades, S . T. and G . S. Argyropoulos                                                                                                              2
+                                                                                 g i v e n by A. V . P h e l p s i n N . B . S. Tech. Note
+ P h y s i c s of F l u i d s 2, No. 11, pp. 2136-2149                           No. 211, Vol. 5 (1964), were t h e r e s u l t of a
+ (1966).                                                                         v e r y p r e l i m i n a r y a n a l y s i s and a r e no longer
+                                                                                 considered v a l i d .
+D u t t o n , J . , "A Survey of E l e c t r o n Swarm Data",
+   JPCRo 4 577 (1975)             .                                             H a r r i s , L . P . , J . Appl. Phys. 35, 1993 (1964);
+                                                                                 F. Sakao and H. S a t o , Phys. F l u i d s 12, 2063
+E n g e l h a r d t , A. G. and A. V. P h e l p s , Phys.                        (1969); J . D. E. Beynon and P. G . Brooker,
+   Rev. 131, 2115 (1963).                                                        J . Phys. B 2, 849 (1972).
+
+E n g e l h a r d t , A. G . , A. V . P h e l p s , and C. G .                  I t i k a w a , Y . , P l a n e t . Space S c i . 9,
+                                                                                                                                   993
+   R i s k , Phys. Rev. 135, A1566 (1964). The                                     (1971) and Phys. F l u i d s 16,8 3 1 (1973); R.
+   rapid r i s e i n the i n e l a s t i c cross section                          H. Comfort, P l a n e t . Space S c i . 3, 533
+   f o r N between 2 1 and 25 eV which was                                         (1975).
+   p o s t u j a t e d i n t h i s p a p e r h a s n o t been
+   d e t e c t e d by o t h e r e x p e r i m e n t s . S i m i l a r l y ,     K a r u l e , E. M . , Atomic C o l l i s i o n s 111, ed. by
+   t h e energy l o s s of 5 eV. Recent a n a l y s e s                          V . Ia. V e l d r e ( L a t v i a n Acad. S c i e n c e s , Riga
+   by A. V. P h e l p s and G. C . Chamberlain                                   1965) ( T r a n s l a t i o n : JILA I n f o r m a t i o n Center,
+    ( w p u b l i s h e d ) have o b t a i n e d good agreement                  Report No. 3 , U . of Colorado, Boulder,
+   with experimental transport d a t a using a                                   1 9 6 5 ) ; A. L. S i n f a i l a m and R. K . Nesbet, IBM
+   s e t of e l e c t r o n i c e x c i t a t i o n c r o s s s e c t i o n s    Research Report W 1156, Feb. 13, 1973; D .
+   based on M. H . Rees and R. A. J o n e s , P l a n e t .                      N o r c r o s s ( p r i v a t e communication).
+   Space S c i . 2,           213 (1972), and a s e t of
+   v i b r a t i o n a l e x c i t a t i o n c r o s s s e c t i o n s which    K i e f f e r , L. J . A Compilation of E l e c t r o n
+   a r e l a r g e r t h a n t h o s e of E n g e l h a r d t , e t              C o l l i s i o n Cross-Section Data f o r Modeling
+   a l . , by a b o u t 50 p e r c e n t . However, t h e                        Gas D i s c h a r g e L a s e r s . JILA I n f o r m a t i o n
+   r e q u i r e d momentum t r a n s f e r c r o s s s e c t i o n s            C e n t e r Report 1 3 , U n i v e r s i t y of Colorado,
+   a r e unchanged.                                                              Boulder, Colorado ( 1 9 7 3 ) .
+
+F l e t c h e r J. and D. S. Burch, J . Phys. D 5,                              K l e p e i s , J . E. and J . F. L o u i s , Aerospace
+    2037 (1972).                                                                 Research L a b o r a t o r i e s Report ARL 70-0244,
+                                                                                 November 1970.
+F l e t c h e r , J. and S. C . Haydon, A u s t r a l i a n J .
+    Phys. 19, 615 (1966).                                                       Kolodner, I . I . : "Moment D e s c r i p t i o n of Gas
+                                                                                 Mixtures", AEC Computing and Applied Mathe-
+Freund, S. N . :            K i n e t i c S t u d i e s and E l e c t r i c      m a t i c s C e n t e r p u b l i c a t i o n NYO-7980 NYU-
+  Resonance S p e c t r o s c o p y of S e v e r a l A l k a l i                 Courant, 43 p p . , (1957).
+   M e t a l C o n t a i n i n g Molecules, Harvard
+  D i s s e r t a t i o n , Cambridge (1970).                                    Krauss, M.        ( p r i v a t e communication).
+
+ F r o s t , L. S.      J . Appl. Phys. 12 2029 (1961).                          Kruger, C. H . , M. M i t c h n e r , and U. Daybelge,
+                                                                                  AIM J. 5 1712 (1968).
+ F r o s t , L. S. and A. V . P h e l p s , Phys. Rev.
+  -
+  136, A1538 (1966).                                                             L i d e , D. R., J r . and R. L . Kuczkowski, J .
+                                                                                  Chem. Phys. 5,        4768 ( 1 9 6 7 ) .
+ F r o s t , L. S. and A. V . P h e l p s , Phys. Rev.
+  127, 1 6 2 1 (1962).
+  -                                                                              L i n , S. C . and B. K i v e l , Phys. Rev.               114, 1026
+                                                                                   (1959); J . W. Diaber and H. F . Waldron,
+ Gehenn W. and M. Wilmers, Z . P h y s i k 244, 395                               I b i d . 151,5 1 (1966). Our own e f f o r t s t o
+  (1971); D . H i l s , M. V. McCusher, H. Klein-                                 r e a n a l y z e t h e d a t a of L i n and K i v e l u s i n g
+  p i p p e n and S. J. Smith, Phys. Rev. L e t t . 9,                            t h e O2 and N c r o s s s e c t i o n s of T a b l e 1
+  398 (1972).                                                                     l e a d t o n e g a $ i u e v a l u e s f o r %(E)  for
+                                                                                   e l e c t r o n s i n a t o m i c oxygen.
+ Golden, D. E . , Phys. Rev. 151,48 (1966); J.
+  F. Delpech and C. S o l , C. R. Acad. S c i .                                  Lowke, J . J . , A. V. P h e l p s , and B. W. I r w i n ,
+  Paris     a,  1 8 3 (1972).                                                     J . Appl. Phys. 44, 4664 (1973).
+                                           SEAM #15 (1976), Session: Plasma and Flow Phenomena
+
+
+
+
+L u f t , P. E. a n d L. J . K i e f f e r ( p r i v a t e corn-               62.   S c h u l z , G . J . , Rev. Mod. Phys.             45, 423 ( 1 9 7 3 ) .
+ munication, 1973).
+                                                                               63.   Shyn, T . W . , R. S . S t o l a r s k i , and G . R.
+Maki, A.,      JPCRD 2, p. 221 ( 1 9 7 4 ) .                                          C a r i g a n , Phys. Rev. A 6, 1002 ( 1 9 7 2 ) .
+
+Maxwell, C. D . , e t a l . , " I n p u t D a t a . . . ' I ,                  64.   S p e n c e r , F. E . , J r . and A. A. Orning: ''An
+ p r o c e e d i n g s 1 3 t h MHD Symposium, S t a n f o r d                         A l g o r i t h m f o r C a l c u l a t i n g M u l t i p h a s e Chemical
+ University (1973).                                                                   E q u i l i b r i u m " , U. S. Bureau of Mines R e p o r t
+                                                                                      of I n v e s t i g a t i o n 7786, 42 pp. ( 1 9 7 3 ) .
+Mentzoni, M. H., 3. Res. N a t l . Bur. S t d s . E,
+ 213 (1965); G . E. Veatch, 3. T. Verdeyen, and                                65.   S p e n c e r , F. E., J r . , J. C . H e n d r i e , J r . , and
+ 3. 3. Cahn, B u l l . Am. Phys. Soc. 11,496                                          D. B i e n s t o c k : " E q u i l i b r i u m E l e c t r o n D e n s i t y
+ (1966). E a r l i e r r e s u l t s a r e t h o s e of V. A.                         of Coal Combustion M i x t u r e s . . . " ,             paper
+ J. L i n t , E. G. Wikner, and D. L. Trueblood,                                      IlVII.4, 1 3 t h Symposium o n MHD, S t a n f o r d
+ B u l l . Am. Phys. Soc. 2, 122 ( 1 9 6 0 ) , and F . C.                              (1973).
+ F e h s e n f e l d , J . Chem. Phys. 2, 1653 (1963).
+                                                                               66.   S p e n c e r , F. E., J r . , J . C . H e n d r i e , J r . , and
+Mentzoni, M. H. and J. Donohue, Can. 3. Phys.                                         D. B i e n s t o c k : "A T e r n a r y Margules-Type
+ -
+ 44, 693 (1966).                                                                                                                                 .
+                                                                                      Model f o r P l a s m a / S l a g E q u i l i b r i u m . ." , 6 t h
+                                                                                      I n t e r n a t i o n a l C o n f e r e n c e on MHD, Washington
+Michejda, J . A. and P . D. Burrow, i n A b s t r a c t s                              (1975).
+ of P a p e r s o f t h e 9 t h I n t ' l . Conf. o n P h y s i c s
+ o f E l e c t r o n i c a n d Atomic C o l l i s i o n s , ed.                67    S r i v a s t a v a , S. K., S. T r a j m a r , A. C h u t j i a n ,
+ J. S. R i s l e y and R. G e b a l l e (Univ. o f Wash-                              and W. W i l l i a m s , i n A b s t r a c t s of P a p e r s of
+ i n g t o n P r e s s , S e a t t l e , 1975) Vol. 2, p. 949.                        t h e 9 t h I n t ' l . Conf. o n P h y s i c s o f E l e c t r o n i c
+                                                                                      and Atomic C o l l i s i o n s , e d . J. S. R i s l e y a n d
+Nelson, D. R. and F. J. D a v i s , 3. Chem. Phys.                                    R. G e b a l l e (Univ. of Washington P r e s s ,
+ 57, 4079 ( 1 9 7 2 ) .                                                               S e a t t l e , 1 9 7 5 ) , Vol. 1, p . 265.
+
+Nelson, R. D . , J r . , D. R. L i d e , J r . , and A. A.                     68.   S u n s h i n e , G . , B. B . Aubrey, and B. B e d e r s o n ,
+ M a r g o t t , " S e l e c t e d Values o f E l e c t r i c D i p o l e             Phys. Rev.         154,   1 (1967).
+ Moments f o r M o l e c u l e s i n t h e Gas Phase",
+ N a t i o n a l S t a n d a r d R e f e r e n c e Data S e r i e s . NBS      69.   Takayanagi, K. ( p r i v a t e communication).
+ 1 0 , S e p t . 1, 1967.
+                                                                                     Thomas, L. D. and R. K. N e s b e t , P h y s . Rev. A
+Neynaber, R. H., L. L. Marino, E . W. Rothe,                                          11, 170 ( 1 9 7 5 ) ; H. E. S a r a p h , J. Phys. B 6,
+                                                                                      -
+ and S. M. T r u j i l l o , Phys. Rev. 123, 148                                      L243 ( 1 9 7 3 ) ; V. K. Lan, N. F e a u t r i e r , M.
+ (1961).                                                                              LeDourneuf, a n d H. Van Regmorter, 3. P h y s . B
+                                                                                      5, 1506 (1972).
+                                                                                      -
+Nighan, W. L. and A. J. Postma, Phys. Rev. A 6
+ 2109 (1972).                                                                  71.   T r a j m a r , S . , D. C. C a r t w r i g h t , and W. W i l l i a m s ,
+                                                                                      Phys. Rev. A 6,1482 ( 1 9 7 1 ) .
+Nighan, W. L., Phys. F l u i d s 10, 1085 (1967).
+                                                                               72.   V i s c o n t i , P. J . , J . A. S l e v i n , and K . Rubin,
+N o r c r o s s , D. W. ( p r i v a t e communication); D. L.                         Phys. Rev. A 3, 1 3 1 0 (1971); R. E. C o l l i n s ,
+ Moores and D. W. N o r c r o s s , J. Phys. B 2, 1482                                B. Bederson, and M. G o l d s t e i n , Phys. Rev.
+ (1972).                                                                              A 2, 1976 ( 1 9 7 1 ) .
+
+Pack, J. L., R. E. V o s h a l l , and A. V. P h e l p s ,                     73.   Wilson, J . F., F. J . D a v i s , D . R . N e l s o n , R.
+ Phys. Rev. 127, 2084 (1962); J. J. Lowke and                                         N. Compton, and 0 . H. Crawford, J . Chem.
+ J. A. Rees, A u s t . J. Phys. 16,447 (1963);                                        Phys. 62, 4204 ( 1 9 7 5 ) .
+ R. W. Crompton, 3. A. Rees and R. L. J o r y ,
+ A u s t . J. Phys. 18, 541 (1965); H. Ryzko,
+ A r k i v f'dr P h y s i k 32, 1 (1966).
+
+P h e l p s , A. V., DNA R e a c t i o n R a t e Handbook
+  (DNAl948H), Ed. M. H. B o r t n e r and T . Bauer
+  (DoD N u c l e a r I n f o r m a t i o n and A n a l y s i s C e n t e r ,
+ S a n t a B a r b a r a , 1 9 7 2 ) , Chap. 21.
+
+P h e l p s , A. V., J . Appl. Phys. 31, 1723 ( 1 9 6 0 ) .
+ S e e a l s o L. G. H. Huxley, J . Atm. T e r r e s t r .
+ Phys. 2,        46 ( 1 9 5 9 ) .
+
+P h e l p s , A. V. ( u n p u b l i s h e d C 0 2 d a t a ) .
+
+P h e l p s , A. V. ( u n p u b l i s h e d O2 d a t a )
+
+ Postma, A. J . , P h y s i c a 46, 38 ( 1 9 6 9 ) .
+
+ Ramsauer, C. and R. K o l l a t h , Ann. P h y s i k 10,
+  1 4 3 (1931).
+
+ Schlumbohm, H . ,        2. P h y s i k   184,492 (1965).
+                                                                          IX.9.8
+                     ca
+QDA   A2     QDA
+
+             6,608
+            10.625
+            11.029
+            11,405
+            11.758
+           12.099
+           12.417
+           12,734
+           13.045
+           13.356
+           13.666
+           13.976
+           14.287
+           14.596
+            14.908
+           15.217
+           15,521
+            15*821
+            16,115
+            16.401
+            16.678
+            16.946
+            17.202
+            17,447
+            17.680
+           17.699
+           18.106
+           18.300
+           18,94 1
+           19.460
+           19.712
+           19,755
+           19.644
+           18.453
+           17 e 034
+           15*831
+           14.093
+           14,177
+           130630
+           13.211
+      KOH               NO
+                                    N2
+
+QDA         A2    QDA         QDA
+
+                    5.798     5.272
+                  10.569      8.116
+                  11.746      8.317
+                  12.836      8.492
+                  13.821      8.647
+                  14.692      8.703
+                  15.449      8.905
+                  lbs090      9.014
+                  16,645      9.115
+                  17.100      9.208
+                  17.471      9,297
+                  17.769      9,382
+                  18.002      9.466
+                  18.179      9.551
+                  18.306      9.637
+                  18.390      9.726
+                  18.437      9.818
+                  18.452      9.915
+                  18.441     10.017
+                  18.406     10.125
+                 18.352      10.239
+                 18.281      10.358
+                 lf3.196     10.403
+                 18.099      10.614
+                 17.993      10.751
+                 17.879      10.893
+                 17,758      11.040
+                 17.633      11.1Q1
+                 17.098      11.031
+                 16.408      12.670
+                 15.739      13.498
+                 15.113      14.266
+                 14.537      14.951
+                 12.715      16.661
+                 11.493      17.052
+                 10.666      16.734
+                 10.102      16.126
+                   9.717     15.446
+                   9.458     14.794
+                  9.291      14.210
+                  HZ
+
+QDA   A2    QDA         A2
+
+            9.807      ,2711
+           12.360      02853
+           12.616      m2871
+           12.860      02886
+           13.092      ,2898
+           13.313      ,2907
+           13.523      ,2912
+           13.724      ,2915
+           13.916      02914
+           14.098      -2911
+           14.272      ,2905
+           14.438      .2897
+           14.596      02888
+           14.747      .2876
+           14.8YO      ,2863
+           15.026      .2849
+           15.156      ,2833
+           15.279      02816
+           15.396      e2799
+           15.507      02780
+           15.612      e276l
+           15.712      ,2741
+           15.806      e2720
+           15,895      ,2699
+           15.960      02677
+           16.059      ,2655
+           16.135      ,2633
+           16.205      eE610
+           16.448      ,2517
+           16.671      .t?397
+           16.8Z1      02278
+           16.909      e2161
+           16.948      02049
+           16.770      01653
+           16,306      .1343
+           15.738      .I104
+           15.149      00917
+           14.029
+           14.574      ,0767
+                       ,0644
+           13.510      ,0542
+      0
+QOA       QDA   42   QOA   A2
+
+4.810
+4.917
+4.931
+4.944
+4.958
+4.970
+4,983
+4,994
+5.006
+5.017
+5.027
+5.038
+5,048
+5.058
+5.067
+5.076
+5.085
+5.094
+5.103
+5.111
+5.120
+5.128
+5.13b
+5.144
+5.152
+5.159
+5.167
+5.175
+5.204
+5.240
+5.274
+5.308
+5.342
+5.472
+5.599
+5.722
+5.84 0
+5.954
+6.063
+6,167
+
