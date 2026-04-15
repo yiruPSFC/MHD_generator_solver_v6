@@ -1,0 +1,518 @@
+脚本目的: 在当前 V6 纯显式局部闭合与 batch 积分框架的基础上, 将 MHD generator 扩展到可变 cross section 的 global-design 模式。
+核心升级(V6-global 架构): 将状态变量从 (n_p, T_e) 扩展为 (n_p, T_e, A), 其中 A(x) 是通道截面积。仍然保留纯显式局部闭合, 不在沿程做 brentq/fsolve, 而是利用:
+    1. 动量方程
+    2. 重粒子能量方程
+    3. d/dx[Velikhov marginality] = 0
+联立得到一个 3x3 一阶常微分系统, 直接求解 (dn_p/dx, dT_e/dx, dA/dx)。
+
+依赖原则:
+    1. Governing equations 的来源可以追溯到 Jeffrey 的 global-design 推导与 V5 文档。
+    2. 具体代码实现必须以当前 V6 为主线:
+        - 复用 local_algebraic_closure.py 的显式局部闭合
+        - 复用 pde_solver_v6_batch.py 的 _evaluate_state / RK4 / prange 架构
+    3. 不依赖 pde_solver_v5 的 root solve、reverse solve、implicit stepping 或其他旧数值骨架。
+    4. V5 在这里的作用仅限于“物理方程参考”, 不是“实现模板”。
+
+
+Variables:
+State variables:
+    n_p, T_e, A
+
+Conserved constants per trajectory:
+    dot_N = n_p * v_p * A
+    I_0   = J_x * A
+
+Derived variables:
+    v_p, n_e, beta, eta, Z, T_p, J_x, J_y, E_x
+
+
+Original Equations to be solved (Jeffrey + quasi-1D global design):
+
+(1) partial_x (J_x * A) = 0
+    where J_x = beta^2/(beta^2 + 1 + Z) * e * n_e * v_p
+
+(2) partial_x (n_p * v_p * A) = 0
+
+(3) m_p * n_p * v_p * partial_x v_p = J_y * B - partial_x (n_p * k_B * T_p)
+    where J_y = - beta * (1 + Z)/(beta^2 + 1 + Z) * e * n_e * v_p
+
+(4) 3/2 * div(p_p * v_p) + p_p * div(v_p) = 3/2 * nu_E * n_e * k_B * (T_e - T_p)
+    in quasi-1D area form:
+    3/2 * (1/A) * partial_x (A * n_p * k_B * T_p * v_p)
+      + n_p * k_B * T_p * (1/A) * partial_x (A * v_p)
+      = 3/2 * nu_E * n_e * k_B * (T_e - T_p)
+
+(5) beta = B / (e * n_e * eta)
+(5') beta = e * B / (m_e * n_p * sigma_ep * sqrt(2 * k_B * T_e / m_e))
+
+(6) eta = m_e * n_p * sigma_ep * v_te / (e^2 * n_e)
+    where v_te = sqrt(2 * k_B * T_e / m_e)
+
+(7) n_e^2 / (n_s - n_e) = (2 * pi * m_e * k_B * T_e / h^2)^(3/2) * exp(-E_I / (k_B * T_e))
+    where n_s = seed_fraction * n_p
+
+(8) T_e / T_p - 1 = 5 * M^2 / 9 * beta^2 * (beta^2 + (1 + Z)^2) / (beta^2 + 1 + Z)^2
+    where M = sqrt(3/5 * m_p * v_p^2 / (k_B * T_p))
+
+(8') T_p = T_e - (m_p * v_p^2 / (3 * k_B)) * F(beta, Z)
+     where F(beta, Z) = beta^2 * (beta^2 + (1 + Z)^2) / (beta^2 + 1 + Z)^2
+
+Velikhov marginal stability constraint:
+
+(9) G(n_p, T_e, A) = 0
+    where
+    G = 4 * alpha * (2 + 1/delta_T) * (1 + alpha * (1 + 1/delta_T)) - beta^2
+    delta_T = T_e / T_p - 1
+    alpha = (k_B * T_e / (2 * E_I)) * (2 - f_I) / (1 - f_I)
+    f_I = n_e / n_s
+
+关键 global-design 思路:
+    不再把 A(x) 当成外部给定函数, 而是要求通道在每一点都满足 G = 0。
+    对 (9) 沿 x 微分:
+        partial_x G = G_np * n_p' + G_Te * T_e' + G_A * A' = 0
+    这条式子就是 A' 的闭合方程。
+
+
+状态方程 (衍生量, 全部显式):
+
+1. v_p = dot_N / (n_p * A)
+
+2. 由 (7) 直接计算 n_e = n_e(n_p, T_e)
+   这里直接复用当前 V6 的 Saha 正根实现, 保持纯代数结构。
+
+3. 由 (5') 直接计算 beta = beta(n_p, T_e)
+
+4. 由 (6) 直接计算 eta = eta(n_p, n_e, T_e)
+
+5. 由 (1) 反解 Z
+   由于 J_x = I_0 / A, v_p = dot_N / (n_p * A), 代入后 A 会完全相消:
+
+       Z = beta^2 * [ e * n_e * dot_N / (n_p * I_0) - 1 ] - 1
+
+   这是整个 V6-global 架构最关键的代数简化:
+       A 进入了 v_p 和 J_x, 但在 Z 的闭合中精确相消。
+   因而局部闭合仍然不需要 root solve。
+
+6. 由 (8') 反解 T_p:
+
+       T_p = T_e - C * F(beta, Z)
+       C = m_p * v_p^2 / (3 * k_B)
+         = m_p * dot_N^2 / (3 * k_B * n_p^2 * A^2)
+
+7. 计算电流与电场:
+       J_x = I_0 / A
+       J_y = - beta * (1 + Z)/(beta^2 + 1 + Z) * e * n_e * v_p
+       E_x = - beta^2 * Z /(beta^2 + 1 + Z) * eta * e * n_e * v_p
+
+
+================ 核心执行思路 (V6-global 纯代数 + 微分约束架构) ================
+
+Step 1: 建立纯显式局部闭合模块 (建议: local_algebraic_closure_global.py)
+
+实现基线:
+    这一层必须从当前 local_algebraic_closure.py 扩展出来, 不是参考旧版 local solver 重新写一套。
+    最自然的做法不是新造一套 V5 风格 closure, 而是:
+        - 保留现有的 beta_from_np_te
+        - 保留现有的 ne_from_np_te
+        - 保留现有的 eta_from_np_ne_te
+        - 保留现有的 _saha_partials
+        - 保留现有的 F_beta_Z / dF_dbeta / dF_dZ
+      然后新增:
+        local_closure_global_with_partials(...)
+    也就是说, global 版 local solver 本质上只是 V6 local closure 的三变量扩展。
+
+输入:
+    n_p, T_e, A (当前状态)
+    dot_N, I_0 (守恒常数)
+
+输出:
+    v_p, n_e, beta, eta, Z, T_p,
+    以及对 (n_p, T_e, A) 的解析偏导数。
+
+解析映射序列:
+    1. v_p = dot_N / (n_p * A)
+    2. n_e = ne_from_np_te(n_p, T_e, seed_fraction)
+    3. beta = beta_from_np_te(n_p, T_e, B, sigma_ep)
+    4. eta = eta_from_np_ne_te(n_p, n_e, T_e, sigma_ep)
+    5. Z = beta^2 * [ e * n_e * dot_N / (n_p * I_0) - 1 ] - 1
+    6. T_p = T_e - (m_p * v_p^2 / (3 * k_B)) * F(beta, Z)
+
+要求:
+    核心计算函数必须保持 @numba.njit 友好, 不允许引入 SciPy root。
+    这里的重点不是“重新实现一份 global local solver”, 而是“把当前 V6 的局部闭合从 2-state 扩展到 3-state”。
+
+
+Step 2: 解析偏导数模块
+
+为了在每个网格点 O(1) 代价求解 (n_p', T_e', A'), 需要硬编码全部解析 Jacobian。
+
+2.1 Saha 偏导
+
+直接复用当前 V6 的解析偏导骨架, 先做:
+    partial n_e / partial T_e
+    partial n_e / partial n_p
+
+记为:
+    dne_dTe, dne_dnp
+
+
+2.2 beta, Z, T_p 对状态变量的偏导
+
+已知:
+    v_p = dot_N / (n_p * A)
+    q   = e * n_e * dot_N / (n_p * I_0)
+    Z   = beta^2 * (q - 1) - 1
+    T_p = T_e - C * F(beta, Z)
+    C   = m_p * dot_N^2 / (3 * k_B * n_p^2 * A^2)
+
+基本偏导:
+    partial beta / partial T_e = - beta / (2 * T_e)
+    partial beta / partial n_p = - beta / n_p
+    partial beta / partial A   = 0
+
+    partial q / partial T_e = e * dot_N / (I_0 * n_p) * dne_dTe
+    partial q / partial n_p = e * dot_N / I_0 * (dne_dnp / n_p - n_e / n_p^2)
+    partial q / partial A   = 0
+
+    partial Z / partial T_e =
+        2 * beta * beta_Te * (q - 1) + beta^2 * q_Te
+
+    partial Z / partial n_p =
+        2 * beta * beta_np * (q - 1) + beta^2 * q_np
+
+    partial Z / partial A = 0
+
+    partial C / partial T_e = 0
+    partial C / partial n_p = - 2 * C / n_p
+    partial C / partial A   = - 2 * C / A
+
+令:
+    F_beta = partial F / partial beta
+    F_Z    = partial F / partial Z
+
+则:
+    partial F / partial T_e = F_beta * beta_Te + F_Z * Z_Te
+    partial F / partial n_p = F_beta * beta_np + F_Z * Z_np
+    partial F / partial A   = 0
+
+最终:
+    partial T_p / partial T_e = 1 - C * F_Te
+
+    partial T_p / partial n_p =
+        (2 * C / n_p) * F - C * F_np
+
+    partial T_p / partial A =
+        (2 * C / A) * F
+
+注意:
+    对当前 V6 代码来说, 新增的最重要项其实只有 partial T_p / partial A。
+    原有的 T_p 对 (n_p, T_e) 偏导推导、Saha 偏导、beta/Z 的解析导数都可以直接沿用 V6 思路。
+    同时由于 Z 对 A 不敏感, 这里依然保持非常干净的纯代数结构。
+
+
+Step 3: 对 Velikhov marginality 沿程微分, 构造第三条闭合方程
+
+定义:
+    f_I = n_e / (seed_fraction * n_p)
+    delta_T = T_e / T_p - 1
+    alpha = (k_B * T_e / (2 * E_I)) * (2 - f_I) / (1 - f_I)
+    U = 2 + 1 / delta_T
+    V = 1 + alpha * (1 + 1 / delta_T)
+    G = 4 * alpha * U * V - beta^2
+
+要求沿程处处 marginal:
+    G(x) = 0
+
+对 x 微分:
+    dG/dx = G_np * n_p' + G_Te * T_e' + G_A * A' = 0
+
+其中偏导数全部解析给出。
+
+3.1 f_I 偏导
+
+    partial f_I / partial T_e =
+        dne_dTe / (seed_fraction * n_p)
+
+    partial f_I / partial n_p =
+        (n_p * dne_dnp - n_e) / (seed_fraction * n_p^2)
+
+    partial f_I / partial A = 0
+
+
+3.2 alpha 偏导
+
+记:
+    R(f_I) = (2 - f_I) / (1 - f_I)
+
+则:
+    dR/df_I = 1 / (1 - f_I)^2
+
+因此:
+    partial alpha / partial T_e =
+        (k_B / (2 * E_I)) * R(f_I)
+        + (k_B * T_e / (2 * E_I)) * (partial f_I / partial T_e) / (1 - f_I)^2
+
+    partial alpha / partial n_p =
+        (k_B * T_e / (2 * E_I)) * (partial f_I / partial n_p) / (1 - f_I)^2
+
+    partial alpha / partial A = 0
+
+
+3.3 delta_T 偏导
+
+    partial delta_T / partial T_e =
+        1 / T_p - T_e / T_p^2 * (partial T_p / partial T_e)
+
+    partial delta_T / partial n_p =
+        - T_e / T_p^2 * (partial T_p / partial n_p)
+
+    partial delta_T / partial A =
+        - T_e / T_p^2 * (partial T_p / partial A)
+
+
+3.4 G 偏导
+
+    partial U / partial xi = - (partial delta_T / partial xi) / delta_T^2
+
+    partial V / partial xi =
+        (partial alpha / partial xi) * (1 + 1 / delta_T)
+        - alpha * (partial delta_T / partial xi) / delta_T^2
+
+    partial G / partial xi =
+        4 * [ alpha_xi * U * V + alpha * U_xi * V + alpha * U * V_xi ]
+        - 2 * beta * beta_xi
+
+其中:
+    xi in {n_p, T_e, A}
+且:
+    beta_A = 0
+
+这样即可得到:
+    G_np, G_Te, G_A
+
+
+Step 4: 组装 3x3 一阶系统, 直接求解 (n_p', T_e', A')
+
+4.1 使用 continuity 将 v_p' 消去
+
+由:
+    dot_N = n_p * v_p * A = const
+
+得:
+    v_p = dot_N / (n_p * A)
+    v_p' = - v_p * (n_p' / n_p + A' / A)
+
+
+4.2 动量方程
+
+原方程:
+    m_p * n_p * v_p * v_p' + partial_x(n_p * k_B * T_p) = J_y * B
+
+将:
+    T_p' = T_p_np * n_p' + T_p_Te * T_e' + T_p_A * A'
+代入后可写成:
+
+    M11 * n_p' + M12 * T_e' + M13 * A' = J_y * B
+
+其中:
+    M11 = (- m_p * v_p^2 + k_B * T_p) + k_B * n_p * T_p_np
+    M12 = k_B * n_p * T_p_Te
+    M13 = k_B * n_p * T_p_A - m_p * n_p * v_p^2 / A
+
+
+4.3 重粒子能量方程
+
+将 quasi-1D 面积形式整理后, 会出现一个非常漂亮的简化:
+    A' 项在原始能量守恒展开中会完全抵消掉显式面积源项,
+    最终仍然得到和 V5 同型的关系:
+
+    - T_p * n_p' + 3/2 * n_p * T_p' = 3/2 * nu_E * n_e * (T_e - T_p) / v_p
+
+再代入 T_p' 的链式法则:
+
+    E11 * n_p' + E12 * T_e' + E13 * A' = RHS_E
+
+其中:
+    E11 = - T_p + 3/2 * n_p * T_p_np
+    E12 = 3/2 * n_p * T_p_Te
+    E13 = 3/2 * n_p * T_p_A
+    RHS_E = 3/2 * nu_E * n_e * (T_e - T_p) / v_p
+
+并且:
+    nu_E = eta * 2 * e^2 * n_e / m_p
+
+
+4.4 Velikhov 微分闭合
+
+    G_np * n_p' + G_Te * T_e' + G_A * A' = 0
+
+
+4.5 最终线性系统
+
+因此每个 x 点需要解如下 3x3 系统:
+
+    [ M11   M12   M13 ] [ n_p' ]   [ J_y * B ]
+    [ E11   E12   E13 ] [ T_e' ] = [ RHS_E   ]
+    [ G_np  G_Te  G_A ] [ A'   ]   [ 0       ]
+
+这就是 V6-global 的核心。
+
+要求:
+    彻底废弃数值有限差分和沿程 root solve。
+    每个网格点只做一次 O(1) 的小矩阵求解。
+    优先使用手写 3x3 求解器或 Numba 兼容的线性代数。
+
+
+Step 5: 建立主积分器 (建议: pde_solver_v6_batch_global.py)
+
+实现基线:
+    这一层必须直接从当前 pde_solver_v6_batch.py 扩展。
+    也就是说, 需要保留 V6 已经验证过的:
+        - _prepare_inlet_constants 风格的入口常数准备
+        - _evaluate_state 风格的“单点评估 + 导数返回”
+        - _rk4_step 的固定步长 RK4
+        - 外层 batch + prange 并行
+    不建议回头依赖任何 V5 的 PDE solver、reverse solver 或 implicit integrator。
+
+输入:
+    入口参数建议扩展为:
+        n_p_in, Z_in, T_p_in, T_e_in, A_in, seed_fraction
+
+初始化:
+    1. 和当前 V6 一样, 先用 Eq.(8') 反解入口 v_p_in
+    2. 计算:
+           dot_N = n_p_in * v_p_in * A_in
+           I_0   = J_x_in * A_in
+    3. 严格 global-design 模式要求入口满足 G_in = 0
+       若用户给的入口只是“接近 marginal”, 则需要在入口对 T_e_in 或 Z_in 做一次一维修正。
+       这一步只在入口做一次, 沿程不做 root solve。
+
+状态:
+    y = [n_p, T_e, A]
+
+核心:
+    复用当前 V6 batch 架构的 fixed-step RK4:
+        k1 = f(y)
+        k2 = f(y + 0.5 dx k1)
+        k3 = f(y + 0.5 dx k2)
+        k4 = f(y + dx k3)
+
+其中 f(y) 在每次调用时:
+    - 先跑 Step 1 的纯显式局部闭合
+    - 再跑 Step 4 的 3x3 线性系统
+    - 返回 [dn_p/dx, dT_e/dx, dA/dx]
+
+建议的代码层次:
+    1. 在 local_algebraic_closure.py 中新增 global-aware closure 与解析偏导接口
+    2. 新建 pde_solver_v6_batch_global.py
+    3. 其内部接口风格尽量与当前 _evaluate_state / _rk4_step 对齐
+    4. 这样 batch worker、profile 存储、后处理都能最大化复用现有 V6 逻辑
+
+
+Step 6: 批量并行与 worker 改造
+
+batch 层面:
+    当前 pde_solver_v6_batch.py 的外层 batch + prange 结构可以继续保留。
+    需要做的只是:
+        1. 状态数组增加 A
+        2. inlet constants 从 (m0, Jx0) 改为 (dot_N, I_0)
+        3. evaluate_state 返回 A 相关导数和 A 的 profile
+
+worker 层面:
+    cluster_sweep_worker_batch.py 需要新增几何输入维度, 例如:
+        A_in
+    或者用工程上更自然的量:
+        h_in, width_in, aspect_ratio
+
+如果采用 square cross section:
+    A = h^2
+可以只扫描 h_in, 并在输出时恢复:
+    h(x) = sqrt(A(x))
+
+
+Step 7: 事件与数值稳定性
+
+新 global-mode 需要新增的 event / invalid-state 检查:
+    1. A <= 0
+    2. T_p <= 0
+    3. det(3x3 Jacobian) 过小
+    4. G 偏离 0 过大
+    5. A'/A 过大, 表示通道急剧张开
+    6. Mach 接近 1 (沿用现有 event)
+
+建议:
+    - 在 RK4 stage 内对 A, n_p, T_e 都做 safe floor
+    - 对 det 设最小阈值
+    - 对过大的单步相对变化设置 jump rejection
+
+
+Step 8: 工程约束 (不进入 core PDE, 进入 profile scoring)
+
+Jeffrey talk 里的 global design 不只是 G = 0, 还包括工程约束:
+    1. 电场 breakdown 限制: |E_x| <= E_max
+    2. wall loading 限制: P_w <= P_w,max
+    3. power balance / overall cycle efficiency
+    4. 磁能与体积
+
+这些量不建议进入沿程 ODE 主闭合, 否则会把显式 batch solver 重新推回 DAE/root-solve 结构。
+建议做法:
+    - 先用上面的 3-state ODE 生成完整 profile
+    - 再在 post-process/scoring 阶段计算:
+          max |E_x(x)|
+          max wall_loading(x)
+          generator length
+          inlet/outlet height
+          volume
+          magnetic energy
+          electric output / cycle efficiency
+
+这样可以最大化保留当前 V6 batch 的吞吐量优势。
+
+
+================ 建议代码落地顺序 ================
+
+Phase 1:
+    新建纯文档 + 解析推导
+    目标: 明确 V6-global 的状态量、闭合量、3x3 方程组。
+
+Phase 2:
+    扩展 local_algebraic_closure.py, 增加 geometry-aware 版本:
+        local_closure_global_with_partials(...)
+    输出新增:
+        dTp_dA, G_np, G_Te, G_A
+
+Phase 3:
+    新建 batch global solver:
+        pde_solver_v6_batch_global.py
+    保持 fixed-step RK4 + prange。
+
+Phase 4:
+    修改 cluster_sweep_worker_batch.py
+    新增 A_in 或 h_in 的扫描维度, 并加入 global profile 的工程打分。
+
+
+装置/物理参数建议沿用当前 V6:
+    B
+    E_I
+    e_charge
+    k_B
+    h_P
+    m_e
+    m_p
+    sigma_ep
+    seed_fraction
+
+
+注意事项:
+1. 这一版的核心不是“引入 A 之后再做 root solve”, 而是“保持局部闭合显式, 用 dG/dx = 0 作为第三条微分闭合”。
+2. Z 对 A 不敏感这一点是整个方案成立的关键; 必须在代码实现时严格保持 dot_N 和 I_0 的定义一致。
+3. 所有偏导都必须写成解析代数式, 不能退回有限差分。
+4. 若以后需要更精确的 nu_M = nu_ep + nu_en + nu_ei, 则 beta/eta/Z 对 A 的间接依赖关系需要重新检查。
+5. 对 batch solver 来说, 只要沿程不引入 root solve, 当前并行化结构就仍然成立。
+6. 文档中的“参考 V5”只指物理方程形式, 不指代码依赖; 实现上必须优先参考当前 V6 的 local closure 和 batch solver。
+
+
+一句话总结:
+    这份方案在物理上继承 Jeffrey/V5 的 global equations, 但在实现上明确是 V6-first。
+    真正应该被保留的核心资产不是旧 solver, 而是当前 V6 的“显式局部闭合 + 解析 Jacobian + 固定步长批量积分”。
+    在 global-design 版本里, 只要把 A 作为第三个状态变量, 并用 d/dx[Velikhov marginality] = 0 取代原来的二维闭合, 就可以把 Jeffrey 的可变通道设计思路并入现有 V6 架构, 而不必重新退回慢速的 DAE/root-solve 方案。

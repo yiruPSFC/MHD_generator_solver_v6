@@ -71,13 +71,56 @@ Expected output:
 Smoke test used for this setup:
 
 ```bash
-./.venv_jit/bin/python smoke_test_batch_v6.py
+./.venv_jit/bin/python v6_batch/smoke_test_batch_v6.py
 ```
 
 Expected result:
 
 - `SMOKE TEST PASSED`
 - The run may also print an OpenMP info line from the runtime before the smoke test output. That line is not a failure.
+
+## Local batch benchmark
+
+We also benchmarked `cluster_sweep_worker_batch.py` locally on this Mac under AC power with:
+
+- fixed `seed=12345`
+- fixed `n_total=100000`
+- default inlet prefilter enabled
+- thread counts `1, 2, 4, 8`
+- batch sizes `32, 64, 96, 128, 192, 256`
+
+Top local configurations from that sweep:
+
+- `8 threads + batch_size=256` -> `5.296 s`, about `247 MiB` max RSS
+- `4 threads + batch_size=192` -> `5.399 s`, about `215 MiB` max RSS
+- `4 threads + batch_size=256` -> `5.405 s`, about `220 MiB` max RSS
+
+Practical local default:
+
+- use `OMP_NUM_THREADS=4`
+- use `NUMBA_NUM_THREADS=4`
+- use `BATCH_SIZE=256`
+
+Reason:
+
+- it is effectively tied with the fastest local configurations
+- it uses fewer threads than the absolute-fastest `8 x 256` setting
+- it keeps memory lower while preserving nearly all of the speed
+
+Example local run:
+
+```bash
+OMP_NUM_THREADS=4 NUMBA_NUM_THREADS=4 \
+./.venv_jit/bin/python v6_batch/cluster_sweep_worker_batch.py \
+  --n-total 100000 --seed 12345 --batch-size 256 --top-k 50 --out sweep_results.jsonl
+```
+
+Important caveat:
+
+- these local-optimal settings should not be assumed to be cluster-optimal
+- on Engaging, you observed a different winner: `1 CPU per task + batch_size=128`
+- that is plausible because cluster nodes have different per-core speed, threading overhead, cache behavior, and scheduling characteristics
+- always re-benchmark on the target platform before choosing production defaults
 
 ## How to run on cluster next time
 
@@ -88,27 +131,30 @@ cd /path/to/MHD_generator_solver_v6
 python3 -m venv .venv_jit
 ./.venv_jit/bin/python -m pip install --upgrade pip setuptools wheel
 ./.venv_jit/bin/python -m pip install numpy==2.0.2 scipy==1.15.3 numba==0.61.2
-./.venv_jit/bin/python smoke_test_batch_v6.py
+./.venv_jit/bin/python v6_batch/smoke_test_batch_v6.py
 ```
 
 For direct script runs:
 
 ```bash
 PYTHON_BIN=./.venv_jit/bin/python
-$PYTHON_BIN non_batch/cluster_sweep_worker.py --n-total 1000 --top-k 50 --out sweep_results_scalar.jsonl
-$PYTHON_BIN cluster_sweep_worker_batch.py --n-total 1000 --top-k 50 --out sweep_results.jsonl
+$PYTHON_BIN v6_core/non_batch/cluster_sweep_worker.py --n-total 1000 --top-k 50 --out sweep_results_scalar.jsonl
+$PYTHON_BIN v6_batch/cluster_sweep_worker_batch.py --n-total 1000 --top-k 50 --out sweep_results.jsonl
 ```
 
 Current layout note:
 
-- non-batch pipeline lives under `non_batch/`
+- V6 explicit local-closure core lives under `v6_core/`
+- V6 batch/vectorized sweep pipeline lives under `v6_batch/`
+- variable-area marginal-stability solver lives under `v6_global_marginal/`
+- CasADi / NLP optimization workflows live under `v6_casadi/`
 
 For Slurm jobs on this cluster, avoid `sbatch --export=VAR1=...` style submissions. We observed `user env retrieval failed -> held` around Slurm's get-user-env path, and explicit `--export=...` submissions are the pattern that repeatedly correlated with those failures.
 
 Preferred V6 submission pattern:
 
 ```bash
-./submit_v6_batch_array.sh
+./v6_batch/submit_v6_batch_array.sh
 ```
 
 The wrapper now exports run variables in the submit shell, then calls `sbatch` without any `--export` flag (default environment propagation).
@@ -132,9 +178,8 @@ If you want to override run parameters, set them explicitly:
 N_TOTAL=100000000 \
 OUT_DIR=results/run_1e8_example \
 TIME_LIMIT=04:00:00 \
-./submit_v6_batch_array.sh
+./v6_batch/submit_v6_batch_array.sh
 ```
-
 To tune pull-pool redundancy:
 
 ```bash
@@ -143,13 +188,13 @@ WORKER_COUNT=130 \
 ARRAY_CONCURRENCY=96 \
 TASK_STALE_TIMEOUT_S=1200 \
 TASK_MAX_ATTEMPTS=3 \
-./submit_v6_batch_array.sh
+./v6_batch/submit_v6_batch_array.sh
 ```
 
 If you identify flaky nodes, exclude them at submit time:
 
 ```bash
-EXCLUDE_NODES=node1618,node2705 ./submit_v6_batch_array.sh
+EXCLUDE_NODES=node1618,node2705 ./v6_batch/submit_v6_batch_array.sh
 ```
 
 If you need to call `sbatch` directly, set variables in your shell first, then submit without `--export`:
@@ -168,25 +213,25 @@ sbatch -p mit_normal --array=0-99%96 \
   --cpus-per-task=1 \
   --mem=1G \
   --no-requeue \
-  submit_v6_batch_array.sbatch
+  v6_batch/submit_v6_batch_array.sbatch
 ```
 
 Backup sweeper (non-batch worker) is available if you need a fallback lane:
 
 ```bash
-./non_batch/submit_v6_backup_array.sh
+./v6_core/non_batch/submit_v6_backup_array.sh
 ```
 
 To resume an existing run and only fill missing shards, reuse the same `OUT_DIR` and `SHARD_COUNT`:
 
 ```bash
-OUT_DIR=results/run_xxx SHARD_COUNT=100 ./submit_v6_batch_array.sh
+OUT_DIR=results/run_xxx SHARD_COUNT=100 ./v6_batch/submit_v6_batch_array.sh
 ```
 
 `RESET_TASK_POOL=1` is guarded because it clears queue state. To confirm reset, set:
 
 ```bash
-RESET_TASK_POOL=1 ALLOW_TASK_POOL_RESET=1 ./submit_v6_batch_array.sh
+RESET_TASK_POOL=1 ALLOW_TASK_POOL_RESET=1 ./v6_batch/submit_v6_batch_array.sh
 ```
 
 If `processing/` is non-empty and you are sure the old run is dead, additionally set `FORCE_RESET_TASK_POOL=1`.
@@ -196,6 +241,10 @@ If `processing/` is non-empty and you are sure the old run is dead, additionally
 - Current Engaging default for `submit_v6_batch_array.sbatch`:
   - `--cpus-per-task=1`
   - `BATCH_SIZE=256`
+- Suggested first-pass Engaging comparison sweep:
+  - keep `--cpus-per-task=1` fixed
+  - compare `BATCH_SIZE=96, 128, 192, 256`
+  - do not assume that increasing `cpus-per-task` improves single-job throughput; on Engaging it may reduce throughput
 - Local MacBook tuning note:
   - use `4` CPU threads and `batch_size=256` for local runs/benchmarks
 

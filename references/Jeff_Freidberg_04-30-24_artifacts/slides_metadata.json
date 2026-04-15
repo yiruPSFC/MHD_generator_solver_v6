@@ -1,0 +1,13 @@
+{
+  "video_path": "/Users/yiruxiao/Desktop/MHD Generator/references/Jeff_Freidberg_04-30-24.mp4",
+  "duration_sec": 4908.2,
+  "fps": 25.0,
+  "crop": {
+    "x1": 80,
+    "y1": 100,
+    "x2": 1850,
+    "y2": 1080
+  },
+  "sample_seconds": 30.0,
+  "slide_count": 62
+}
