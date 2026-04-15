@@ -6,13 +6,13 @@ import json
 from pathlib import Path
 import sys
 
-REPO_DIR = Path(__file__).resolve().parents[1]
+_THIS_DIR = Path(__file__).resolve().parent
+_CASADI_DIR = Path(__file__).resolve().parents[1]
+REPO_DIR = Path(__file__).resolve().parents[2]
 if str(REPO_DIR) not in sys.path:
     sys.path.insert(0, str(REPO_DIR))
 
 from v6_casadi.run_casadi_continuation_v6 import run_continuation
-
-_THIS_DIR = Path(__file__).resolve().parent
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -31,7 +31,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--out-dir",
         type=str,
-        default=str(_THIS_DIR / "outputs" / "continuation" / "reference_case"),
+        default=str(_CASADI_DIR / "outputs" / "continuation" / "reference_case"),
         help="directory for the Jeffrey-local continuation artifacts",
     )
     p.add_argument("--out-json", type=str, default="")

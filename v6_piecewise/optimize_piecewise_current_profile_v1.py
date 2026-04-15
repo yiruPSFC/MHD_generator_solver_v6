@@ -24,7 +24,7 @@ from v6_casadi.optimize_area_profile_casadi_v6 import (
     optimize_area_profile,
 )
 from v6_casadi.run_casadi_continuation_v6 import run_continuation
-from v6_casadi.run_relaxed_continuation_v6 import _relaxed_stage_schedule
+from v6_casadi.runners.run_relaxed_continuation_v6 import _relaxed_stage_schedule
 
 _EPS = 1e-30
 _TP_MIN = 1.0
@@ -202,7 +202,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--out-dir",
         type=str,
-        default=str(Path(__file__).resolve().parent / "outputs" / "piecewise_current" / "prototype_case"),
+        default=str(Path(__file__).resolve().parent / "outputs" / "prototype_case"),
     )
     return p
 

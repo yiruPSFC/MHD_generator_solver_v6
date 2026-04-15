@@ -13,7 +13,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 _THIS_DIR = Path(__file__).resolve().parent
-REPO_DIR = _THIS_DIR.parents[0]
+_CASADI_DIR = Path(__file__).resolve().parents[1]
+REPO_DIR = Path(__file__).resolve().parents[2]
 if str(REPO_DIR) not in sys.path:
     sys.path.insert(0, str(REPO_DIR))
 
@@ -34,7 +35,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--out-dir",
         type=str,
-        default=str(_THIS_DIR / "outputs" / "continuation" / "reference_case"),
+        default=str(_CASADI_DIR / "outputs" / "continuation" / "reference_case"),
     )
     p.add_argument(
         "--stage3-npz",
