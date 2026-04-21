@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ProcessPoolExecutor
 import json
 import math
+import os
 from pathlib import Path
 import sys
 
@@ -16,10 +18,6 @@ if str(REPO_DIR) not in sys.path:
     sys.path.insert(0, str(REPO_DIR))
 
 from v6_casadi.run_casadi_continuation_v6 import run_continuation
-from v6_casadi.optimize_area_profile_casadi_v6 import (
-    _make_stage_function,
-    _prepare_inlet_constants,
-)
 from v6_casadi.runners.run_relaxed_continuation_v6 import _relaxed_stage_schedule
 from v6_global_marginal.global_postprocess_v6 import (
     design_value_weights_lab_poc,
@@ -70,7 +68,15 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--B", type=float, default=10.2)
     p.add_argument("--L", type=float, default=1.0)
-    p.add_argument("--seed-fraction", type=float, default=None)
+    p.add_argument(
+        "--seed-fraction",
+        type=float,
+        default=None,
+        help=(
+            "unsupported for relaxed inlet search; this runner always uses the "
+            "projected marginal inlet seed"
+        ),
+    )
     p.add_argument("--warm-start-dx", type=float, default=0.01)
     p.add_argument("--n-intervals", type=int, default=80)
     p.add_argument(
@@ -81,6 +87,15 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--sample-count", type=int, default=24)
     p.add_argument("--eval-count", type=int, default=8)
+    p.add_argument(
+        "--jobs",
+        type=int,
+        default=1,
+        help=(
+            "candidate-level process parallelism for the expensive continuation loop; "
+            "pass 0 to auto-size from eval_count and CPU count"
+        ),
+    )
     p.add_argument("--random-seed", type=int, default=7)
     p.add_argument("--np-in-min", type=float, default=1.0e24)
     p.add_argument("--np-in-max", type=float, default=8.0e25)
@@ -95,8 +110,18 @@ def _build_parser() -> argparse.ArgumentParser:
         help="sample Te_in via Te_in = Tp_in * (1 + inlet_delta_ratio)",
     )
     p.add_argument("--inlet-delta-ratio-max", type=float, default=4.0)
-    p.add_argument("--A-in-min", type=float, default=0.10)
-    p.add_argument("--A-in-max", type=float, default=0.80)
+    p.add_argument(
+        "--A-in-min",
+        type=float,
+        default=1.0,
+        help="normalized inlet area; must remain 1.0 for the relaxed inlet search workflow",
+    )
+    p.add_argument(
+        "--A-in-max",
+        type=float,
+        default=1.0,
+        help="normalized inlet area; must remain 1.0 for the relaxed inlet search workflow",
+    )
     p.add_argument(
         "--prefilter-weight-inlet-delta-ratio",
         type=float,
@@ -116,6 +141,29 @@ def _build_parser() -> argparse.ArgumentParser:
         type=float,
         default=0.5,
         help="extra penalty on inlet ionization fraction in addition to lab_poc score",
+    )
+    p.add_argument(
+        "--allow-shortcut-stages",
+        action="store_true",
+        help=(
+            "allow scoring acceptable later stages that did not inherit an accepted "
+            "warm start from the continuation chain"
+        ),
+    )
+    p.add_argument(
+        "--max-score-sigma-bound-hit-fraction",
+        type=float,
+        default=0.98,
+        help=(
+            "reject score candidates whose sigma=dlogA/dx bound-hit fraction exceeds "
+            "this value; pass <0 to disable"
+        ),
+    )
+    p.add_argument(
+        "--score-penalty-sigma-bound-hit",
+        type=float,
+        default=0.5,
+        help="subtract this weight times sigma_bound_hit_fraction from the search score",
     )
     p.add_argument(
         "--adaptive-bridge-count",
@@ -142,8 +190,8 @@ def _build_parser() -> argparse.ArgumentParser:
         type=float,
         default=1.0,
     )
-    p.add_argument("--final-a-min-ratio", type=float, default=0.40)
-    p.add_argument("--final-a-max-ratio", type=float, default=5.0)
+    p.add_argument("--final-a-min-ratio", type=float, default=0.10)
+    p.add_argument("--final-a-max-ratio", type=float, default=10.0)
     p.add_argument("--final-max-abs-dlogA-dx", type=float, default=0.50)
     p.add_argument("--final-np-min-ratio", type=float, default=1e-8)
     p.add_argument("--final-np-max-ratio", type=float, default=150.0)
@@ -235,7 +283,7 @@ def _sample_inlets(args, *, rng: np.random.Generator) -> list[dict[str, float]]:
         float(args.inlet_delta_ratio_max),
         n,
     )
-    A = _uniform(rng, float(args.A_in_min), float(args.A_in_max), n)
+    A = np.ones(n, dtype=float)
 
     out: list[dict[str, float]] = []
     for i in range(n):
@@ -257,142 +305,48 @@ def _sample_inlets(args, *, rng: np.random.Generator) -> list[dict[str, float]]:
 
 def _prefilter_candidates(args, *, candidates: list[dict[str, float]]) -> list[dict[str, object]]:
     ranked: list[dict[str, object]] = []
-    if args.seed_fraction is None:
-        solver = ForwardPDESolverV6BatchGlobal(B=float(args.B), length=float(args.L))
-        inlet = solver.evaluate_inlet_batch(
-            n_p_in=np.array([c["n_p_in"] for c in candidates], dtype=float),
-            Z_in=np.array([c["Z_in"] for c in candidates], dtype=float),
-            T_p_in=np.array([c["T_p_in"] for c in candidates], dtype=float),
-            T_e_in=np.array([c["T_e_in"] for c in candidates], dtype=float),
-            A_in=np.array([c["A_in"] for c in candidates], dtype=float),
-        )
+    solver = ForwardPDESolverV6BatchGlobal(B=float(args.B), length=float(args.L))
+    inlet = solver.evaluate_inlet_batch(
+        n_p_in=np.array([c["n_p_in"] for c in candidates], dtype=float),
+        Z_in=np.array([c["Z_in"] for c in candidates], dtype=float),
+        T_p_in=np.array([c["T_p_in"] for c in candidates], dtype=float),
+        T_e_in=np.array([c["T_e_in"] for c in candidates], dtype=float),
+        A_in=np.array([c["A_in"] for c in candidates], dtype=float),
+    )
 
-        for i, candidate in enumerate(candidates):
-            seed_fraction = float(inlet.seed_fraction[i])
-            inlet_f_ion = _safe_ratio(
-                float(inlet.n_e[i]),
-                seed_fraction * float(inlet.n_p[i]),
-            )
-            inlet_delta_ratio = float(inlet.T_e[i] / max(float(inlet.T_p[i]), 1e-30) - 1.0)
-            prefilter_score = -(
-                float(args.prefilter_weight_inlet_delta_ratio) * inlet_delta_ratio
-                + float(args.prefilter_weight_inlet_mach) * float(inlet.mach[i])
-                + float(args.prefilter_weight_inlet_f_ion) * inlet_f_ion
-            )
-            ranked.append(
-                {
-                    "candidate": dict(candidate),
-                    "inlet_success": bool(inlet.success[i]),
-                    "inlet_event_code": int(inlet.event_code[i]),
-                    "inlet_event_name": event_name_from_code(int(inlet.event_code[i])),
-                    "seed_fraction": seed_fraction,
-                    "inlet_metrics": {
-                        "mach": float(inlet.mach[i]),
-                        "inlet_delta_ratio": inlet_delta_ratio,
-                        "inlet_f_ion": inlet_f_ion,
-                        "velikhov_margin": float(inlet.inlet_velikhov_margin[i]),
-                        "T_p_effective_K": float(inlet.T_p[i]),
-                        "J_x_in_A_m2": float(inlet.J_x[i]),
-                        "E_x_in_V_m": float(inlet.E_x[i]),
-                        "dTe_rel_grad_1_m": float(inlet.dTe_rel_grad[i]),
-                        "dA_rel_grad_1_m": float(inlet.dA_rel_grad[i]),
-                    },
-                    "prefilter_score": float(prefilter_score),
-                }
-            )
-    else:
-        for candidate in candidates:
-            try:
-                inlet = _prepare_inlet_constants(
-                    n_p_in=float(candidate["n_p_in"]),
-                    Z_in=float(candidate["Z_in"]),
-                    T_p_in=float(candidate["T_p_in"]),
-                    T_e_in=float(candidate["T_e_in"]),
-                    A_in=float(candidate["A_in"]),
-                    B=float(args.B),
-                    seed_fraction=float(args.seed_fraction),
-                )
-                stage = _make_stage_function(
-                    dot_N=float(inlet.dot_N),
-                    I_0=float(inlet.I_0),
-                    seed_fraction=float(inlet.seed_fraction),
-                    B=float(args.B),
-                )
-                state = np.array(
-                    [
-                        float(candidate["n_p_in"]),
-                        float(candidate["T_e_in"]),
-                        float(candidate["A_in"]),
-                    ],
-                    dtype=float,
-                )
-                out = np.asarray(stage(state, 0.0), dtype=float).reshape(-1)
-                inlet_success = bool(np.all(np.isfinite(out)))
-                inlet_event_code = 0 if inlet_success else -1
-                inlet_event_name = "EVENT_NONE" if inlet_success else "NON_FINITE_STAGE_EVAL"
-                tp_effective = float(out[3]) if inlet_success else float("nan")
-                mach = float(out[12]) if inlet_success else float("nan")
-                velikhov_margin = float(out[13]) if inlet_success else float("nan")
-                n_e = float(out[5]) if inlet_success else float("nan")
-                j_x = float(out[9]) if inlet_success else float("nan")
-                e_x = float(out[11]) if inlet_success else float("nan")
-                inlet_delta_ratio = (
-                    float(candidate["T_e_in"] / max(tp_effective, 1e-30) - 1.0)
-                    if inlet_success
-                    else float("nan")
-                )
-                inlet_f_ion = _safe_ratio(
-                    n_e,
-                    float(inlet.seed_fraction) * float(candidate["n_p_in"]),
-                )
-                prefilter_score = -(
-                    float(args.prefilter_weight_inlet_delta_ratio) * inlet_delta_ratio
-                    + float(args.prefilter_weight_inlet_mach) * mach
-                    + float(args.prefilter_weight_inlet_f_ion) * inlet_f_ion
-                ) if inlet_success else float("-inf")
-                ranked.append(
-                    {
-                        "candidate": dict(candidate),
-                        "inlet_success": inlet_success,
-                        "inlet_event_code": int(inlet_event_code),
-                        "inlet_event_name": str(inlet_event_name),
-                        "seed_fraction": float(inlet.seed_fraction),
-                        "inlet_metrics": {
-                            "mach": mach,
-                            "inlet_delta_ratio": inlet_delta_ratio,
-                            "inlet_f_ion": inlet_f_ion,
-                            "velikhov_margin": velikhov_margin,
-                            "T_p_effective_K": tp_effective,
-                            "J_x_in_A_m2": j_x,
-                            "E_x_in_V_m": e_x,
-                            "dTe_rel_grad_1_m": float("nan"),
-                            "dA_rel_grad_1_m": float("nan"),
-                        },
-                        "prefilter_score": float(prefilter_score),
-                    }
-                )
-            except ValueError as exc:
-                ranked.append(
-                    {
-                        "candidate": dict(candidate),
-                        "inlet_success": False,
-                        "inlet_event_code": -1,
-                        "inlet_event_name": str(exc),
-                        "seed_fraction": float(args.seed_fraction),
-                        "inlet_metrics": {
-                            "mach": float("nan"),
-                            "inlet_delta_ratio": float("nan"),
-                            "inlet_f_ion": float("nan"),
-                            "velikhov_margin": float("nan"),
-                            "T_p_effective_K": float("nan"),
-                            "J_x_in_A_m2": float("nan"),
-                            "E_x_in_V_m": float("nan"),
-                            "dTe_rel_grad_1_m": float("nan"),
-                            "dA_rel_grad_1_m": float("nan"),
-                        },
-                        "prefilter_score": float("-inf"),
-                    }
-                )
+    for i, candidate in enumerate(candidates):
+        seed_fraction = float(inlet.seed_fraction[i])
+        inlet_f_ion = _safe_ratio(
+            float(inlet.n_e[i]),
+            seed_fraction * float(inlet.n_p[i]),
+        )
+        inlet_delta_ratio = float(inlet.T_e[i] / max(float(inlet.T_p[i]), 1e-30) - 1.0)
+        prefilter_score = -(
+            float(args.prefilter_weight_inlet_delta_ratio) * inlet_delta_ratio
+            + float(args.prefilter_weight_inlet_mach) * float(inlet.mach[i])
+            + float(args.prefilter_weight_inlet_f_ion) * inlet_f_ion
+        )
+        ranked.append(
+            {
+                "candidate": dict(candidate),
+                "inlet_success": bool(inlet.success[i]),
+                "inlet_event_code": int(inlet.event_code[i]),
+                "inlet_event_name": event_name_from_code(int(inlet.event_code[i])),
+                "seed_fraction": seed_fraction,
+                "inlet_metrics": {
+                    "mach": float(inlet.mach[i]),
+                    "inlet_delta_ratio": inlet_delta_ratio,
+                    "inlet_f_ion": inlet_f_ion,
+                    "velikhov_margin": float(inlet.inlet_velikhov_margin[i]),
+                    "T_p_effective_K": float(inlet.T_p[i]),
+                    "J_x_in_A_m2": float(inlet.J_x[i]),
+                    "E_x_in_V_m": float(inlet.E_x[i]),
+                    "dTe_rel_grad_1_m": float(inlet.dTe_rel_grad[i]),
+                    "dA_rel_grad_1_m": float(inlet.dA_rel_grad[i]),
+                },
+                "prefilter_score": float(prefilter_score),
+            }
+        )
     ranked.sort(
         key=lambda item: (
             0 if item["inlet_success"] else 1,
@@ -402,17 +356,51 @@ def _prefilter_candidates(args, *, candidates: list[dict[str, float]]) -> list[d
     return ranked
 
 
+def _stage_score_rejection_reason(args, *, stage: dict[str, object]) -> str:
+    if not bool(stage.get("acceptable", False)):
+        return "unacceptable_stage"
+    artifacts = stage.get("artifacts")
+    if not isinstance(artifacts, dict):
+        return "missing_stage_artifacts"
+
+    if not bool(args.allow_shortcut_stages):
+        stage_kind = str(stage.get("stage_kind", ""))
+        warm_source = str(stage.get("warm_start_input_source", ""))
+        if stage_kind == "scheduled" and warm_source not in ("marginal_auto", "constant_auto"):
+            pass
+        elif stage_kind == "adaptive_bridge" and warm_source not in ("marginal_auto", "constant_auto"):
+            pass
+        elif str(stage.get("name", "")).startswith("stage_2"):
+            pass
+        else:
+            return f"shortcut_stage_warm_start_source={warm_source}"
+
+    max_sigma_fraction = float(args.max_score_sigma_bound_hit_fraction)
+    if max_sigma_fraction >= 0.0:
+        diagnostics = dict(artifacts.get("diagnostics", {}) or {})
+        sigma_fraction = float(diagnostics.get("sigma_bound_hit_fraction", float("nan")))
+        if math.isfinite(sigma_fraction) and sigma_fraction > max_sigma_fraction:
+            return (
+                "sigma_bound_hit_fraction="
+                f"{sigma_fraction:.6g}_exceeds_{max_sigma_fraction:.6g}"
+            )
+    return ""
+
+
 def _search_score(args, *, final_stage_artifacts: dict[str, object], inlet_metrics: dict[str, float]) -> dict[str, object]:
     value_terms = dict(final_stage_artifacts["value_terms"])
     lab_poc = dict(final_stage_artifacts["value_profiles"]["lab_poc"])
+    diagnostics = dict(final_stage_artifacts.get("diagnostics", {}) or {})
     outlet_delta_ratio = float(value_terms["outlet_delta_ratio"])
     inlet_delta_ratio = float(inlet_metrics["inlet_delta_ratio"])
     inlet_f_ion = float(inlet_metrics["inlet_f_ion"])
+    sigma_bound_hit_fraction = float(diagnostics.get("sigma_bound_hit_fraction", 0.0))
     delta_ratio_uplift = outlet_delta_ratio - inlet_delta_ratio
     contributions = {
         "base_lab_poc_score": float(lab_poc["total_score"]),
         "reward_delta_ratio_uplift": float(args.score_weight_delta_ratio_uplift) * delta_ratio_uplift,
         "penalty_inlet_f_ion": -float(args.score_penalty_inlet_f_ion) * inlet_f_ion,
+        "penalty_sigma_bound_hit": -float(args.score_penalty_sigma_bound_hit) * sigma_bound_hit_fraction,
     }
     return {
         "total_score": float(sum(contributions.values())),
@@ -421,6 +409,7 @@ def _search_score(args, *, final_stage_artifacts: dict[str, object], inlet_metri
         "inlet_delta_ratio": inlet_delta_ratio,
         "delta_ratio_uplift": delta_ratio_uplift,
         "inlet_f_ion": inlet_f_ion,
+        "sigma_bound_hit_fraction": sigma_bound_hit_fraction,
         "base_lab_poc_score": float(lab_poc["total_score"]),
     }
 
@@ -463,7 +452,7 @@ def _run_candidate(args, *, ranked_item: dict[str, object], schedule: list[dict]
         A_in=float(candidate["A_in"]),
         B=float(args.B),
         L=float(args.L),
-        seed_fraction=None if args.seed_fraction is None else float(args.seed_fraction),
+        seed_fraction=None,
         warm_start_dx=float(args.warm_start_dx),
         stage_schedule=schedule,
         out_dir=candidate_dir,
@@ -492,9 +481,17 @@ def _run_candidate(args, *, ranked_item: dict[str, object], schedule: list[dict]
         record["final_stage"] = final_stage
         best_stage = None
         best_score = None
+        score_rejections = []
         for stage in stages:
             artifacts = stage.get("artifacts")
-            if (not bool(stage.get("acceptable", False))) or (not isinstance(artifacts, dict)):
+            rejection_reason = _stage_score_rejection_reason(args, stage=stage)
+            if rejection_reason:
+                score_rejections.append(
+                    {
+                        "stage": str(stage.get("name", "")),
+                        "reason": rejection_reason,
+                    }
+                )
                 continue
             score = _search_score(
                 args,
@@ -506,11 +503,47 @@ def _run_candidate(args, *, ranked_item: dict[str, object], schedule: list[dict]
                 best_score = dict(score)
         record["best_acceptable_stage"] = best_stage
         record["search_score"] = best_score
+        record["score_rejections"] = score_rejections
     return record
 
 
+def _run_candidate_job(
+    payload: tuple[dict[str, object], dict[str, object], list[dict], str]
+) -> dict[str, object]:
+    args_dict, ranked_item, schedule, out_dir_str = payload
+    args = argparse.Namespace(**args_dict)
+    return _run_candidate(
+        args,
+        ranked_item=ranked_item,
+        schedule=schedule,
+        out_dir=Path(out_dir_str),
+    )
+
+
+def _resolve_job_count(*, requested_jobs: int, eval_count: int) -> int:
+    if requested_jobs < 0:
+        raise ValueError("jobs must be nonnegative.")
+    if eval_count <= 1:
+        return 1
+    if requested_jobs == 0:
+        cpu_count = os.cpu_count() or 1
+        return max(1, min(eval_count, cpu_count))
+    return max(1, min(eval_count, int(requested_jobs)))
+
+
 def main() -> int:
-    args = _build_parser().parse_args()
+    parser = _build_parser()
+    args = parser.parse_args()
+    if args.seed_fraction is not None:
+        parser.error(
+            "--seed-fraction is not supported in relaxed inlet search; "
+            "this runner always uses the projected marginal inlet seed."
+        )
+    if float(args.A_in_min) != 1.0 or float(args.A_in_max) != 1.0:
+        parser.error(
+            "--A-in-min/--A-in-max must both remain 1.0; "
+            "the relaxed inlet search now uses a normalized fixed inlet area."
+        )
     scenario_info = _apply_scenario_preset(args, argv=sys.argv[1:])
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -521,17 +554,29 @@ def main() -> int:
     feasible_ranked = [item for item in ranked if bool(item["inlet_success"])]
     eval_count = min(max(0, int(args.eval_count)), len(feasible_ranked))
     schedule = _build_schedule(args)
+    job_count = _resolve_job_count(
+        requested_jobs=int(args.jobs),
+        eval_count=int(eval_count),
+    )
 
-    evaluated: list[dict[str, object]] = []
-    for ranked_item in feasible_ranked[:eval_count]:
-        evaluated.append(
+    selected_ranked = feasible_ranked[:eval_count]
+    if job_count == 1:
+        evaluated = [
             _run_candidate(
                 args,
                 ranked_item=ranked_item,
                 schedule=schedule,
                 out_dir=out_dir,
             )
-        )
+            for ranked_item in selected_ranked
+        ]
+    else:
+        job_payloads = [
+            (dict(vars(args)), ranked_item, schedule, str(out_dir))
+            for ranked_item in selected_ranked
+        ]
+        with ProcessPoolExecutor(max_workers=job_count) as executor:
+            evaluated = list(executor.map(_run_candidate_job, job_payloads))
 
     scored = [item for item in evaluated if isinstance(item.get("search_score"), dict)]
     scored.sort(
@@ -550,7 +595,12 @@ def main() -> int:
         "schedule_profile": str(args.schedule_profile),
         "sample_count": int(args.sample_count),
         "eval_count": int(eval_count),
-        "seed_fraction_mode": "specified" if args.seed_fraction is not None else "projected_marginal",
+        "candidate_parallel_jobs": int(job_count),
+        "inlet_area_normalization_m2": 1.0,
+        "seed_fraction_mode": "projected_marginal",
+        "allow_shortcut_stages": bool(args.allow_shortcut_stages),
+        "max_score_sigma_bound_hit_fraction": float(args.max_score_sigma_bound_hit_fraction),
+        "score_penalty_sigma_bound_hit": float(args.score_penalty_sigma_bound_hit),
         "schedule": schedule,
         "prefilter_ranked_candidates": ranked,
         "evaluated_candidates": evaluated,

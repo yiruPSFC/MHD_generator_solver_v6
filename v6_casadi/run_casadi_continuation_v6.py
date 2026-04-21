@@ -140,6 +140,78 @@ def _profile_payload(result) -> dict[str, np.ndarray]:
     }
 
 
+def _dual_npz_payload(result) -> dict[str, np.ndarray]:
+    arrays = {}
+    dual_arrays = dict((getattr(result, "duals", {}) or {}).get("arrays", {}) or {})
+    for name, values in dual_arrays.items():
+        arrays[f"dual_{name}"] = np.asarray(values, dtype=float)
+    return arrays
+
+
+def _save_dual_plot(*, out_dir: Path, stage_name: str, result) -> Path | None:
+    dual_arrays = dict((getattr(result, "duals", {}) or {}).get("arrays", {}) or {})
+    if not dual_arrays:
+        return None
+
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    x_node = np.asarray(result.x, dtype=float)
+    if x_node.size < 2:
+        return None
+    x_mid = 0.5 * (x_node[:-1] + x_node[1:])
+
+    def _x_for(values: np.ndarray) -> np.ndarray:
+        arr = np.asarray(values, dtype=float).reshape(-1)
+        if arr.size == x_node.size:
+            return x_node
+        if arr.size == x_mid.size:
+            return x_mid
+        return np.linspace(float(x_node[0]), float(x_node[-1]), arr.size, dtype=float)
+
+    def _plot_group(ax, names: list[str], title: str) -> None:
+        plotted = False
+        for name in names:
+            values = np.asarray(dual_arrays.get(name, []), dtype=float).reshape(-1)
+            if values.size == 0 or not np.any(np.isfinite(values)):
+                continue
+            ax.plot(_x_for(values), values, lw=1.8, label=name)
+            plotted = True
+        ax.set_title(title)
+        ax.set_xlabel("x (m)")
+        ax.grid(True, alpha=0.3, which="both")
+        if plotted:
+            ax.set_yscale("symlog", linthresh=1e-8, linscale=1.0)
+            ax.legend(loc="best", fontsize=8)
+        else:
+            ax.text(0.5, 0.5, "no active series", transform=ax.transAxes, ha="center", va="center")
+
+    save_path = out_dir / f"{stage_name}_duals.png"
+    fig, axes = plt.subplots(3, 1, figsize=(12, 10), constrained_layout=True)
+    _plot_group(
+        axes[0],
+        ["G_lower_node", "G_lower_mid", "Tp_lower_node", "Tp_lower_mid"],
+        "Path constraint multipliers",
+    )
+    _plot_group(
+        axes[1],
+        ["A_lower_node", "A_upper_node", "sigma_lower_interval", "sigma_upper_interval"],
+        "Area and dlogA/dx bound multipliers",
+    )
+    _plot_group(
+        axes[2],
+        ["Mach_lower_node", "Mach_lower_mid", "Mach_upper_node", "Mach_upper_mid"],
+        "Mach bound multipliers",
+    )
+    status = str((getattr(result, "duals", {}) or {}).get("status", ""))
+    fig.suptitle(f"{stage_name}: IPOPT/CasADi constraint duals ({status})", fontsize=13)
+    fig.savefig(save_path, dpi=180)
+    plt.close(fig)
+    return save_path
+
+
 def _save_stage_artifacts(*, out_dir: Path, stage_name: str, result, B: float) -> dict[str, object]:
     out_dir.mkdir(parents=True, exist_ok=True)
     base = out_dir / stage_name
@@ -147,7 +219,7 @@ def _save_stage_artifacts(*, out_dir: Path, stage_name: str, result, B: float) -
     png_path = base.with_suffix(".png")
     json_path = base.with_suffix(".json")
 
-    np.savez(npz_path, **_profile_payload(result))
+    np.savez(npz_path, **_profile_payload(result), **_dual_npz_payload(result))
 
     plot_stats = plot_global_results_v6(
         _profile_payload(result),
@@ -192,10 +264,16 @@ def _save_stage_artifacts(*, out_dir: Path, stage_name: str, result, B: float) -
                 profile_name="lab_poc",
             ).to_dict(),
         },
+        "dual_status": (getattr(result, "duals", {}) or {}).get("status", ""),
+        "dual_summary": (getattr(result, "duals", {}) or {}).get("summary", {}),
+        "dual_errors": (getattr(result, "duals", {}) or {}).get("errors", {}),
         "plot_stats": {k: float(v) for k, v in plot_stats.items()},
         "npz_path": str(npz_path),
         "plot_path": str(png_path),
     }
+    dual_plot_path = _save_dual_plot(out_dir=out_dir, stage_name=stage_name, result=result)
+    if dual_plot_path is not None:
+        stage_payload["dual_plot_path"] = str(dual_plot_path)
     json_path.write_text(json.dumps(stage_payload, ensure_ascii=False, indent=2), encoding="utf-8")
     return stage_payload
 
@@ -470,6 +548,10 @@ def _save_stage_record(
         "min_velikhov_margin": float(np.nanmin(result.velikhov_margin))
         if result.velikhov_margin.size
         else float("nan"),
+        "min_velikhov_margin_x_m": float(result.diagnostics.get("velikhov_margin_min_x_m", float("nan"))),
+        "velikhov_margin_lt_1e_3_fraction": float(
+            result.diagnostics.get("velikhov_margin_lt_1e_3_fraction", float("nan"))
+        ),
         "min_mach": float(np.nanmin(result.mach)) if result.mach.size else float("nan"),
         "outlet_area_m2": float(result.A[-1]),
         "dynamic_defect_inf": float(result.diagnostics["dynamic_defect_inf"]),
@@ -716,7 +798,7 @@ def run_continuation(
     if out_dir_path is not None and final is not None:
         final_npz = out_dir_path / "final_acceptable.npz"
         final_png = out_dir_path / "final_acceptable.png"
-        np.savez(final_npz, **_profile_payload(final))
+        np.savez(final_npz, **_profile_payload(final), **_dual_npz_payload(final))
         plot_global_results_v6(
             _profile_payload(final),
             final_png,
@@ -727,6 +809,7 @@ def run_continuation(
                 f"acceptable={final.acceptable}, dTe={final.objective_delta_Te:.2f} K"
             ),
         )
+        _save_dual_plot(out_dir=out_dir_path, stage_name="final_acceptable", result=final)
         if baseline_result is not None:
             _save_baseline_comparison_plot(
                 out_dir=out_dir_path,

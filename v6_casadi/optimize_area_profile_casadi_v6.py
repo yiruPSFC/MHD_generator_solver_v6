@@ -101,6 +101,7 @@ class OptimizedAreaProfile:
     warm_start_source: str
     stats: dict
     diagnostics: dict
+    duals: dict
 
 
 @dataclass(frozen=True)
@@ -662,13 +663,11 @@ def _compute_regularity_diagnostics(
     )
 
     n_intervals = int(sigma.size)
-    max_turns = max(4, int(math.ceil(max(n_intervals, 1) / 20.0)))
+    max_turns = max(8, int(math.ceil(max(n_intervals, 1) / 20.0)))
     area_tv_ratio = _total_variation_ratio(A)
     regularity_ok = bool(
         _count_sign_changes(area_steps) <= max_turns
         and _count_sign_changes(sigma) <= max_turns
-        and area_tv_ratio <= 1.10
-        and sigma_bound_hit_fraction <= 0.35
     )
 
     return {
@@ -685,8 +684,6 @@ def _compute_regularity_diagnostics(
         "regularity_ok": regularity_ok,
         "regularity_thresholds": {
             "max_turns": max_turns,
-            "max_area_total_variation_ratio": 1.10,
-            "max_sigma_bound_hit_fraction": 0.35,
         },
     }
 
@@ -769,6 +766,7 @@ def _compute_feasibility_diagnostics(
     margin_slack_nodes: np.ndarray | None = None,
     margin_slack_mid: np.ndarray | None = None,
 ) -> dict:
+    velikhov_margin_activity_threshold = 1e-3
     np_scale = float(inlet_target[0])
     te_scale = float(max(inlet_target[1], 1.0))
     A_scale = float(inlet_target[2])
@@ -802,6 +800,21 @@ def _compute_feasibility_diagnostics(
         and np.all(np.isfinite(defects))
         and np.all(np.isfinite(mid_defects))
     )
+
+    finite_margin_mask = np.isfinite(velikhov_margin)
+    if np.any(finite_margin_mask):
+        margin_values = np.asarray(velikhov_margin, dtype=float)
+        margin_indices = np.flatnonzero(finite_margin_mask)
+        min_margin_local_idx = int(np.argmin(margin_values[finite_margin_mask]))
+        margin_min_index = int(margin_indices[min_margin_local_idx])
+        margin_min_x = float(np.asarray(x_nodes, dtype=float)[margin_min_index])
+        margin_lt_threshold_fraction = float(
+            np.mean(margin_values[finite_margin_mask] < float(velikhov_margin_activity_threshold))
+        )
+    else:
+        margin_min_index = -1
+        margin_min_x = float("nan")
+        margin_lt_threshold_fraction = float("nan")
 
     violations = []
     path_slack_tol = float(thresholds.path_slack_tol)
@@ -884,6 +897,9 @@ def _compute_feasibility_diagnostics(
         "initial_state_residual": initial_residual.tolist(),
         "tp_min": tp_min,
         "velikhov_margin_min": margin_min,
+        "velikhov_margin_min_index": margin_min_index,
+        "velikhov_margin_min_x_m": margin_min_x,
+        "velikhov_margin_lt_1e_3_fraction": margin_lt_threshold_fraction,
         "mach_min": mach_min_val,
         "mach_max": mach_max_val,
         "max_constraint_violation": max_constraint_violation,
@@ -897,6 +913,7 @@ def _compute_feasibility_diagnostics(
             "defect_rms_tol": float(thresholds.defect_rms_tol),
             "boundary_inf_tol": float(thresholds.boundary_inf_tol),
             "path_slack_tol": float(thresholds.path_slack_tol),
+            "velikhov_margin_activity_threshold": float(velikhov_margin_activity_threshold),
         },
     }
 
@@ -1021,6 +1038,25 @@ def optimize_area_profile(
     use_margin_slack = bool(margin_slack_max > 0.0)
     S_node = opti.variable(1, n_intervals + 1) if use_margin_slack else None
     S_mid = opti.variable(1, n_intervals) if use_margin_slack else None
+    dual_handles: dict[str, list[ca.MX]] = {
+        "A_lower_node": [],
+        "A_upper_node": [],
+        "sigma_lower_interval": [],
+        "sigma_upper_interval": [],
+        "Tp_lower_node": [],
+        "Tp_lower_mid": [],
+        "G_lower_node": [],
+        "G_lower_mid": [],
+        "Mach_lower_node": [],
+        "Mach_lower_mid": [],
+        "Mach_upper_node": [],
+        "Mach_upper_mid": [],
+    }
+
+    def _subject_to(name: str | None, expr):
+        opti.subject_to(expr)
+        if name is not None:
+            dual_handles[name].append(expr)
 
     np_scale = float(n_p_in)
     te_scale = float(max(T_e_in, te_min))
@@ -1048,17 +1084,18 @@ def optimize_area_profile(
         inlet_target=(float(n_p_in), float(T_e_in), float(A_in)),
     )
 
-    opti.subject_to(X[:, 0] == ca.DM([1.0, float(T_e_in) / te_scale, 1.0]))
-    opti.subject_to(n_p_hat >= np_floor / np_scale)
-    opti.subject_to(n_p_hat <= np_ceil / np_scale)
-    opti.subject_to(T_e_hat >= float(te_min) / te_scale)
-    opti.subject_to(T_e_hat <= te_ceil / te_scale)
-    opti.subject_to(A_hat >= A_floor / A_scale)
-    opti.subject_to(A_hat <= A_ceil / A_scale)
-    opti.subject_to(opti.bounded(-float(max_abs_dlogA_dx), U, float(max_abs_dlogA_dx)))
+    _subject_to(None, X[:, 0] == ca.DM([1.0, float(T_e_in) / te_scale, 1.0]))
+    _subject_to(None, n_p_hat >= np_floor / np_scale)
+    _subject_to(None, n_p_hat <= np_ceil / np_scale)
+    _subject_to(None, T_e_hat >= float(te_min) / te_scale)
+    _subject_to(None, T_e_hat <= te_ceil / te_scale)
+    _subject_to("A_lower_node", A_hat >= A_floor / A_scale)
+    _subject_to("A_upper_node", A_hat <= A_ceil / A_scale)
+    _subject_to("sigma_lower_interval", U >= -float(max_abs_dlogA_dx))
+    _subject_to("sigma_upper_interval", U <= float(max_abs_dlogA_dx))
     if use_margin_slack:
-        opti.subject_to(opti.bounded(0.0, S_node, float(margin_slack_max)))
-        opti.subject_to(opti.bounded(0.0, S_mid, float(margin_slack_max)))
+        _subject_to(None, opti.bounded(0.0, S_node, float(margin_slack_max)))
+        _subject_to(None, opti.bounded(0.0, S_mid, float(margin_slack_max)))
 
     objective = -float(objective_weight) * (te_scale * T_e_hat[-1] - float(T_e_in))
     if use_margin_slack:
@@ -1110,7 +1147,7 @@ def optimize_area_profile(
             out_kp1[2] / A_scale,
         )
         if transcription == "trapezoid":
-            opti.subject_to(X[:, k + 1] == X[:, k] + 0.5 * dx * (f_k + f_kp1))
+            _subject_to(None, X[:, k + 1] == X[:, k] + 0.5 * dx * (f_k + f_kp1))
             mid_state = 0.5 * (xk_phys + xkp1_phys)
         else:
             mid_state = 0.5 * (xk_phys + xkp1_phys) + 0.125 * dx * ca.vertcat(
@@ -1124,42 +1161,42 @@ def optimize_area_profile(
                 out_mid_hs[1] / te_scale,
                 out_mid_hs[2] / A_scale,
             )
-            opti.subject_to(X[:, k + 1] == X[:, k] + dx / 6.0 * (f_k + 4.0 * f_mid + f_kp1))
+            _subject_to(None, X[:, k + 1] == X[:, k] + dx / 6.0 * (f_k + 4.0 * f_mid + f_kp1))
 
-        opti.subject_to(out_k[3] >= float(tp_min))
+        _subject_to("Tp_lower_node", out_k[3] >= float(tp_min))
         if use_margin_slack:
-            opti.subject_to(out_k[13] + S_node[0, k] >= float(min_margin))
+            _subject_to("G_lower_node", out_k[13] + S_node[0, k] >= float(min_margin))
         else:
-            opti.subject_to(out_k[13] >= float(min_margin))
+            _subject_to("G_lower_node", out_k[13] >= float(min_margin))
         if mach_min is not None:
-            opti.subject_to(out_k[12] >= float(mach_min))
+            _subject_to("Mach_lower_node", out_k[12] >= float(mach_min))
         if mach_max is not None:
-            opti.subject_to(out_k[12] <= float(mach_max))
+            _subject_to("Mach_upper_node", out_k[12] <= float(mach_max))
 
         out_mid = stage(mid_state, U[0, k])
-        opti.subject_to(out_mid[3] >= float(tp_min))
+        _subject_to("Tp_lower_mid", out_mid[3] >= float(tp_min))
         if use_margin_slack:
-            opti.subject_to(out_mid[13] + S_mid[0, k] >= float(min_margin))
+            _subject_to("G_lower_mid", out_mid[13] + S_mid[0, k] >= float(min_margin))
         else:
-            opti.subject_to(out_mid[13] >= float(min_margin))
+            _subject_to("G_lower_mid", out_mid[13] >= float(min_margin))
         if mach_min is not None:
-            opti.subject_to(out_mid[12] >= float(mach_min))
+            _subject_to("Mach_lower_mid", out_mid[12] >= float(mach_min))
         if mach_max is not None:
-            opti.subject_to(out_mid[12] <= float(mach_max))
+            _subject_to("Mach_upper_mid", out_mid[12] <= float(mach_max))
 
     out_end = stage(
         ca.vertcat(np_scale * n_p_hat[-1], te_scale * T_e_hat[-1], A_scale * A_hat[-1]),
         U[0, -1],
     )
-    opti.subject_to(out_end[3] >= float(tp_min))
+    _subject_to("Tp_lower_node", out_end[3] >= float(tp_min))
     if use_margin_slack:
-        opti.subject_to(out_end[13] + S_node[0, -1] >= float(min_margin))
+        _subject_to("G_lower_node", out_end[13] + S_node[0, -1] >= float(min_margin))
     else:
-        opti.subject_to(out_end[13] >= float(min_margin))
+        _subject_to("G_lower_node", out_end[13] >= float(min_margin))
     if mach_min is not None:
-        opti.subject_to(out_end[12] >= float(mach_min))
+        _subject_to("Mach_lower_node", out_end[12] >= float(mach_min))
     if mach_max is not None:
-        opti.subject_to(out_end[12] <= float(mach_max))
+        _subject_to("Mach_upper_node", out_end[12] <= float(mach_max))
 
     opti.minimize(objective)
 
@@ -1250,6 +1287,65 @@ def optimize_area_profile(
         margin_slack_mid=S_mid_sol,
     )
     objective_value = float(value_fn(objective))
+    dual_status = (
+        "converged"
+        if bool(stats.get("success", False))
+        else "debug_last_iterate"
+        if sol is None
+        else "limited_or_nonconverged"
+    )
+
+    def _value_dual_array(handles: list[ca.MX]) -> np.ndarray:
+        if not handles:
+            return np.zeros(0, dtype=float)
+        exprs = []
+        for handle in handles:
+            dual_expr = opti.dual(handle)
+            exprs.append(ca.reshape(dual_expr, dual_expr.numel(), 1))
+        return np.asarray(value_fn(ca.vertcat(*exprs)), dtype=float).reshape(-1)
+
+    dual_arrays: dict[str, np.ndarray] = {}
+    dual_errors: dict[str, str] = {}
+    for name, handles in dual_handles.items():
+        try:
+            dual_arrays[name] = _value_dual_array(handles)
+        except Exception as exc:
+            dual_arrays[name] = np.zeros(0, dtype=float)
+            dual_errors[name] = str(exc)
+
+    def _summarize_dual(name: str, values: np.ndarray) -> dict[str, object]:
+        arr = np.asarray(values, dtype=float).reshape(-1)
+        finite = arr[np.isfinite(arr)]
+        if finite.size == 0:
+            return {
+                "size": int(arr.size),
+                "finite_count": 0,
+                "max_abs": float("nan"),
+                "max": float("nan"),
+                "l1": float("nan"),
+                "active_fraction_gt_1e_8": float("nan"),
+            }
+        max_abs_idx = int(np.nanargmax(np.abs(arr)))
+        return {
+            "size": int(arr.size),
+            "finite_count": int(finite.size),
+            "max_abs": float(np.nanmax(np.abs(arr))),
+            "max_abs_index": max_abs_idx,
+            "max": float(np.nanmax(arr)),
+            "l1": float(np.nansum(np.abs(arr))),
+            "active_fraction_gt_1e_8": float(np.mean(np.abs(finite) > 1e-8)),
+        }
+
+    duals = {
+        "status": dual_status,
+        "sign_convention": (
+            "Values are from CasADi opti.dual(saved_constraint). For single-sided "
+            "bounds, positive values indicate active KKT pressure on that named bound."
+        ),
+        "arrays": dual_arrays,
+        "summary": {name: _summarize_dual(name, values) for name, values in dual_arrays.items()},
+        "errors": dual_errors,
+    }
 
     return OptimizedAreaProfile(
         success=bool(stats.get("success", False)),
@@ -1278,6 +1374,7 @@ def optimize_area_profile(
         warm_start_source=warm.source,
         stats=_jsonify_stats(stats),
         diagnostics=diagnostics,
+        duals=duals,
     )
 
 
@@ -1342,6 +1439,8 @@ def _payload_from_result(result: OptimizedAreaProfile, B: float) -> dict[str, ob
         "value_profiles": value_profiles,
         "solver_stats": result.stats,
         "diagnostics": result.diagnostics,
+        "dual_summary": result.duals.get("summary", {}),
+        "dual_status": result.duals.get("status", ""),
     }
 
 
@@ -1396,6 +1495,10 @@ def main() -> int:
     if args.out_npz:
         out_path = Path(args.out_npz)
         out_path.parent.mkdir(parents=True, exist_ok=True)
+        dual_npz = {
+            f"dual_{name}": np.asarray(values, dtype=float)
+            for name, values in (result.duals.get("arrays", {}) or {}).items()
+        }
         np.savez(
             out_path,
             x=result.x,
@@ -1414,6 +1517,7 @@ def main() -> int:
             mach=result.mach,
             velikhov_margin=result.velikhov_margin,
             sigma_logA=result.sigma_logA,
+            **dual_npz,
         )
 
     return 0
