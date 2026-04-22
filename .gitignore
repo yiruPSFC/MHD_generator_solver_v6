@@ -10,6 +10,7 @@ slurm/
 v6_batch/outputs/
 v6_core/non_batch/outputs/
 v6_casadi/outputs/
+v6_casadi_v2/outputs/
 v6_global_marginal/debug/
 v6_global_marginal/diagnostics/
 v6_global_marginal/reference_recovery/*.npz
