@@ -131,9 +131,11 @@ The Yamasaki 2004 CCMHD benchmark mapping lives in
 - `build_seed.py`: writes case warm-profile and summary artifacts.
 - `README.md`: records the case-specific artifact layout.
 
-Compatibility shims remain at `yamasaki2004_parameters.py`,
-`yamasaki2004_geometry.py`, and `build_yamasaki2004_disk_seed.py` for older
-imports and command snippets.
+Use the case package directly for new code and commands:
+
+```bash
+./.venv_jit/bin/python -m v6_maingo_casadi.cases.yamasaki2004.build_seed
+```
 
 New seed artifacts default to:
 
