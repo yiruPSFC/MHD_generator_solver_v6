@@ -14,6 +14,31 @@ from .maingo_models import _MAiNGOHybridImplicitModelBase, _import_maingopy, _re
 from .models import BaselineSeed, CoarseProfileResult, HybridRunResult
 from .profiles import WorkingFluidProfile, _normalize_objective_profile
 
+
+_PACKAGE_DIR = Path(__file__).resolve().parent
+_SETTINGS_COMPAT_NAMES = {
+    "maingo_multistart_8_settings.txt": "maingo_multistart_8.txt",
+    "maingo_multistart_32_settings.txt": "maingo_multistart_32.txt",
+    "maingo_pure_multistart_settings.txt": "maingo_pure_multistart.txt",
+}
+
+
+def _resolve_maingo_settings_path(path: str | Path) -> Path:
+    settings_path = Path(path)
+    if settings_path.exists():
+        return settings_path
+    basename = settings_path.name
+    candidates = [
+        _PACKAGE_DIR / "settings" / basename,
+    ]
+    if basename in _SETTINGS_COMPAT_NAMES:
+        candidates.append(_PACKAGE_DIR / "settings" / _SETTINGS_COMPAT_NAMES[basename])
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return settings_path
+
+
 def _handoff_bounds_from_best(best: CoarseProfileResult) -> dict[str, dict[str, float]]:
     return {
         "n_p_in": {
@@ -106,7 +131,7 @@ def run_hybrid_maingo_casadi(
     model = HybridMAiNGOModel(impl=model_impl)
     solver = maingopy.MAiNGO(model)
     if maingo_settings_path:
-        solver.read_settings(str(maingo_settings_path))
+        solver.read_settings(str(_resolve_maingo_settings_path(maingo_settings_path)))
     if maingo_max_time is not None and float(maingo_max_time) > 0.0:
         solver.set_option("maxTime", float(maingo_max_time))
     solver.set_log_file_name(str(out_dir_path / "maingo.log"))

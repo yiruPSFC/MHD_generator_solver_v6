@@ -1,12 +1,6 @@
-"""Compatibility imports for the Yamasaki 2004 case definition.
+"""Yamasaki 2004 CCMHD benchmark mapping for the MAiNGO/CasADi workflow."""
 
-Prefer importing from ``v6_maingo_casadi.cases.yamasaki2004.parameters`` in new
-code.
-"""
-
-from __future__ import annotations
-
-from v6_maingo_casadi.cases.yamasaki2004.parameters import (
+from .parameters import (
     YAMASAKI2004,
     YAMASAKI2004_MODEL_SEED,
     RangeValue,

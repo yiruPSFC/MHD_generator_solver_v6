@@ -86,6 +86,10 @@ continuation handoff:
   --out-dir v6_maingo_casadi/outputs/maingo_enthalpy
 ```
 
+Settings files live under `v6_maingo_casadi/settings/`. The workflow still
+accepts the old top-level settings filenames for compatibility and resolves
+them to the new folder when needed.
+
 Main outputs:
 
 - `maingo_summary.json`
@@ -114,6 +118,31 @@ is split by role:
   construction, projection, and feasibility restoration.
 - `maingo_models.py`, `workflow.py`: MAiNGO model adapters and the full
   MAiNGO-to-CasADi handoff workflow.
+- `settings/`: MAiNGO runtime settings.
+- `cases/`: benchmark-specific mappings and scripts that are not generic solver
+  engine code.
+
+## Yamasaki 2004 Case
+
+The Yamasaki 2004 CCMHD benchmark mapping lives in
+`cases/yamasaki2004/`:
+
+- `parameters.py`: paper values, disk geometry, and model-neighborhood seed.
+- `build_seed.py`: writes case warm-profile and summary artifacts.
+- `README.md`: records the case-specific artifact layout.
+
+Compatibility shims remain at `yamasaki2004_parameters.py`,
+`yamasaki2004_geometry.py`, and `build_yamasaki2004_disk_seed.py` for older
+imports and command snippets.
+
+New seed artifacts default to:
+
+```text
+v6_maingo_casadi/outputs/cases/yamasaki2004/seeds/
+```
+
+Older milestone outputs under `outputs/maingo_yamasaki2004_neighborhood/` are
+left in place because their JSON files record those paths.
 
 ## Validation
 
