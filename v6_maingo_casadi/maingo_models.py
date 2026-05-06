@@ -5,6 +5,7 @@ from typing import Any
 
 import numpy as np
 
+from .casadi_evaluator import CasadiCoarseEvaluator
 from .constants import _EPS, _G_HARD_MARGIN, _TP_MIN, OBJECTIVE_PROFILE_LAB_POC_V2
 from .geometry import SplineAreaDesign, _evaluate_area_design_nodes
 from .implicit import (
@@ -27,6 +28,18 @@ from .physics import (
 from .profiles import _normalize_objective_profile
 
 class _MAiNGOHybridModelBase:
+    formulation = "rk4_reduced_benchmark"
+    _DECISION_NAMES = (
+        "log_n_p_in",
+        "T_e_in",
+        "Z_in",
+        "I_0",
+        "log_seed_fraction",
+        "a1",
+        "a2",
+        "a3",
+    )
+
     def __init__(
         self,
         *,
@@ -41,6 +54,18 @@ class _MAiNGOHybridModelBase:
         self._ops = _ops_for_maingo(maingopy_module)
         self._objective_profile = _normalize_objective_profile(objective_profile)
         self._working_fluid = baseline.working_fluid
+        self._numeric_evaluator = CasadiCoarseEvaluator(
+            baseline=baseline,
+            n_intervals=self._n_intervals,
+            objective_profile=self._objective_profile,
+        )
+
+    @property
+    def total_variables(self) -> int:
+        return 8
+
+    def summary_metadata(self) -> dict[str, Any]:
+        return {"benchmark_model": "rk4_reduced"}
 
     def get_variables(self):
         variables = []
@@ -56,6 +81,15 @@ class _MAiNGOHybridModelBase:
 
     def get_initial_point(self):
         return self._baseline.initial_point()
+
+    def decode_solution_point(self, values) -> dict[str, float]:
+        values = list(values)
+        if len(values) != len(self._DECISION_NAMES):
+            raise ValueError(f"RK4 reduced solution size mismatch: got {len(values)}, expected {len(self._DECISION_NAMES)}.")
+        return {name: float(value) for name, value in zip(self._DECISION_NAMES, values, strict=True)}
+
+    def evaluate_solution(self, solution: dict[str, float]) -> CoarseProfileResult:
+        return self._numeric_evaluator.evaluate(solution)
 
     def evaluate(self, vars):
         result = self._maingopy.EvaluationContainer()

@@ -341,11 +341,6 @@ def _build_local_kkt_summary(
 def analyze_hybrid_summary(summary_path: str | Path) -> dict[str, Any]:
     hybrid = _load_json(summary_path)
     seed = _seed_from_hybrid_payload(hybrid)
-    model = _MAiNGOHybridImplicitModelBase(
-        baseline=seed,
-        n_intervals=40,
-        maingopy_module=_import_maingopy(),
-    )
     reference_variables, reference_result, _ = _build_implicit_reference(baseline=seed, n_intervals=40)
     _ = reference_variables
     solver_status = dict(hybrid.get("maingo_status", {}))
@@ -354,6 +349,7 @@ def analyze_hybrid_summary(summary_path: str | Path) -> dict[str, Any]:
         or hybrid.get("maingo_best", {}).get("decision_vector", {})
     )
     maingo_best = dict(hybrid.get("maingo_best", {}))
+    formulation = str(dict(maingo_best.get("diagnostics", {}) or {}).get("formulation", ""))
     maingo_value_profile = dict(maingo_best.get("value_profile", {}))
     baseline_profile = dict(reference_result.value_profile)
 
@@ -388,6 +384,35 @@ def analyze_hybrid_summary(summary_path: str | Path) -> dict[str, Any]:
                 float(handoff_bounds[key_bounds]["max"]),
             )
 
+    kkt_local_analysis: dict[str, Any]
+    kkt_comment: str
+    if formulation == "implicit_fullspace_backward_euler_scaled_variables":
+        model = _MAiNGOHybridImplicitModelBase(
+            baseline=seed,
+            n_intervals=40,
+            maingopy_module=_import_maingopy(),
+        )
+        kkt_local_analysis = _build_local_kkt_summary(
+            seed=seed,
+            model=model,
+            decision_vector=handoff_decision,
+        )
+        kkt_comment = (
+            "MAiNGO's Python API does not expose KKT multipliers directly. "
+            "The KKT section is from a local CasADi/IPOPT solve of the same coarse implicit NLP."
+        )
+    else:
+        kkt_local_analysis = {
+            "skipped": True,
+            "reason": (
+                "local full-space KKT reconstruction is intentionally disabled for reduced implicit/RK4 "
+                "coarse summaries; rebuilding a full-space NLP would conflate the benchmark problem with "
+                "the reduced MAiNGO model."
+            ),
+            "formulation": formulation,
+        }
+        kkt_comment = "KKT reconstruction skipped because this summary is not a full-space coarse NLP."
+
     return {
         "summary_path": str(Path(summary_path).resolve()),
         "baseline_objective_score": float(reference_result.objective_score),
@@ -400,17 +425,10 @@ def analyze_hybrid_summary(summary_path: str | Path) -> dict[str, Any]:
         "contribution_delta_vs_baseline": contribution_delta,
         "decision_position_in_current_box": decision_position,
         "continuation_position_in_handoff_box": continuation_position,
-        "kkt_local_analysis": _build_local_kkt_summary(
-            seed=seed,
-            model=model,
-            decision_vector=handoff_decision,
-        ),
+        "kkt_local_analysis": kkt_local_analysis,
         "notes": {
             "maingopy_duals_available": False,
-            "comment": (
-                "MAiNGO's Python API does not expose KKT multipliers directly. "
-                "The KKT section is from a local CasADi/IPOPT solve of the same coarse implicit NLP."
-            ),
+            "comment": kkt_comment,
         },
     }
 

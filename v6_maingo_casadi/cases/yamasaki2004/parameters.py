@@ -193,7 +193,7 @@ class Yamasaki2004ModelSeed:
         return {
             "name": "maingo_yamasaki2004_disk_geometry_reference",
             "n_intervals": int(self.schedule_n_intervals),
-            "transcription": "implicit_fullspace_backward_euler_scaled_variables",
+            "transcription": "reduced_implicit_fixed_newton_backward_euler",
             "min_margin": float(self.min_margin),
             "mach_min": float(self.mach_min),
             "max_abs_dlogA_dx": float(self.max_abs_dlogA_dx),

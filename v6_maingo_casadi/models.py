@@ -192,6 +192,51 @@ class BaselineSeed:
             area_reference_sigma_logA=area_reference_sigma_logA,
         )
 
+    def with_inlet_bound_factors(
+        self,
+        *,
+        n_p_in_lower: float = 1.0,
+        n_p_in_upper: float = 1.0,
+        T_e_in_lower: float = 1.0,
+        T_e_in_upper: float = 1.0,
+        Z_in_lower: float = 1.0,
+        Z_in_upper: float = 1.0,
+        I_0_lower: float = 1.0,
+        I_0_upper: float = 1.0,
+        seed_fraction_lower: float = 1.0,
+        seed_fraction_upper: float = 1.0,
+    ) -> "BaselineSeed":
+        lower_factor_map = {
+            "n_p_in": float(n_p_in_lower),
+            "T_e_in": float(T_e_in_lower),
+            "Z_in": float(Z_in_lower),
+            "I_0": float(I_0_lower),
+            "seed_fraction": float(seed_fraction_lower),
+        }
+        upper_factor_map = {
+            "n_p_in": float(n_p_in_upper),
+            "T_e_in": float(T_e_in_upper),
+            "Z_in": float(Z_in_upper),
+            "I_0": float(I_0_upper),
+            "seed_fraction": float(seed_fraction_upper),
+        }
+        for label, factor_map in (("lower", lower_factor_map), ("upper", upper_factor_map)):
+            for key, factor in factor_map.items():
+                if factor <= 0.0:
+                    raise ValueError(f"{label} inlet bound factor for {key} must be positive, got {factor!r}.")
+        new_windows: dict[str, dict[str, float]] = {}
+        for key, window in self.inlet_windows.items():
+            new_window = dict(window)
+            new_window["min"] = float(window["min"]) * lower_factor_map[key]
+            new_window["max"] = float(window["max"]) * upper_factor_map[key]
+            if new_window["max"] <= float(new_window["min"]):
+                raise ValueError(
+                    f"scaled bounds for {key} must satisfy min < max: "
+                    f"min={new_window['min']!r}, max={new_window['max']!r}."
+                )
+            new_windows[key] = new_window
+        return replace(self, inlet_windows=new_windows)
+
     def with_inlet_upper_bound_factors(
         self,
         *,
@@ -201,28 +246,13 @@ class BaselineSeed:
         I_0: float = 1.0,
         seed_fraction: float = 1.0,
     ) -> "BaselineSeed":
-        factor_map = {
-            "n_p_in": float(n_p_in),
-            "T_e_in": float(T_e_in),
-            "Z_in": float(Z_in),
-            "I_0": float(I_0),
-            "seed_fraction": float(seed_fraction),
-        }
-        for key, factor in factor_map.items():
-            if factor <= 0.0:
-                raise ValueError(f"upper-bound factor for {key} must be positive, got {factor!r}.")
-        new_windows: dict[str, dict[str, float]] = {}
-        for key, window in self.inlet_windows.items():
-            new_window = dict(window)
-            factor = factor_map[key]
-            new_window["max"] = float(window["max"]) * factor
-            if new_window["max"] <= float(new_window["min"]):
-                raise ValueError(
-                    f"expanded upper bound for {key} must exceed lower bound: "
-                    f"min={new_window['min']!r}, max={new_window['max']!r}."
-                )
-            new_windows[key] = new_window
-        return replace(self, inlet_windows=new_windows)
+        return self.with_inlet_bound_factors(
+            n_p_in_upper=n_p_in,
+            T_e_in_upper=T_e_in,
+            Z_in_upper=Z_in,
+            I_0_upper=I_0,
+            seed_fraction_upper=seed_fraction,
+        )
 
     def with_working_fluid_profile(self, profile: str | WorkingFluidProfile | None) -> "BaselineSeed":
         return replace(self, working_fluid=_normalize_working_fluid_profile(profile))

@@ -8,34 +8,25 @@ import numpy as np
 
 from v6_casadi_v2.run_casadi_continuation_v2 import load_warm_profile_npz, run_continuation
 
+from .casadi_evaluator import CasadiCoarseEvaluator
 from .constants import _DEFAULT_BASELINE_SUMMARY, OBJECTIVE_PROFILE_LAB_POC_V2
 from .implicit import _resample_profile_result, _restore_feasible_implicit_solution
-from .maingo_models import _MAiNGOHybridImplicitModelBase, _import_maingopy, _retcode_name, _safe_solver_metric
+from .maingo_models import _import_maingopy, _retcode_name, _safe_solver_metric
 from .models import BaselineSeed, CoarseProfileResult, HybridRunResult
 from .profiles import WorkingFluidProfile, _normalize_objective_profile
+from .reduced_implicit import _MAiNGOHybridReducedImplicitModelBase
 
 
 _PACKAGE_DIR = Path(__file__).resolve().parent
-_SETTINGS_COMPAT_NAMES = {
-    "maingo_multistart_8_settings.txt": "maingo_multistart_8.txt",
-    "maingo_multistart_32_settings.txt": "maingo_multistart_32.txt",
-    "maingo_pure_multistart_settings.txt": "maingo_pure_multistart.txt",
-}
 
 
 def _resolve_maingo_settings_path(path: str | Path) -> Path:
     settings_path = Path(path)
     if settings_path.exists():
         return settings_path
-    basename = settings_path.name
-    candidates = [
-        _PACKAGE_DIR / "settings" / basename,
-    ]
-    if basename in _SETTINGS_COMPAT_NAMES:
-        candidates.append(_PACKAGE_DIR / "settings" / _SETTINGS_COMPAT_NAMES[basename])
-    for candidate in candidates:
-        if candidate.exists():
-            return candidate
+    candidate = _PACKAGE_DIR / "settings" / settings_path.name
+    if candidate.exists():
+        return candidate
     return settings_path
 
 
@@ -84,38 +75,65 @@ def run_hybrid_maingo_casadi(
     handoff_n_intervals: int = 80,
     maingo_settings_path: str = "",
     maingo_max_time: float | None = None,
+    coarse_model: str = "reduced_implicit",
+    reduced_implicit_newton_steps: int = 10,
+    critical_mode: bool = False,
+    critical_residual_tolerance: float = 1e-4,
+    include_rk4_benchmark: bool = True,
     objective_profile: str = OBJECTIVE_PROFILE_LAB_POC_V2,
     working_fluid_profile: str | WorkingFluidProfile | None = None,
     skip_casadi_handoff: bool = False,
+    n_p_in_lower_factor: float = 1.0,
     n_p_in_upper_factor: float = 1.0,
+    T_e_in_lower_factor: float = 1.0,
     T_e_in_upper_factor: float = 1.0,
+    Z_in_lower_factor: float = 1.0,
     Z_in_upper_factor: float = 1.0,
+    I_0_lower_factor: float = 1.0,
     I_0_upper_factor: float = 1.0,
+    seed_fraction_lower_factor: float = 1.0,
     seed_fraction_upper_factor: float = 1.0,
 ) -> HybridRunResult:
     maingopy = _import_maingopy()
     objective_profile = _normalize_objective_profile(objective_profile)
+    coarse_model_name = str(coarse_model).strip().replace("-", "_").lower()
+    if coarse_model_name in {"newton_reduced_implicit", "reduced_newton_implicit"}:
+        coarse_model_name = "reduced_implicit"
+    if coarse_model_name != "reduced_implicit":
+        raise ValueError(
+            f"unsupported coarse_model={coarse_model!r}; the production MAiNGO path is reduced_implicit. "
+            "RK4 is evaluated only as a post-hoc benchmark because its explicit RHS can cross singular "
+            "denominators during MAiNGO relaxation."
+        )
     baseline = BaselineSeed.from_summary(baseline_summary_path)
     if working_fluid_profile is not None:
         baseline = baseline.with_working_fluid_profile(working_fluid_profile)
-    baseline = baseline.with_inlet_upper_bound_factors(
-        n_p_in=float(n_p_in_upper_factor),
-        T_e_in=float(T_e_in_upper_factor),
-        Z_in=float(Z_in_upper_factor),
-        I_0=float(I_0_upper_factor),
-        seed_fraction=float(seed_fraction_upper_factor),
+    baseline = baseline.with_inlet_bound_factors(
+        n_p_in_lower=float(n_p_in_lower_factor),
+        n_p_in_upper=float(n_p_in_upper_factor),
+        T_e_in_lower=float(T_e_in_lower_factor),
+        T_e_in_upper=float(T_e_in_upper_factor),
+        Z_in_lower=float(Z_in_lower_factor),
+        Z_in_upper=float(Z_in_upper_factor),
+        I_0_lower=float(I_0_lower_factor),
+        I_0_upper=float(I_0_upper_factor),
+        seed_fraction_lower=float(seed_fraction_lower_factor),
+        seed_fraction_upper=float(seed_fraction_upper_factor),
     )
     out_dir_path = Path(out_dir).resolve()
     out_dir_path.mkdir(parents=True, exist_ok=True)
-    model_impl = _MAiNGOHybridImplicitModelBase(
+    model_impl = _MAiNGOHybridReducedImplicitModelBase(
         baseline=baseline,
         n_intervals=int(coarse_n_intervals),
         maingopy_module=maingopy,
         objective_profile=objective_profile,
+        newton_steps=int(reduced_implicit_newton_steps),
+        critical_mode=bool(critical_mode),
+        critical_residual_tolerance=float(critical_residual_tolerance),
     )
 
     class HybridMAiNGOModel(maingopy.MAiNGOmodel):
-        def __init__(self, *, impl: _MAiNGOHybridImplicitModelBase):
+        def __init__(self, *, impl):
             maingopy.MAiNGOmodel.__init__(self)
             self._impl = impl
 
@@ -146,13 +164,17 @@ def run_hybrid_maingo_casadi(
         solution_point = list(model_impl.get_initial_point())
         fallback_reason = (
             "MAiNGO did not return a feasible solution point on this run; "
-            "continuing from the implicit baseline-connected coarse seed. "
+            "continuing from the baseline-connected reduced coarse seed. "
             f"Original MAiNGO error: {exc}"
         )
         used_fallback_initial_point = True
     incumbent_solution = model_impl.decode_solution_point(solution_point)
     incumbent_result = model_impl.evaluate_solution(incumbent_solution)
-    incumbent_decision_vector = dict(incumbent_solution.decision_vector)
+    incumbent_decision_vector = (
+        dict(incumbent_solution.decision_vector)
+        if hasattr(incumbent_solution, "decision_vector")
+        else dict(incumbent_solution)
+    )
     best_solution, coarse_best, feasibility_restoration = _restore_feasible_implicit_solution(
         baseline=baseline,
         n_intervals=int(coarse_n_intervals),
@@ -163,7 +185,11 @@ def run_hybrid_maingo_casadi(
         candidate_result=incumbent_result,
         objective_profile=objective_profile,
     )
+    coarse_best = model_impl.evaluate_solution(best_solution)
     handoff_decision_vector = dict(best_solution.decision_vector)
+    incumbent_result.diagnostics["formulation"] = str(getattr(model_impl, "formulation", coarse_model_name))
+    coarse_best.diagnostics["formulation"] = str(getattr(model_impl, "formulation", coarse_model_name))
+    coarse_best.diagnostics["reduced_implicit_newton_steps"] = int(reduced_implicit_newton_steps)
     if not bool(coarse_best.diagnostics.get("acceptable", False)):
         raise RuntimeError(
             "Unable to recover a coarse feasible point from the MAiNGO incumbent: "
@@ -178,19 +204,49 @@ def run_hybrid_maingo_casadi(
         objective_profile=objective_profile,
     )
     handoff_bounds = _handoff_bounds_from_best(handoff_best)
+    rk4_benchmark = None
+    if bool(include_rk4_benchmark):
+        try:
+            rk4_result = CasadiCoarseEvaluator(
+                baseline=baseline,
+                n_intervals=int(coarse_n_intervals),
+                objective_profile=objective_profile,
+            ).evaluate(handoff_decision_vector)
+            rk4_benchmark = {
+                "ok": True,
+                "coarse_model": "rk4_reduced_benchmark",
+                "score_delta_vs_reduced_implicit": float(rk4_result.objective_score - coarse_best.objective_score),
+                "diagnostics": rk4_result.diagnostics,
+                "result": rk4_result.to_summary_dict(),
+            }
+        except Exception as exc:
+            rk4_benchmark = {
+                "ok": False,
+                "coarse_model": "rk4_reduced_benchmark",
+                "error": str(exc),
+            }
 
     maingo_summary_payload = {
         "solver": "maingo",
-        "formulation": "implicit_fullspace_backward_euler_scaled_variables",
+        "formulation": str(getattr(model_impl, "formulation", coarse_model_name)),
+        "coarse_model": coarse_model_name,
         "objective_profile": objective_profile,
+        "reduced_implicit_newton_steps": int(reduced_implicit_newton_steps),
+        "critical_mode": bool(critical_mode),
+        "critical_residual_tolerance": float(critical_residual_tolerance),
         "working_fluid_profile": baseline.working_fluid.to_dict(),
         "skip_casadi_handoff": bool(skip_casadi_handoff),
         "baseline_seed": baseline.to_dict(),
         "search_window_expansion": {
+            "n_p_in_lower_factor": float(n_p_in_lower_factor),
             "n_p_in_upper_factor": float(n_p_in_upper_factor),
+            "T_e_in_lower_factor": float(T_e_in_lower_factor),
             "T_e_in_upper_factor": float(T_e_in_upper_factor),
+            "Z_in_lower_factor": float(Z_in_lower_factor),
             "Z_in_upper_factor": float(Z_in_upper_factor),
+            "I_0_lower_factor": float(I_0_lower_factor),
             "I_0_upper_factor": float(I_0_upper_factor),
+            "seed_fraction_lower_factor": float(seed_fraction_lower_factor),
             "seed_fraction_upper_factor": float(seed_fraction_upper_factor),
         },
         "status": {
@@ -210,8 +266,11 @@ def run_hybrid_maingo_casadi(
             "feasibility_restoration_reason": feasibility_restoration["reason"],
             "feasibility_restoration_alpha": float(feasibility_restoration["alpha"]),
             "handoff_solution_point": handoff_decision_vector,
+            "rk4_benchmark_ok": None if rk4_benchmark is None else bool(rk4_benchmark.get("ok", False)),
+            "rk4_benchmark": rk4_benchmark,
         },
-        "variable_scaling": model_impl._trajectory_scaling.to_dict(),
+        "model_metadata": model_impl.summary_metadata(),
+        "rk4_benchmark": rk4_benchmark,
         "incumbent_diagnostics": incumbent_result.diagnostics,
         "coarse_best": coarse_best.to_summary_dict(),
         "handoff_bounds": handoff_bounds,

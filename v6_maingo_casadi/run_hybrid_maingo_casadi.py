@@ -34,7 +34,29 @@ def _build_parser() -> argparse.ArgumentParser:
         "--coarse-n-intervals",
         type=int,
         default=40,
-        help="number of implicit full-space intervals used in the MAiNGO coarse model",
+        help="number of coarse intervals used inside the reduced MAiNGO rollout",
+    )
+    p.add_argument(
+        "--reduced-implicit-newton-steps",
+        type=int,
+        default=10,
+        help="fixed Gauss-Newton iterations per interval for the reduced implicit coarse model",
+    )
+    p.add_argument(
+        "--critical-mode",
+        action="store_true",
+        help="enable the optional sonic critical-point search variable and compatibility residual",
+    )
+    p.add_argument(
+        "--critical-residual-tolerance",
+        type=float,
+        default=1e-4,
+        help="max scaled residual allowed for the optional sonic critical-point compatibility check",
+    )
+    p.add_argument(
+        "--skip-rk4-benchmark",
+        action="store_true",
+        help="skip the post-hoc RK4 reduced benchmark at the reduced-implicit handoff decision",
     )
     p.add_argument(
         "--handoff-n-intervals",
@@ -74,10 +96,22 @@ def _build_parser() -> argparse.ArgumentParser:
         help="write the MAiNGO best profile and summary without running v6_casadi_v2 continuation",
     )
     p.add_argument(
+        "--n-p-in-lower-factor",
+        type=float,
+        default=1.0,
+        help="multiplicative factor applied to the baseline-aligned lower bound for n_p_in",
+    )
+    p.add_argument(
         "--n-p-in-upper-factor",
         type=float,
         default=1.0,
         help="multiplicative factor applied to the baseline-aligned upper bound for n_p_in",
+    )
+    p.add_argument(
+        "--t-e-in-lower-factor",
+        type=float,
+        default=1.0,
+        help="multiplicative factor applied to the baseline-aligned lower bound for T_e_in",
     )
     p.add_argument(
         "--t-e-in-upper-factor",
@@ -86,16 +120,34 @@ def _build_parser() -> argparse.ArgumentParser:
         help="multiplicative factor applied to the baseline-aligned upper bound for T_e_in",
     )
     p.add_argument(
+        "--z-in-lower-factor",
+        type=float,
+        default=1.0,
+        help="multiplicative factor applied to the baseline-aligned lower bound for Z_in",
+    )
+    p.add_argument(
         "--z-in-upper-factor",
         type=float,
         default=1.0,
         help="multiplicative factor applied to the baseline-aligned upper bound for Z_in",
     )
     p.add_argument(
+        "--i0-lower-factor",
+        type=float,
+        default=1.0,
+        help="multiplicative factor applied to the baseline-aligned lower bound for I_0",
+    )
+    p.add_argument(
         "--i0-upper-factor",
         type=float,
         default=1.0,
         help="multiplicative factor applied to the baseline-aligned upper bound for I_0",
+    )
+    p.add_argument(
+        "--seed-fraction-lower-factor",
+        type=float,
+        default=1.0,
+        help="multiplicative factor applied to the baseline-aligned lower bound for seed_fraction",
     )
     p.add_argument(
         "--seed-fraction-upper-factor",
@@ -116,13 +168,22 @@ def main(argv: list[str] | None = None) -> int:
         handoff_n_intervals=int(args.handoff_n_intervals),
         maingo_settings_path=str(args.maingo_settings),
         maingo_max_time=None if float(args.maingo_max_time) <= 0.0 else float(args.maingo_max_time),
+        reduced_implicit_newton_steps=int(args.reduced_implicit_newton_steps),
+        critical_mode=bool(args.critical_mode),
+        critical_residual_tolerance=float(args.critical_residual_tolerance),
+        include_rk4_benchmark=not bool(args.skip_rk4_benchmark),
         objective_profile=str(args.objective_profile),
         working_fluid_profile=args.working_fluid_profile,
         skip_casadi_handoff=bool(args.skip_casadi_handoff),
+        n_p_in_lower_factor=float(args.n_p_in_lower_factor),
         n_p_in_upper_factor=float(args.n_p_in_upper_factor),
+        T_e_in_lower_factor=float(args.t_e_in_lower_factor),
         T_e_in_upper_factor=float(args.t_e_in_upper_factor),
+        Z_in_lower_factor=float(args.z_in_lower_factor),
         Z_in_upper_factor=float(args.z_in_upper_factor),
+        I_0_lower_factor=float(args.i0_lower_factor),
         I_0_upper_factor=float(args.i0_upper_factor),
+        seed_fraction_lower_factor=float(args.seed_fraction_lower_factor),
         seed_fraction_upper_factor=float(args.seed_fraction_upper_factor),
     )
     print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))

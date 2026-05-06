@@ -112,6 +112,11 @@ from .maingo_models import (
     _retcode_name,
     _safe_solver_metric,
 )
+from .reduced_implicit import (
+    ReducedImplicitRollout,
+    _MAiNGOHybridReducedImplicitModelBase,
+    rollout_reduced_implicit_generic,
+)
 from .workflow import _handoff_bounds_from_best, _write_json, run_hybrid_maingo_casadi
 
 __all__ = [name for name in globals() if not name.startswith("__")]

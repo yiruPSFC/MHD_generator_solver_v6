@@ -15,7 +15,7 @@ from v6_maingo_casadi.core import (
     OBJECTIVE_PROFILE_ENTHALPY_EXTRACTION,
     SplineAreaDesign,
     WORKING_FLUID_PROFILE_HELIUM_CESIUM,
-    _MAiNGOHybridImplicitModelBase,
+    _MAiNGOHybridReducedImplicitModelBase,
     _build_implicit_reference,
     _handoff_bounds_from_best,
     _import_maingopy,
@@ -150,6 +150,39 @@ class HybridComponentTests(unittest.TestCase):
             float(expanded.inlet_windows["seed_fraction"]["max"]),
             float(seed.inlet_windows["seed_fraction"]["max"]),
         )
+
+    def test_inlet_bound_scaling_changes_requested_minima_and_maxima(self):
+        seed = BaselineSeed.from_summary(BASELINE_SUMMARY)
+        expanded = seed.with_inlet_bound_factors(
+            n_p_in_lower=0.75,
+            n_p_in_upper=1.5,
+            seed_fraction_lower=0.25,
+            seed_fraction_upper=2.0,
+        )
+        self.assertAlmostEqual(
+            float(expanded.inlet_windows["n_p_in"]["min"]),
+            0.75 * float(seed.inlet_windows["n_p_in"]["min"]),
+        )
+        self.assertAlmostEqual(
+            float(expanded.inlet_windows["n_p_in"]["max"]),
+            1.5 * float(seed.inlet_windows["n_p_in"]["max"]),
+        )
+        self.assertAlmostEqual(
+            float(expanded.inlet_windows["seed_fraction"]["min"]),
+            0.25 * float(seed.inlet_windows["seed_fraction"]["min"]),
+        )
+        self.assertAlmostEqual(
+            float(expanded.inlet_windows["seed_fraction"]["max"]),
+            2.0 * float(seed.inlet_windows["seed_fraction"]["max"]),
+        )
+        self.assertAlmostEqual(
+            float(expanded.inlet_windows["T_e_in"]["min"]),
+            float(seed.inlet_windows["T_e_in"]["min"]),
+        )
+        self.assertAlmostEqual(
+            float(expanded.inlet_windows["Z_in"]["max"]),
+            float(seed.inlet_windows["Z_in"]["max"]),
+        )
         self.assertEqual(expanded.inlet_windows["n_p_in"]["guess"], seed.inlet_windows["n_p_in"]["guess"])
 
     def test_npz_payload_is_compatible_with_casadi_warm_loader(self):
@@ -236,17 +269,47 @@ class HybridComponentTests(unittest.TestCase):
         self.assertLess(float(result.diagnostics["max_eq_residual"]), 1e-9)
         self.assertLess(float(result.diagnostics["max_ineq_residual"]), 0.0)
 
-    def test_implicit_state_variables_are_scaled_to_order_one(self):
+    def test_reduced_implicit_model_keeps_maingo_dimension_low(self):
         seed = BaselineSeed.from_summary(BASELINE_SUMMARY)
-        model = _MAiNGOHybridImplicitModelBase(
+        model = _MAiNGOHybridReducedImplicitModelBase(
             baseline=seed,
-            n_intervals=40,
+            n_intervals=4,
             maingopy_module=_import_maingopy(),
+            newton_steps=10,
         )
-        tail_specs = model._variable_specs[8:]
-        self.assertLess(max(max(abs(lb), abs(ub)) for lb, ub, _ in tail_specs), 1.05)
-        tail_init = model.get_initial_point()[8:]
-        self.assertLess(max(abs(float(value)) for value in tail_init), 1e-12)
+        self.assertEqual(model.total_variables, 8)
+        self.assertEqual(len(model.get_variables()), 8)
+        self.assertEqual(len(model.get_initial_point()), 8)
+        solution = model.decode_solution_point(model.get_initial_point())
+        result = model.evaluate_solution(solution)
+        self.assertTrue(result.diagnostics["finite_profile"])
+        self.assertLess(float(result.diagnostics["max_eq_residual"]), 1e-2)
+        self.assertFalse(result.diagnostics["critical_mode"])
+
+    def test_reduced_implicit_critical_mode_adds_one_sonic_variable(self):
+        seed = BaselineSeed.from_summary(BASELINE_SUMMARY)
+        model = _MAiNGOHybridReducedImplicitModelBase(
+            baseline=seed,
+            n_intervals=4,
+            maingopy_module=_import_maingopy(),
+            newton_steps=10,
+            critical_mode=True,
+        )
+        self.assertEqual(model.total_variables, 9)
+        self.assertEqual(len(model.get_variables()), 9)
+        self.assertEqual(len(model.get_initial_point()), 9)
+        self.assertGreaterEqual(float(model.get_initial_point()[-1]), 0.0)
+        self.assertLessEqual(float(model.get_initial_point()[-1]), float(seed.L))
+        solution = model.decode_solution_point(model.get_initial_point())
+        result = model.evaluate_solution(solution)
+        self.assertTrue(result.diagnostics["critical_mode"])
+        self.assertIn("critical_x_sonic", result.diagnostics)
+        self.assertTrue(np.isfinite(float(result.diagnostics["critical_x_sonic"])))
+        self.assertTrue(np.isfinite(float(result.diagnostics["critical_max_abs_residual"])))
+        self.assertGreaterEqual(float(result.diagnostics["critical_max_gate"]), 0.0)
+        self.assertLessEqual(float(result.diagnostics["critical_max_gate"]), 1.0)
+        evaluation = model.evaluate(model.get_initial_point())
+        self.assertIsNotNone(evaluation.objective)
 
 
 if __name__ == "__main__":
