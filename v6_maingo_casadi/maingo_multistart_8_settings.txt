@@ -1,0 +1,5 @@
+# Shorter runtime settings for Yamasaki-neighborhood milestone searches.
+
+PRE_pureMultistart                     1
+PRE_maxLocalSearches                   8
+PRE_printEveryLocalSearch              1

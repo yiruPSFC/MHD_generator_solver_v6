@@ -1,0 +1,9 @@
+# Temporary runtime settings for macOS arm64 builds where full root-node
+# McCormick preprocessing fails on inverse-with-zero-range checks.
+#
+# This keeps the hybrid pipeline runnable by using MAiNGO as a pure
+# multistart coarse-search engine before the CasADi continuation handoff.
+
+PRE_pureMultistart                     1
+PRE_maxLocalSearches                   1
+PRE_printEveryLocalSearch              1

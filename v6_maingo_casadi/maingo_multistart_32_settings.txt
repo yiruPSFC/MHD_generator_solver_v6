@@ -1,0 +1,7 @@
+# Runtime settings for neighborhood milestone searches where the deterministic
+# root relaxation is weak but MAiNGO's IPOPT-backed multistart can still find
+# useful feasible incumbents.
+
+PRE_pureMultistart                     1
+PRE_maxLocalSearches                   32
+PRE_printEveryLocalSearch              1
