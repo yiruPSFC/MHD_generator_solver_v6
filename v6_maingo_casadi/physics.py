@@ -24,7 +24,7 @@ from .constants import (
     OBJECTIVE_PROFILE_ENTHALPY_EXTRACTION,
     OBJECTIVE_PROFILE_LAB_POC_V2,
 )
-from .geometry import SplineAreaDesign, _evaluate_area_design_samples, _sample_area_reference
+from .geometry import SplineAreaDesign, _evaluate_area_design_samples
 from .models import InletDesign
 from .numerics import (
     _clip_range,
@@ -372,9 +372,6 @@ def _evaluate_midpoint_closures(
     seed_fraction,
     B,
     area_scale: float = 1.0,
-    area_reference_x_norm: np.ndarray | None = None,
-    area_reference_factor: np.ndarray | None = None,
-    area_reference_sigma_logA: np.ndarray | None = None,
     working_fluid: WorkingFluidProfile = _DEFAULT_WORKING_FLUID_PROFILE,
 ):
     fluid = _normalize_working_fluid_profile(working_fluid)
@@ -385,9 +382,6 @@ def _evaluate_midpoint_closures(
         length=float(length),
         x_norm=x_mid_norm,
         area_scale=float(area_scale),
-        area_reference_x_norm=area_reference_x_norm,
-        area_reference_factor=area_reference_factor,
-        area_reference_sigma_logA=area_reference_sigma_logA,
     )
     closures_mid = []
     for k in range(int(n_intervals)):
@@ -490,9 +484,6 @@ def _rk4_rollout_generic(
     length: float,
     n_intervals: int,
     area_scale: float = 1.0,
-    area_reference_x_norm: np.ndarray | None = None,
-    area_reference_factor: np.ndarray | None = None,
-    area_reference_sigma_logA: np.ndarray | None = None,
     working_fluid: WorkingFluidProfile = _DEFAULT_WORKING_FLUID_PROFILE,
 ):
     fluid = _normalize_working_fluid_profile(working_fluid)
@@ -512,18 +503,6 @@ def _rk4_rollout_generic(
     x_mid_norm = 0.5 * (x_norm[:-1] + x_norm[1:])
     basis_mid, slopes_mid = SplineAreaDesign.basis_matrices(x_mid_norm)
     params = [area_design.a1, area_design.a2, area_design.a3]
-    ref_nodes, ref_sigma_nodes = _sample_area_reference(
-        x_norm,
-        area_reference_x_norm=area_reference_x_norm,
-        area_reference_factor=area_reference_factor,
-        area_reference_sigma_logA=area_reference_sigma_logA,
-    )
-    ref_mid, ref_sigma_mid = _sample_area_reference(
-        x_mid_norm,
-        area_reference_x_norm=area_reference_x_norm,
-        area_reference_factor=area_reference_factor,
-        area_reference_sigma_logA=area_reference_sigma_logA,
-    )
 
     def _apply_basis(row):
         return row[0] * params[0] + row[1] * params[1] + row[2] * params[2]
@@ -536,8 +515,8 @@ def _rk4_rollout_generic(
     dx = float(length) / int(n_intervals)
     for k in range(int(n_intervals)):
         logA_k = _apply_basis(basis_nodes[k, :])
-        sigma_k = float(ref_sigma_nodes[k]) + _apply_basis(slopes_nodes[k, :]) / float(length)
-        A_k = float(area_scale) * float(ref_nodes[k]) * ops.exp(logA_k)
+        sigma_k = _apply_basis(slopes_nodes[k, :]) / float(length)
+        A_k = float(area_scale) * ops.exp(logA_k)
         dn1, dTe1, closure_k = _state_rhs(
             ops=ops,
             n_p=n_p_nodes[-1],
@@ -551,8 +530,8 @@ def _rk4_rollout_generic(
             working_fluid=fluid,
         )
         logA_mid = _apply_basis(basis_mid[k, :])
-        sigma_mid = float(ref_sigma_mid[k]) + _apply_basis(slopes_mid[k, :]) / float(length)
-        A_mid = float(area_scale) * float(ref_mid[k]) * ops.exp(logA_mid)
+        sigma_mid = _apply_basis(slopes_mid[k, :]) / float(length)
+        A_mid = float(area_scale) * ops.exp(logA_mid)
         n_mid_1 = n_p_nodes[-1] + 0.5 * dx * dn1
         Te_mid_1 = T_e_nodes[-1] + 0.5 * dx * dTe1
         dn2, dTe2, _ = _state_rhs(
@@ -582,8 +561,8 @@ def _rk4_rollout_generic(
             working_fluid=fluid,
         )
         logA_kp1 = _apply_basis(basis_nodes[k + 1, :])
-        sigma_kp1 = float(ref_sigma_nodes[k + 1]) + _apply_basis(slopes_nodes[k + 1, :]) / float(length)
-        A_kp1 = float(area_scale) * float(ref_nodes[k + 1]) * ops.exp(logA_kp1)
+        sigma_kp1 = _apply_basis(slopes_nodes[k + 1, :]) / float(length)
+        A_kp1 = float(area_scale) * ops.exp(logA_kp1)
         n_end = n_p_nodes[-1] + dx * dn3
         Te_end = T_e_nodes[-1] + dx * dTe3
         dn4, dTe4, _ = _state_rhs(
@@ -607,8 +586,8 @@ def _rk4_rollout_generic(
         A_nodes.append(A_k)
 
     logA_end = _apply_basis(basis_nodes[-1, :])
-    sigma_end = float(ref_sigma_nodes[-1]) + _apply_basis(slopes_nodes[-1, :]) / float(length)
-    A_end = float(area_scale) * float(ref_nodes[-1]) * ops.exp(logA_end)
+    sigma_end = _apply_basis(slopes_nodes[-1, :]) / float(length)
+    A_end = float(area_scale) * ops.exp(logA_end)
     _, _, closure_end = _state_rhs(
         ops=ops,
         n_p=n_p_nodes[-1],

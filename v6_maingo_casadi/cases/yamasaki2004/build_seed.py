@@ -13,6 +13,7 @@ if str(REPO_DIR) not in sys.path:
     sys.path.insert(0, str(REPO_DIR))
 
 from v6_maingo_casadi.cases.yamasaki2004.parameters import YAMASAKI2004, YAMASAKI2004_MODEL_SEED
+from v6_maingo_casadi.geometry import SplineAreaDesign
 
 
 DEFAULT_OUT_DIR = (
@@ -39,6 +40,10 @@ def build_seed(out_dir: Path, *, n_intervals: int = 80) -> tuple[Path, Path]:
     model_seed = YAMASAKI2004_MODEL_SEED
     geom = paper.geometry
     profile = geom.profile(n_intervals=int(n_intervals))
+    area_design = SplineAreaDesign.project_from_profile(
+        x=np.asarray(profile["x"], dtype=float),
+        A=np.asarray(profile["A"], dtype=float),
+    )
 
     warm_path = out_dir / "yamasaki2004_hecs_disk_geometry_reference_profile.npz"
     np.savez(warm_path, **profile)
@@ -48,9 +53,10 @@ def build_seed(out_dir: Path, *, n_intervals: int = 80) -> tuple[Path, Path]:
     reference.update(
         {
             "reference_volume_m3": float(profile["volume_m3"]),
+            "area_spline_nominal": area_design.to_dict(),
             "notes": (
-                "Area variables a1/a2/a3 are deviations around the paper geometry, "
-                "not the geometry itself; this keeps the MAiNGO search dimension unchanged. "
+                "Area variables a1/a2/a3 are direct log-area spline values at "
+                "x/L = 1/3, 2/3, and 1, fitted to the paper geometry. "
                 "Hall voltage is a diagnostic target computed from -integral(E_x dx), "
                 "not an independent optimizer variable."
             ),
@@ -67,9 +73,8 @@ def build_seed(out_dir: Path, *, n_intervals: int = 80) -> tuple[Path, Path]:
         "source_alignment": {
             "warm_profile_npz": _repo_relative(warm_path),
             "area_scale_m2": float(geom.cross_section_throat_m2),
-            "area_reference_mode": "multiplicative",
             "aligned_inlet_window": model_seed.aligned_inlet_window(paper),
-            "aligned_area_window": model_seed.aligned_area_window(),
+            "aligned_area_window": model_seed.aligned_area_window(area_design.as_array()),
             "diagnostic_targets": {
                 "hall_voltage_V": paper.hall_voltage_V.to_dict(),
                 "hall_current_A": paper.hall_current_A.to_dict(),

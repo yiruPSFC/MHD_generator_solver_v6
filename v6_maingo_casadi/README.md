@@ -4,11 +4,13 @@ Hybrid MAiNGO + CasADi workflow:
 
 1. solve an 8D design problem over inlet conditions plus a 3-parameter `logA`
    spline,
-2. lift the coarse path into an implicit full-space MAiNGO model with state and
-   derivative variables on a backward-Euler mesh,
-3. export the best MAiNGO profile as a warm-start NPZ,
-4. hand that profile into `v6_casadi_v2.run_continuation(...)` for local
-   refinement.
+2. evaluate each design through a reduced implicit fixed-Newton
+   backward-Euler rollout,
+3. repair the accepted coarse path when needed with a local CasADi Newton
+   projection and baseline-to-incumbent homotopy,
+4. export the best MAiNGO profile as a warm-start NPZ,
+5. hand that profile into `v6_casadi_v2.run_continuation(...)` for local
+   refinement when the run uses the same normalized-area convention.
 
 ## Decision Variables
 
@@ -21,25 +23,42 @@ Hybrid MAiNGO + CasADi workflow:
 - `a2`
 - `a3`
 
-The spline control points are fixed at `x/L = [0, 0.25, 0.5, 0.75, 1.0]` with
-`logA = [0, a1, a2, a3, a3]`, so `A_in = 1` is enforced by construction.
+The spline control points are fixed at `x/L = [0, 1/3, 2/3, 1]` with
+`logA = [0, a1, a2, a3]`. This keeps the inlet shape factor normalized to one
+while allowing the outlet area to remain an independent third area degree of
+freedom. The physical inlet area is separate: `A_in = baseline.area_scale_m2`.
+For old `v6_casadi_v2`-derived baselines this is `1.0`; for physical benchmark
+seeds, such as Yamasaki 2004, it is the throat area in square meters.
 
-The MAiNGO model also carries lifted trajectory variables on the coarse mesh:
+The production MAiNGO problem keeps the global search low-dimensional: five
+inlet/load variables plus three area variables. It does not expose every
+coarse-mesh state as an independent global decision variable. Instead, for each
+8D design point, the model internally reconstructs the coarse trajectory with a
+fixed number of Gauss-Newton iterations on the backward-Euler implicit step:
 
 - `n_p[k]`
 - `T_e[k]`
 - `dn_p_dx[k]`
 - `dT_e_dx[k]`
 
-Those auxiliary variables let the coarse model impose the active-segment
-physics as implicit residual constraints instead of explicitly dividing by the
-local Jacobian determinant. This is the key change that avoids the previous
-`Inverse with zero in range` failure during global preprocessing.
+This keeps the expression graph factorable for MAiNGO while avoiding the
+explicit RHS division by the local Jacobian determinant that caused the previous
+`Inverse with zero in range` failure during global preprocessing. The fixed
+Newton rollout is intentionally not the final feasibility authority; accepted
+candidates are rechecked in numeric post-processing before handoff.
 
-The lifted trajectory variables are stored in MAiNGO as centered, dimensionless
-`hat` variables around the implicit baseline-connected reference trajectory.
-That scaling removes the previous badly-scaled variable domains and gives the
-local NLPs a usable coordinate system.
+## Formulation Rationale
+
+The 8D reduced formulation is a practical compromise between global-search
+coverage and deterministic solver cost. A full direct transcription would add
+`n_p`, `T_e`, and derivative variables at every coarse mesh point, plus their
+path constraints. That larger search space is still factorable in principle, but
+it makes branch-and-bound pruning much harder: interval relaxations get wider,
+many boxes survive longer, and MAiNGO can spend most of its time proving little
+rather than improving the incumbent. Keeping MAiNGO focused on the low-dimensional
+inlet/area design lets it search the physically meaningful controls while the
+fixed-Newton rollout supplies a factorable trajectory map for objective and
+constraint evaluation.
 
 ## Default Baseline Seed
 
@@ -86,6 +105,41 @@ continuation handoff:
   --out-dir v6_maingo_casadi/outputs/maingo_enthalpy
 ```
 
+To start from a different search basin, pass an absolute search-window override
+instead of relying on multiplicative bound factors:
+
+```bash
+./.venv_jit/bin/python -m v6_maingo_casadi.run_hybrid_maingo_casadi \
+  --baseline-summary v6_maingo_casadi/outputs/cases/yamasaki2004/seeds/yamasaki2004_hecs_disk_geometry_reference_seed_summary.json \
+  --search-window-json path/to/search_window.json \
+  --out-dir v6_maingo_casadi/outputs/hybrid_new_basin
+```
+
+The search-window JSON can use either the direct package keys or the
+`source_alignment.aligned_*` layout used by case seed summaries:
+
+```json
+{
+  "inlet_windows": {
+    "n_p_in": {"guess": 4.2e24, "min": 3.8e24, "max": 4.8e24},
+    "T_e_in": {"guess": 5200.0, "min": 4700.0, "max": 6100.0},
+    "Z_in": {"guess": 75.0, "min": 55.0, "max": 105.0},
+    "I_0": {"guess": 950.0, "min": 700.0, "max": 1200.0},
+    "seed_fraction": {"guess": 4.0e-4, "min": 1.5e-4, "max": 7.0e-4}
+  },
+  "area_design_windows": {
+    "a1": {"guess": 0.05, "min": -0.2, "max": 0.2},
+    "a2": {"guess": -0.03, "min": -0.25, "max": 0.15},
+    "a3": {"guess": 0.08, "min": -0.1, "max": 0.3}
+  }
+}
+```
+
+The override is applied after loading the baseline summary and before any
+`--*-lower-factor` or `--*-upper-factor` expansion. Use the JSON override when
+the nominal point and basin should change; use the factor flags only to widen or
+shrink a known baseline-aligned window.
+
 Settings files live under `v6_maingo_casadi/settings/`. The workflow still
 accepts the old top-level settings filenames for compatibility and resolves
 them to the new folder when needed.
@@ -102,6 +156,58 @@ bound, wall/CPU time, and the 8D design point passed into the CasADi handoff.
 If the time-limited MAiNGO incumbent is only solver-tolerance feasible, the
 wrapper records a feasibility-restoration step that projects the path back onto
 the implicit dynamics and falls back along a baseline-to-incumbent homotopy.
+
+The baseline-to-incumbent `alpha` fallback is a pragmatic repair mechanism, not
+a trusted optimization strategy. It linearly interpolates the 8D design vector
+from the baseline reference (`alpha = 0`) toward the MAiNGO incumbent
+(`alpha = 1`) and keeps the largest projected point that passes the tightened
+coarse feasibility checks. This is useful for salvaging a time-limited incumbent,
+but it assumes the straight line between two designs crosses a usable feasible
+region. Future replacements should prefer a real feasibility-restoration NLP, a
+structured continuation over grouped variables or constraints, or a tighter
+MAiNGO reduced formulation that makes this fallback rare.
+
+## Area And Current Conventions
+
+`I_0` is the total Hall current in amperes. The local current density is
+computed from the area profile:
+
+```text
+J_x(x) = I_0 / A(x)
+```
+
+This distinction is invisible only in normalized runs where `A_in = 1`. In a
+physical-area case, for example `A_in = 0.0069 m^2`, `I_0 = 1000 A` implies
+`J_x_in ~= 1.45e5 A/m^2`. The summary dictionaries now report both:
+
+- `I_0`, `I_0_A`, `total_current_A`: total current.
+- `J_x_in`, `J_x_in_A_m2`, `current_density_in_A_m2`: inlet current density.
+- `A_in`: physical inlet area used by the coarse MAiNGO model.
+
+Search-window JSON should use `I_0` for the total-current box. The loader still
+accepts legacy `jx_in`/`J_x_in` keys because older normalized summaries used
+that name, but in this package those aliases are interpreted as `I_0`, not as a
+physical current-density window.
+
+The current `v6_casadi_v2` continuation handoff is deliberately skipped when
+`baseline.area_scale_m2 != 1.0`. That downstream workflow fixes `A_in = 1` and
+uses `J_x_in` as the normalized inlet intensity, so handing a physical-area
+MAiNGO profile into it would mix total-current and current-density conventions.
+For physical benchmarks, treat the MAiNGO coarse result and its NPZ as the
+trusted artifact unless a future area-scale-aware continuation workflow is used.
+
+When a result looks suspicious, check these fields first:
+
+- `hybrid_summary.json -> baseline_seed.area_scale_m2`
+- `maingo_summary.json -> coarse_best.inlet_design.A_in`
+- `maingo_summary.json -> coarse_best.inlet_design.I_0_A`
+- `maingo_summary.json -> coarse_best.inlet_design.J_x_in_A_m2`
+- `maingo_best_profile.npz -> A[0]` and `J_x[0]`
+- `hybrid_summary.json -> continuation.skipped` and `continuation.skip_reason`
+
+If a downstream artifact says `A_in = 1.0`, it is in the normalized-area
+convention and should not be compared directly against physical-area power,
+mass-flow, or enthalpy-flux numbers without an explicit conversion.
 
 ## Code Layout
 
@@ -128,7 +234,8 @@ The Yamasaki 2004 CCMHD benchmark mapping lives in
 `cases/yamasaki2004/`:
 
 - `parameters.py`: paper values, disk geometry, and model-neighborhood seed.
-- `build_seed.py`: writes case warm-profile and summary artifacts.
+- `build_seed.py`: projects the paper geometry into the same 3-parameter
+  `SplineAreaDesign`, then writes case warm-profile and summary artifacts.
 - `README.md`: records the case-specific artifact layout.
 
 Use the case package directly for new code and commands:

@@ -68,7 +68,6 @@ from .geometry import (
     SplineAreaDesign,
     _evaluate_area_design_nodes,
     _evaluate_area_design_samples,
-    _sample_area_reference,
 )
 from .models import BaselineSeed, CoarseProfileResult, HybridRunResult, InletDesign
 from .physics import (

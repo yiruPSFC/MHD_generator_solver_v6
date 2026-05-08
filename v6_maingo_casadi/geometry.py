@@ -7,13 +7,14 @@ import numpy as np
 
 from .constants import _EPS
 
+
 @dataclass(frozen=True)
 class SplineAreaDesign:
     a1: float
     a2: float
     a3: float
 
-    KNOTS = np.array([0.0, 0.25, 0.5, 0.75, 1.0], dtype=float)
+    KNOTS = np.array([0.0, 1.0 / 3.0, 2.0 / 3.0, 1.0], dtype=float)
     _LOWER = math.log(0.25)
     _UPPER = math.log(8.0)
 
@@ -111,9 +112,9 @@ class SplineAreaDesign:
         basis = []
         slopes = []
         for y_nodes in (
-            np.array([0.0, 1.0, 0.0, 0.0, 0.0], dtype=float),
-            np.array([0.0, 0.0, 1.0, 0.0, 0.0], dtype=float),
-            np.array([0.0, 0.0, 0.0, 1.0, 1.0], dtype=float),
+            np.array([0.0, 1.0, 0.0, 0.0], dtype=float),
+            np.array([0.0, 0.0, 1.0, 0.0], dtype=float),
+            np.array([0.0, 0.0, 0.0, 1.0], dtype=float),
         ):
             vals, derivs = cls._evaluate_spline(
                 x_nodes=cls.KNOTS,
@@ -137,9 +138,8 @@ class SplineAreaDesign:
             raise ValueError("warm profile x and A must have the same length >= 2.")
         x_norm = (x - float(x[0])) / max(float(x[-1] - x[0]), _EPS)
         logA = np.log(np.maximum(A / max(float(A[0]), _EPS), _EPS))
-        basis, _ = cls.basis_matrices(x_norm)
-        coeffs, *_ = np.linalg.lstsq(basis, logA, rcond=None)
-        return cls.clipped(coeffs)
+        knot_values = np.interp(cls.KNOTS[1:], x_norm, logA)
+        return cls.clipped(knot_values)
 
     def as_array(self) -> np.ndarray:
         return np.array([self.a1, self.a2, self.a3], dtype=float)
@@ -184,31 +184,6 @@ class SplineAreaDesign:
         return self.evaluate_on_normalized_grid(x_norm, length=float(length), area_scale=float(area_scale))
 
 
-def _sample_area_reference(
-    x_norm: np.ndarray,
-    *,
-    area_reference_x_norm: np.ndarray | None = None,
-    area_reference_factor: np.ndarray | None = None,
-    area_reference_sigma_logA: np.ndarray | None = None,
-) -> tuple[np.ndarray, np.ndarray]:
-    x_norm = np.asarray(x_norm, dtype=float).reshape(-1)
-    if area_reference_x_norm is None or area_reference_factor is None:
-        return np.ones_like(x_norm, dtype=float), np.zeros_like(x_norm, dtype=float)
-    ref_x = np.asarray(area_reference_x_norm, dtype=float).reshape(-1)
-    ref_factor = np.asarray(area_reference_factor, dtype=float).reshape(-1)
-    if ref_x.size != ref_factor.size or ref_x.size < 2:
-        raise ValueError("area reference x/factor arrays must have the same length >= 2.")
-    factor = np.interp(x_norm, ref_x, ref_factor)
-    if area_reference_sigma_logA is None:
-        ref_sigma = np.zeros_like(ref_x, dtype=float)
-    else:
-        ref_sigma = np.asarray(area_reference_sigma_logA, dtype=float).reshape(-1)
-        if ref_sigma.size != ref_x.size:
-            raise ValueError("area reference sigma array must match reference x length.")
-    sigma = np.interp(x_norm, ref_x, ref_sigma)
-    return factor, sigma
-
-
 def _evaluate_area_design_samples(
     *,
     ops,
@@ -216,19 +191,10 @@ def _evaluate_area_design_samples(
     length: float,
     x_norm: np.ndarray,
     area_scale: float = 1.0,
-    area_reference_x_norm: np.ndarray | None = None,
-    area_reference_factor: np.ndarray | None = None,
-    area_reference_sigma_logA: np.ndarray | None = None,
 ):
     x_norm = np.asarray(x_norm, dtype=float).reshape(-1)
     basis_nodes, slopes_nodes = SplineAreaDesign.basis_matrices(x_norm)
     params = [area_design.a1, area_design.a2, area_design.a3]
-    ref_factor, ref_sigma = _sample_area_reference(
-        x_norm,
-        area_reference_x_norm=area_reference_x_norm,
-        area_reference_factor=area_reference_factor,
-        area_reference_sigma_logA=area_reference_sigma_logA,
-    )
 
     def _apply_basis(row):
         return row[0] * params[0] + row[1] * params[1] + row[2] * params[2]
@@ -238,9 +204,9 @@ def _evaluate_area_design_samples(
     sigma_nodes = []
     for idx in range(int(x_norm.size)):
         logA = _apply_basis(basis_nodes[idx, :])
-        sigma = float(ref_sigma[idx]) + _apply_basis(slopes_nodes[idx, :]) / float(length)
+        sigma = _apply_basis(slopes_nodes[idx, :]) / float(length)
         logA_nodes.append(logA)
-        A_nodes.append(float(area_scale) * float(ref_factor[idx]) * ops.exp(logA))
+        A_nodes.append(float(area_scale) * ops.exp(logA))
         sigma_nodes.append(sigma)
     return {
         "x_norm": x_norm,
@@ -258,9 +224,6 @@ def _evaluate_area_design_nodes(
     length: float,
     n_intervals: int,
     area_scale: float = 1.0,
-    area_reference_x_norm: np.ndarray | None = None,
-    area_reference_factor: np.ndarray | None = None,
-    area_reference_sigma_logA: np.ndarray | None = None,
 ):
     x_norm = np.linspace(0.0, 1.0, int(n_intervals) + 1, dtype=float)
     return _evaluate_area_design_samples(
@@ -269,7 +232,4 @@ def _evaluate_area_design_nodes(
         length=float(length),
         x_norm=x_norm,
         area_scale=float(area_scale),
-        area_reference_x_norm=area_reference_x_norm,
-        area_reference_factor=area_reference_factor,
-        area_reference_sigma_logA=area_reference_sigma_logA,
     )

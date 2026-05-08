@@ -164,7 +164,6 @@ def _critical_scales_from_reference(
         length=float(baseline.L),
         n_intervals=int(n_intervals),
         area_scale=float(baseline.area_scale_m2),
-        **baseline.area_reference_kwargs(),
     )
     inlet = _inlet_design_generic(
         ops=ops,
@@ -348,7 +347,6 @@ def rollout_reduced_implicit_generic(
         length=float(baseline.L),
         n_intervals=n_intervals,
         area_scale=float(baseline.area_scale_m2),
-        **baseline.area_reference_kwargs(),
     )
 
     n_nodes = [inlet["n_p"]]
@@ -655,7 +653,6 @@ class _MAiNGOHybridReducedImplicitModelBase:
             B=float(self._baseline.B),
             area_scale=float(self._baseline.area_scale_m2),
             working_fluid=self._working_fluid,
-            **self._baseline.area_reference_kwargs(),
         )
         power_density_nodes = []
         for idx, closure in enumerate(rollout.closures):

@@ -91,6 +91,15 @@ def _build_parser() -> argparse.ArgumentParser:
         help="working gas / seed profile used by the MAiNGO coarse closure; defaults to the baseline summary profile",
     )
     p.add_argument(
+        "--search-window-json",
+        type=str,
+        default="",
+        help=(
+            "optional JSON file with absolute inlet_windows and/or area_design_windows "
+            "guess/min/max overrides; applied after baseline loading and before bound factors"
+        ),
+    )
+    p.add_argument(
         "--skip-casadi-handoff",
         action="store_true",
         help="write the MAiNGO best profile and summary without running v6_casadi_v2 continuation",
@@ -174,6 +183,7 @@ def main(argv: list[str] | None = None) -> int:
         include_rk4_benchmark=not bool(args.skip_rk4_benchmark),
         objective_profile=str(args.objective_profile),
         working_fluid_profile=args.working_fluid_profile,
+        search_window_json=None if not str(args.search_window_json).strip() else str(args.search_window_json),
         skip_casadi_handoff=bool(args.skip_casadi_handoff),
         n_p_in_lower_factor=float(args.n_p_in_lower_factor),
         n_p_in_upper_factor=float(args.n_p_in_upper_factor),

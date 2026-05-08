@@ -37,7 +37,6 @@ def _make_casadi_rollout_function(
         n_intervals=int(n_intervals),
         area_scale=float(baseline.area_scale_m2),
         working_fluid=fluid,
-        **baseline.area_reference_kwargs(),
     )
     closures = rollout["closures"]
     x_nodes = np.asarray(rollout["x"], dtype=float)
@@ -78,7 +77,6 @@ def _make_casadi_rollout_function(
         B=float(baseline.B),
         area_scale=float(baseline.area_scale_m2),
         working_fluid=fluid,
-        **baseline.area_reference_kwargs(),
     )
     min_g_nodes = _reduce_min(ops, [item["G"] for item in closures])
     min_g_midpoints = _reduce_min(ops, [item["G"] for item in midpoint_closures])

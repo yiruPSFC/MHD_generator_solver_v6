@@ -79,8 +79,6 @@ class Yamasaki2004DiskGeometry:
             "r_m": self.radius(x_norm),
             "height_m": self.height(x_norm),
             "A": area,
-            "area_reference_factor": area / float(area[0]),
-            "area_reference_sigma_logA": sigma,
             "annular_area_m2": self.annular_area(x_norm),
             "length_m": self.length_m,
             "area_scale_m2": self.cross_section_throat_m2,
@@ -177,16 +175,18 @@ class Yamasaki2004ModelSeed:
             "np_in": self.n_p_in_m3.inlet_window_dict(),
             "te_in": self.electron_temperature_in_K.inlet_window_dict(),
             "z_in": self.z_in.inlet_window_dict(),
-            "jx_in": paper.hall_current_A.inlet_window_dict(),
+            "I_0": paper.hall_current_A.inlet_window_dict(),
             "seed_fraction": paper.seed_fraction.inlet_window_dict(),
         }
 
-    def aligned_area_window(self) -> dict[str, dict[str, float]]:
+    def aligned_area_window(self, nominal_log_area: np.ndarray | None = None) -> dict[str, dict[str, float]]:
         window = self.area_deviation_log.inlet_window_dict()
+        nominal = np.zeros(3, dtype=float) if nominal_log_area is None else np.asarray(nominal_log_area, dtype=float)
+        nominal = nominal.reshape(3)
         return {
-            "a1": dict(window),
-            "a2": dict(window),
-            "a3": dict(window),
+            "a1": {key: float(value) + float(nominal[0]) for key, value in window.items()},
+            "a2": {key: float(value) + float(nominal[1]) for key, value in window.items()},
+            "a3": {key: float(value) + float(nominal[2]) for key, value in window.items()},
         }
 
     def schedule_entry(self) -> dict[str, float | int | str]:

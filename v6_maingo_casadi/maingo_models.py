@@ -108,7 +108,6 @@ class _MAiNGOHybridModelBase:
             n_intervals=self._n_intervals,
             area_scale=float(self._baseline.area_scale_m2),
             working_fluid=self._working_fluid,
-            **self._baseline.area_reference_kwargs(),
         )
         closures = rollout["closures"]
         x_nodes = np.asarray(rollout["x"], dtype=float)
@@ -384,7 +383,6 @@ class _MAiNGOHybridImplicitModelBase:
             length=float(self._baseline.L),
             n_intervals=self._n_intervals,
             area_scale=float(self._baseline.area_scale_m2),
-            **self._baseline.area_reference_kwargs(),
         )
         n_p_tail = self._trajectory_scaling.decode_n_p_tail(n_p_tail_raw)
         T_e_tail = self._trajectory_scaling.decode_T_e_tail(T_e_tail_raw)
@@ -405,7 +403,6 @@ class _MAiNGOHybridImplicitModelBase:
             B=float(self._baseline.B),
             area_scale=float(self._baseline.area_scale_m2),
             working_fluid=self._working_fluid,
-            **self._baseline.area_reference_kwargs(),
         )
         closures = []
         terms_by_node = []

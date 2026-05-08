@@ -211,7 +211,6 @@ def _build_coarse_result_from_state_trajectory(
         length=float(baseline.L),
         n_intervals=int(n_intervals),
         area_scale=float(baseline.area_scale_m2),
-        **baseline.area_reference_kwargs(),
     )
     x_nodes = np.asarray(area_nodes["x"], dtype=float)
     A_nodes = np.asarray(area_nodes["A"], dtype=float)
@@ -229,7 +228,6 @@ def _build_coarse_result_from_state_trajectory(
         B=float(baseline.B),
         area_scale=float(baseline.area_scale_m2),
         working_fluid=fluid,
-        **baseline.area_reference_kwargs(),
     )
 
     closures = []
@@ -513,7 +511,6 @@ def _constant_implicit_reference(
         length=float(baseline.L),
         n_intervals=int(n_intervals),
         area_scale=float(baseline.area_scale_m2),
-        **baseline.area_reference_kwargs(),
     )
     inlet = evaluate_inlet_design_numeric(
         n_p_in=n0,
@@ -582,7 +579,6 @@ def _build_implicit_reference(
         length=float(baseline.L),
         n_intervals=int(n_intervals),
         area_scale=float(baseline.area_scale_m2),
-        **baseline.area_reference_kwargs(),
     )
     dx = float(baseline.L) / int(n_intervals)
     step_n_scales = []
@@ -793,7 +789,6 @@ def _project_implicit_trajectory(
         length=float(baseline.L),
         n_intervals=int(n_intervals),
         area_scale=float(baseline.area_scale_m2),
-        **baseline.area_reference_kwargs(),
     )
     inlet = evaluate_inlet_design_numeric(
         n_p_in=math.exp(float(decision_vector["log_n_p_in"])),

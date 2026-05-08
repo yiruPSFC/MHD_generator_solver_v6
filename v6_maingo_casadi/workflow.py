@@ -9,7 +9,7 @@ import numpy as np
 from v6_casadi_v2.run_casadi_continuation_v2 import load_warm_profile_npz, run_continuation
 
 from .casadi_evaluator import CasadiCoarseEvaluator
-from .constants import _DEFAULT_BASELINE_SUMMARY, OBJECTIVE_PROFILE_LAB_POC_V2
+from .constants import _A_IN, _DEFAULT_BASELINE_SUMMARY, OBJECTIVE_PROFILE_LAB_POC_V2
 from .implicit import _resample_profile_result, _restore_feasible_implicit_solution
 from .maingo_models import _import_maingopy, _retcode_name, _safe_solver_metric
 from .models import BaselineSeed, CoarseProfileResult, HybridRunResult
@@ -82,6 +82,7 @@ def run_hybrid_maingo_casadi(
     include_rk4_benchmark: bool = True,
     objective_profile: str = OBJECTIVE_PROFILE_LAB_POC_V2,
     working_fluid_profile: str | WorkingFluidProfile | None = None,
+    search_window_json: str | Path | None = None,
     skip_casadi_handoff: bool = False,
     n_p_in_lower_factor: float = 1.0,
     n_p_in_upper_factor: float = 1.0,
@@ -108,6 +109,12 @@ def run_hybrid_maingo_casadi(
     baseline = BaselineSeed.from_summary(baseline_summary_path)
     if working_fluid_profile is not None:
         baseline = baseline.with_working_fluid_profile(working_fluid_profile)
+    search_window_path = None
+    if search_window_json:
+        search_window_path = Path(search_window_json).resolve()
+        baseline = baseline.with_search_window_overrides(
+            json.loads(search_window_path.read_text(encoding="utf-8"))
+        )
     baseline = baseline.with_inlet_bound_factors(
         n_p_in_lower=float(n_p_in_lower_factor),
         n_p_in_upper=float(n_p_in_upper_factor),
@@ -236,6 +243,7 @@ def run_hybrid_maingo_casadi(
         "critical_residual_tolerance": float(critical_residual_tolerance),
         "working_fluid_profile": baseline.working_fluid.to_dict(),
         "skip_casadi_handoff": bool(skip_casadi_handoff),
+        "search_window_json": None if search_window_path is None else str(search_window_path),
         "baseline_seed": baseline.to_dict(),
         "search_window_expansion": {
             "n_p_in_lower_factor": float(n_p_in_lower_factor),
@@ -287,6 +295,18 @@ def run_hybrid_maingo_casadi(
             "skipped": True,
             "reason": "skip_casadi_handoff",
             "summary_path": None,
+        }
+    elif not np.isclose(float(baseline.area_scale_m2), float(_A_IN), rtol=1e-12, atol=1e-15):
+        continuation_payload = {
+            "ok": False,
+            "skipped": True,
+            "reason": "physical_area_scale_not_supported_by_v6_casadi_v2_handoff",
+            "summary_path": None,
+            "area_scale_m2": float(baseline.area_scale_m2),
+            "handoff_convention": (
+                "v6_maingo_casadi stores physical A and total I_0, while "
+                "v6_casadi_v2 continuation fixes A_in=1 and names the inlet intensity J_x_in."
+            ),
         }
     else:
         warm_profile = load_warm_profile_npz(

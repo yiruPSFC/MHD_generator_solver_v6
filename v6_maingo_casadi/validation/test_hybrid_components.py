@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import math
 import tempfile
 import unittest
@@ -9,9 +10,11 @@ import numpy as np
 
 from v6_casadi_v2.optimize_area_profile_casadi_v2 import _evaluate_inlet_design_numeric
 from v6_casadi_v2.run_casadi_continuation_v2 import load_warm_profile_npz
+from v6_maingo_casadi.cases.yamasaki2004.build_seed import build_seed as build_yamasaki2004_seed
 from v6_maingo_casadi.core import (
     BaselineSeed,
     CasadiCoarseEvaluator,
+    InletDesign,
     OBJECTIVE_PROFILE_ENTHALPY_EXTRACTION,
     SplineAreaDesign,
     WORKING_FLUID_PROFILE_HELIUM_CESIUM,
@@ -56,6 +59,21 @@ class HybridComponentTests(unittest.TestCase):
         finite_diff = np.gradient(logA, x)
         self.assertLess(float(np.max(np.abs(sigma[2:-2] - finite_diff[2:-2]))), 3e-2)
 
+    def test_spline_knots_use_three_free_values_with_independent_outlet(self):
+        design = SplineAreaDesign(a1=0.2, a2=0.6, a3=1.1)
+        profile = design.evaluate_on_normalized_grid(
+            SplineAreaDesign.KNOTS,
+            length=1.0,
+            area_scale=1.0,
+        )
+        np.testing.assert_allclose(
+            np.asarray(profile["logA"], dtype=float),
+            np.array([0.0, 0.2, 0.6, 1.1], dtype=float),
+            rtol=0.0,
+            atol=1e-12,
+        )
+        self.assertAlmostEqual(float(profile["A"][-1] / profile["A"][0]), math.exp(1.1))
+
     def test_inlet_closure_matches_casadi_v2(self):
         seed = BaselineSeed.from_summary(BASELINE_SUMMARY)
         local = evaluate_inlet_design_numeric(
@@ -79,6 +97,28 @@ class HybridComponentTests(unittest.TestCase):
                 math.isclose(getattr(local, name), getattr(reference, name), rel_tol=1e-10, abs_tol=1e-8),
                 msg=f"mismatch for {name}: {getattr(local, name)} vs {getattr(reference, name)}",
             )
+
+    def test_inlet_design_reports_current_density_for_physical_area(self):
+        inlet = InletDesign(
+            n_p=4.0e24,
+            T_e=5000.0,
+            T_p=3000.0,
+            Z=80.0,
+            I_0=1000.0,
+            dot_N=1.0e25,
+            v_in=1200.0,
+            seed_fraction=5.0e-4,
+            mach=1.2,
+            velikhov_margin=0.1,
+            A_in=0.0069,
+        )
+        payload = inlet.to_dict()
+        self.assertAlmostEqual(payload["I_0"], 1000.0)
+        self.assertAlmostEqual(payload["I_0_A"], 1000.0)
+        self.assertAlmostEqual(payload["A_in"], 0.0069)
+        self.assertAlmostEqual(payload["J_x_in"], 1000.0 / 0.0069)
+        self.assertAlmostEqual(payload["J_x_in_A_m2"], payload["J_x_in"])
+        self.assertFalse(math.isclose(payload["J_x_in"], payload["I_0"], rel_tol=1e-6, abs_tol=1e-6))
 
     def test_working_fluid_switch_changes_inlet_closure(self):
         seed = BaselineSeed.from_summary(BASELINE_SUMMARY)
@@ -184,6 +224,77 @@ class HybridComponentTests(unittest.TestCase):
             float(seed.inlet_windows["Z_in"]["max"]),
         )
         self.assertEqual(expanded.inlet_windows["n_p_in"]["guess"], seed.inlet_windows["n_p_in"]["guess"])
+
+    def test_search_window_override_replaces_absolute_bounds_and_guesses(self):
+        seed = BaselineSeed.from_summary(BASELINE_SUMMARY)
+        overridden = seed.with_search_window_overrides(
+            {
+                "source_alignment": {
+                    "aligned_inlet_window": {
+                        "np_in": {"guess": 4.2e24, "min": 3.8e24, "max": 4.8e24},
+                        "te_in": {"guess": 5200.0, "min": 4700.0, "max": 6100.0},
+                        "z_in": {"guess": 75.0, "min": 55.0, "max": 105.0},
+                        "jx_in": {"guess": 950.0, "min": 700.0, "max": 1200.0},
+                        "seed_fraction": {"guess": 4.0e-4, "min": 1.5e-4, "max": 7.0e-4},
+                    },
+                    "aligned_area_window": {
+                        "a1": {"guess": 0.05, "min": -0.2, "max": 0.2},
+                        "a2": {"guess": -0.03, "min": -0.25, "max": 0.15},
+                        "a3": {"guess": 0.08, "min": -0.1, "max": 0.3},
+                    },
+                }
+            }
+        )
+        self.assertAlmostEqual(overridden.n_p_in_nominal, 4.2e24)
+        self.assertAlmostEqual(overridden.T_e_in_nominal, 5200.0)
+        self.assertAlmostEqual(overridden.Z_in_nominal, 75.0)
+        self.assertAlmostEqual(overridden.I_0_nominal, 950.0)
+        self.assertAlmostEqual(overridden.seed_fraction_nominal, 4.0e-4)
+        self.assertEqual(overridden.inlet_windows["I_0"], {"guess": 950.0, "min": 700.0, "max": 1200.0})
+        self.assertAlmostEqual(overridden.area_design_nominal.a1, 0.05)
+        self.assertAlmostEqual(overridden.area_design_nominal.a2, -0.03)
+        self.assertAlmostEqual(overridden.area_design_nominal.a3, 0.08)
+        bounds_by_name = {name: (lower, upper) for lower, upper, name in overridden.optimization_variable_bounds()}
+        self.assertAlmostEqual(bounds_by_name["log_n_p_in"][0], math.log(3.8e24))
+        self.assertAlmostEqual(bounds_by_name["log_n_p_in"][1], math.log(4.8e24))
+        self.assertEqual(bounds_by_name["a2"], (-0.25, 0.15))
+        initial = overridden.initial_point()
+        self.assertAlmostEqual(initial[0], math.log(4.2e24))
+        self.assertAlmostEqual(initial[4], math.log(4.0e-4))
+        self.assertAlmostEqual(initial[5], 0.05)
+
+    def test_baseline_seed_accepts_total_current_window_key(self):
+        payload = json.loads(BASELINE_SUMMARY.read_text(encoding="utf-8"))
+        aligned = payload["source_alignment"]["aligned_inlet_window"]
+        aligned["I_0"] = aligned.pop("jx_in")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            summary_path = Path(tmpdir) / "summary_with_i0_key.json"
+            summary_path.write_text(json.dumps(payload), encoding="utf-8")
+            seed = BaselineSeed.from_summary(summary_path)
+        self.assertGreater(seed.I_0_nominal, 0.0)
+        self.assertEqual(seed.inlet_windows["I_0"]["guess"], seed.I_0_nominal)
+
+    def test_yamasaki_seed_uses_direct_area_spline_without_reference_geometry(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            warm_path, summary_path = build_yamasaki2004_seed(Path(tmpdir), n_intervals=80)
+            summary_payload = json.loads(summary_path.read_text(encoding="utf-8"))
+            seed = BaselineSeed.from_summary(summary_path)
+            with np.load(warm_path) as warm:
+                warm_A = np.asarray(warm["A"], dtype=float)
+                warm_x = np.asarray(warm["x"], dtype=float)
+        self.assertNotIn("area_reference_mode", summary_payload["source_alignment"])
+        self.assertNotIn("area_reference", seed.to_dict())
+        profile = seed.area_design_nominal.evaluate_profile(
+            length=float(seed.L),
+            n_intervals=int(warm_x.size - 1),
+            area_scale=float(seed.area_scale_m2),
+        )
+        rel_error = np.asarray(profile["A"], dtype=float) / warm_A - 1.0
+        self.assertLess(float(np.max(np.abs(rel_error))), 3e-2)
+        self.assertAlmostEqual(
+            float(seed.area_design_windows["a3"]["guess"]),
+            float(seed.area_design_nominal.a3),
+        )
 
     def test_npz_payload_is_compatible_with_casadi_warm_loader(self):
         seed = BaselineSeed.from_summary(BASELINE_SUMMARY)

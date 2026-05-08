@@ -5,7 +5,8 @@ Okuno, and Yamasaki 2004 CCMHD paper. It is intentionally separate from the
 generic MAiNGO/CasADi engine in the package root.
 
 - `parameters.py` holds the paper values and the model-neighborhood seed.
-- `build_seed.py` writes warm-profile and summary artifacts for the case.
+- `build_seed.py` projects the paper geometry into the package's direct
+  3-parameter area spline, then writes warm-profile and summary artifacts.
 - `geometry.py` preserves the old geometry-only import surface.
 
 New seed artifacts default to:

@@ -12,6 +12,95 @@ from .geometry import SplineAreaDesign
 from .numerics import _json_load
 from .profiles import WorkingFluidProfile, _normalize_working_fluid_profile
 
+
+_INLET_WINDOW_ALIASES = {
+    "n_p_in": "n_p_in",
+    "np_in": "n_p_in",
+    "T_e_in": "T_e_in",
+    "t_e_in": "T_e_in",
+    "te_in": "T_e_in",
+    "Z_in": "Z_in",
+    "z_in": "Z_in",
+    "I_0": "I_0",
+    "i_0": "I_0",
+    "i0": "I_0",
+    "I_0_A": "I_0",
+    "i_0_a": "I_0",
+    "total_current_A": "I_0",
+    "total_current_a": "I_0",
+    "hall_current_A": "I_0",
+    "hall_current_a": "I_0",
+    "J_x_in": "I_0",
+    "j_x_in": "I_0",
+    "jx_in": "I_0",
+    "seed_fraction": "seed_fraction",
+}
+
+_INLET_WINDOW_KEYS = ("n_p_in", "T_e_in", "Z_in", "I_0", "seed_fraction")
+_AREA_WINDOW_KEYS = ("a1", "a2", "a3")
+
+
+def _coerce_window_payload(raw: Any, *, key: str, positive: bool) -> dict[str, float]:
+    if not isinstance(raw, dict):
+        raise ValueError(f"search window for {key} must be an object with guess/min/max fields.")
+    missing = [field for field in ("guess", "min", "max") if field not in raw]
+    if missing:
+        raise ValueError(f"search window for {key} is missing required field(s): {', '.join(missing)}.")
+    window = {
+        "guess": float(raw["guess"]),
+        "min": float(raw["min"]),
+        "max": float(raw["max"]),
+    }
+    if not all(math.isfinite(value) for value in window.values()):
+        raise ValueError(f"search window for {key} must contain finite guess/min/max values.")
+    if positive and any(value <= 0.0 for value in window.values()):
+        raise ValueError(f"search window for {key} must contain positive guess/min/max values.")
+    if not window["min"] < window["max"]:
+        raise ValueError(f"search window for {key} must satisfy min < max.")
+    if not window["min"] <= window["guess"] <= window["max"]:
+        raise ValueError(f"search window for {key} must satisfy min <= guess <= max.")
+    return window
+
+
+def _extract_search_window_sections(payload: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    source_alignment = dict(payload.get("source_alignment", {}) or {})
+    search_window = dict(payload.get("search_window", {}) or {})
+    inlet_payload = (
+        payload.get("inlet_windows")
+        or payload.get("aligned_inlet_window")
+        or search_window.get("inlet_windows")
+        or search_window.get("aligned_inlet_window")
+        or source_alignment.get("aligned_inlet_window")
+        or {}
+    )
+    area_payload = (
+        payload.get("area_design_windows")
+        or payload.get("aligned_area_window")
+        or search_window.get("area_design_windows")
+        or search_window.get("aligned_area_window")
+        or source_alignment.get("aligned_area_window")
+        or {}
+    )
+    if not isinstance(inlet_payload, dict):
+        raise ValueError("search window JSON inlet section must be an object.")
+    if not isinstance(area_payload, dict):
+        raise ValueError("search window JSON area section must be an object.")
+    return dict(inlet_payload), dict(area_payload)
+
+
+def _canonicalize_inlet_window_payload(payload: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
+    windows: dict[str, Any] = {}
+    unknown: list[str] = []
+    for raw_key, raw_window in payload.items():
+        lookup_key = str(raw_key).strip()
+        canonical = _INLET_WINDOW_ALIASES.get(lookup_key) or _INLET_WINDOW_ALIASES.get(lookup_key.lower())
+        if canonical is None:
+            unknown.append(str(raw_key))
+            continue
+        windows[canonical] = raw_window
+    return windows, unknown
+
+
 @dataclass(frozen=True)
 class InletDesign:
     n_p: float
@@ -26,14 +115,24 @@ class InletDesign:
     velikhov_margin: float
     A_in: float = _A_IN
 
+    @property
+    def J_x_in(self) -> float:
+        return float(self.I_0) / max(float(self.A_in), _EPS)
+
     def to_dict(self) -> dict[str, float]:
+        j_x_in = float(self.J_x_in)
+        total_current = float(self.I_0)
         return {
             "n_p_in": float(self.n_p),
             "T_e_in": float(self.T_e),
             "T_p_in": float(self.T_p),
             "Z_in": float(self.Z),
-            "J_x_in": float(self.I_0),
-            "I_0": float(self.I_0),
+            "J_x_in": j_x_in,
+            "J_x_in_A_m2": j_x_in,
+            "current_density_in_A_m2": j_x_in,
+            "I_0": total_current,
+            "I_0_A": total_current,
+            "total_current_A": total_current,
             "dot_N": float(self.dot_N),
             "v_in": float(self.v_in),
             "seed_fraction": float(self.seed_fraction),
@@ -62,9 +161,6 @@ class BaselineSeed:
     inlet_windows: dict[str, dict[str, float]]
     area_design_windows: dict[str, dict[str, float]]
     area_design_nominal: SplineAreaDesign
-    area_reference_x_norm: np.ndarray | None = None
-    area_reference_factor: np.ndarray | None = None
-    area_reference_sigma_logA: np.ndarray | None = None
 
     @classmethod
     def from_summary(cls, path: str | Path) -> "BaselineSeed":
@@ -79,28 +175,25 @@ class BaselineSeed:
         aligned = dict(source_alignment.get("aligned_inlet_window", {}) or {})
         if not aligned:
             raise ValueError("baseline summary is missing aligned_inlet_window.")
+        canonical_aligned, unknown_aligned = _canonicalize_inlet_window_payload(aligned)
+        if unknown_aligned:
+            raise ValueError(
+                "unknown aligned inlet-window key(s): "
+                f"{', '.join(sorted(unknown_aligned))}; expected one of {_INLET_WINDOW_KEYS!r}."
+            )
+        missing_aligned = [key for key in _INLET_WINDOW_KEYS if key not in canonical_aligned]
+        if missing_aligned:
+            raise ValueError(
+                "baseline summary aligned_inlet_window is missing required key(s): "
+                f"{', '.join(missing_aligned)}."
+            )
         schedule = [dict(item) for item in list(summary.get("schedule", []) or [])]
         length = float(summary.get("L", 5.4))
-        area_reference_x_norm = None
-        area_reference_factor = None
-        area_reference_sigma_logA = None
-        area_reference_mode = str(source_alignment.get("area_reference_mode", "")).strip().lower()
+        legacy_area_reference_mode = str(source_alignment.get("area_reference_mode", "")).strip().lower()
         with np.load(warm_profile_npz_path) as warm_data:
             warm_x = np.asarray(warm_data["x"], dtype=float)
             warm_A = np.asarray(warm_data["A"], dtype=float)
-            if area_reference_mode == "multiplicative":
-                area_reference_x_norm = (warm_x - float(warm_x[0])) / max(float(warm_x[-1] - warm_x[0]), _EPS)
-                if "area_reference_factor" in warm_data:
-                    area_reference_factor = np.asarray(warm_data["area_reference_factor"], dtype=float)
-                else:
-                    area_reference_factor = warm_A / max(float(warm_A[0]), _EPS)
-                if "area_reference_sigma_logA" in warm_data:
-                    area_reference_sigma_logA = np.asarray(warm_data["area_reference_sigma_logA"], dtype=float)
-                else:
-                    area_reference_sigma_logA = np.gradient(np.log(np.maximum(area_reference_factor, _EPS)), warm_x)
-                area_design = SplineAreaDesign(a1=0.0, a2=0.0, a3=0.0)
-            else:
-                area_design = SplineAreaDesign.project_from_profile(x=warm_x, A=warm_A)
+            area_design = SplineAreaDesign.project_from_profile(x=warm_x, A=warm_A)
         if schedule:
             sigma_limit = float(schedule[0].get("max_abs_dlogA_dx", np.inf))
             if math.isfinite(sigma_limit) and sigma_limit > 0.0:
@@ -115,11 +208,23 @@ class BaselineSeed:
                     )
         area_window_payload = dict(source_alignment.get("aligned_area_window", {}) or {})
         if area_window_payload:
+            projected_area_values = area_design.to_dict()
+            # Older Yamasaki seed JSON used these windows as deviations around
+            # a reference geometry. Migrate them to direct spline-coordinate
+            # windows when reading those artifacts.
+            legacy_shift = {
+                key: (
+                    float(projected_area_values[key])
+                    if legacy_area_reference_mode == "multiplicative"
+                    else 0.0
+                )
+                for key in ("a1", "a2", "a3")
+            }
             area_design_windows = {
                 key: {
-                    "guess": float(area_window_payload[key]["guess"]),
-                    "min": float(area_window_payload[key]["min"]),
-                    "max": float(area_window_payload[key]["max"]),
+                    "guess": float(area_window_payload[key]["guess"]) + legacy_shift[key],
+                    "min": float(area_window_payload[key]["min"]) + legacy_shift[key],
+                    "max": float(area_window_payload[key]["max"]) + legacy_shift[key],
                 }
                 for key in ("a1", "a2", "a3")
             }
@@ -153,43 +258,40 @@ class BaselineSeed:
             schedule=schedule,
             adaptive_bridge_count=int(summary.get("adaptive_bridge_count", 0)),
             adaptive_bridge_max_count=int(summary.get("adaptive_bridge_max_count", 0)),
-            n_p_in_nominal=float(aligned["np_in"]["guess"]),
-            T_e_in_nominal=float(aligned["te_in"]["guess"]),
-            Z_in_nominal=float(aligned["z_in"]["guess"]),
-            I_0_nominal=float(aligned["jx_in"]["guess"]),
-            seed_fraction_nominal=float(aligned["seed_fraction"]["guess"]),
+            n_p_in_nominal=float(canonical_aligned["n_p_in"]["guess"]),
+            T_e_in_nominal=float(canonical_aligned["T_e_in"]["guess"]),
+            Z_in_nominal=float(canonical_aligned["Z_in"]["guess"]),
+            I_0_nominal=float(canonical_aligned["I_0"]["guess"]),
+            seed_fraction_nominal=float(canonical_aligned["seed_fraction"]["guess"]),
             inlet_windows={
                 "n_p_in": {
-                    "guess": float(aligned["np_in"]["guess"]),
-                    "min": float(aligned["np_in"]["min"]),
-                    "max": float(aligned["np_in"]["max"]),
+                    "guess": float(canonical_aligned["n_p_in"]["guess"]),
+                    "min": float(canonical_aligned["n_p_in"]["min"]),
+                    "max": float(canonical_aligned["n_p_in"]["max"]),
                 },
                 "T_e_in": {
-                    "guess": float(aligned["te_in"]["guess"]),
-                    "min": float(aligned["te_in"]["min"]),
-                    "max": float(aligned["te_in"]["max"]),
+                    "guess": float(canonical_aligned["T_e_in"]["guess"]),
+                    "min": float(canonical_aligned["T_e_in"]["min"]),
+                    "max": float(canonical_aligned["T_e_in"]["max"]),
                 },
                 "Z_in": {
-                    "guess": float(aligned["z_in"]["guess"]),
-                    "min": float(aligned["z_in"]["min"]),
-                    "max": float(aligned["z_in"]["max"]),
+                    "guess": float(canonical_aligned["Z_in"]["guess"]),
+                    "min": float(canonical_aligned["Z_in"]["min"]),
+                    "max": float(canonical_aligned["Z_in"]["max"]),
                 },
                 "I_0": {
-                    "guess": float(aligned["jx_in"]["guess"]),
-                    "min": float(aligned["jx_in"]["min"]),
-                    "max": float(aligned["jx_in"]["max"]),
+                    "guess": float(canonical_aligned["I_0"]["guess"]),
+                    "min": float(canonical_aligned["I_0"]["min"]),
+                    "max": float(canonical_aligned["I_0"]["max"]),
                 },
                 "seed_fraction": {
-                    "guess": float(aligned["seed_fraction"]["guess"]),
-                    "min": float(aligned["seed_fraction"]["min"]),
-                    "max": float(aligned["seed_fraction"]["max"]),
+                    "guess": float(canonical_aligned["seed_fraction"]["guess"]),
+                    "min": float(canonical_aligned["seed_fraction"]["min"]),
+                    "max": float(canonical_aligned["seed_fraction"]["max"]),
                 },
             },
             area_design_windows=area_design_windows,
             area_design_nominal=area_design,
-            area_reference_x_norm=area_reference_x_norm,
-            area_reference_factor=area_reference_factor,
-            area_reference_sigma_logA=area_reference_sigma_logA,
         )
 
     def with_inlet_bound_factors(
@@ -257,12 +359,47 @@ class BaselineSeed:
     def with_working_fluid_profile(self, profile: str | WorkingFluidProfile | None) -> "BaselineSeed":
         return replace(self, working_fluid=_normalize_working_fluid_profile(profile))
 
-    def area_reference_kwargs(self) -> dict[str, np.ndarray | None]:
-        return {
-            "area_reference_x_norm": self.area_reference_x_norm,
-            "area_reference_factor": self.area_reference_factor,
-            "area_reference_sigma_logA": self.area_reference_sigma_logA,
-        }
+    def with_search_window_overrides(self, payload: dict[str, Any]) -> "BaselineSeed":
+        if not isinstance(payload, dict):
+            raise ValueError("search window override payload must be a JSON object.")
+        inlet_payload, area_payload = _extract_search_window_sections(payload)
+        inlet_windows = {key: dict(value) for key, value in self.inlet_windows.items()}
+        area_windows = {key: dict(value) for key, value in self.area_design_windows.items()}
+        canonical_inlet, unknown_inlet_keys = _canonicalize_inlet_window_payload(inlet_payload)
+        for canonical, raw_window in canonical_inlet.items():
+            inlet_windows[canonical] = _coerce_window_payload(raw_window, key=canonical, positive=True)
+        if unknown_inlet_keys:
+            raise ValueError(
+                "unknown inlet search-window key(s): "
+                f"{', '.join(sorted(unknown_inlet_keys))}; expected one of {_INLET_WINDOW_KEYS!r}."
+            )
+        unknown_area_keys = []
+        for raw_key, raw_window in area_payload.items():
+            key = str(raw_key)
+            if key not in _AREA_WINDOW_KEYS:
+                unknown_area_keys.append(key)
+                continue
+            area_windows[key] = _coerce_window_payload(raw_window, key=key, positive=False)
+        if unknown_area_keys:
+            raise ValueError(
+                "unknown area search-window key(s): "
+                f"{', '.join(sorted(unknown_area_keys))}; expected one of {_AREA_WINDOW_KEYS!r}."
+            )
+        return replace(
+            self,
+            inlet_windows=inlet_windows,
+            area_design_windows=area_windows,
+            n_p_in_nominal=float(inlet_windows["n_p_in"]["guess"]),
+            T_e_in_nominal=float(inlet_windows["T_e_in"]["guess"]),
+            Z_in_nominal=float(inlet_windows["Z_in"]["guess"]),
+            I_0_nominal=float(inlet_windows["I_0"]["guess"]),
+            seed_fraction_nominal=float(inlet_windows["seed_fraction"]["guess"]),
+            area_design_nominal=SplineAreaDesign(
+                a1=float(area_windows["a1"]["guess"]),
+                a2=float(area_windows["a2"]["guess"]),
+                a3=float(area_windows["a3"]["guess"]),
+            ),
+        )
 
     def initial_point(self) -> list[float]:
         return [
@@ -277,46 +414,47 @@ class BaselineSeed:
         ]
 
     def optimization_variable_bounds(self) -> list[tuple[float, float, str]]:
-        windows = self.inlet_windows
+        inlet_windows = self.inlet_windows
+        area_windows = self.area_design_windows
         return [
             (
-                math.log(float(windows["n_p_in"]["min"])),
-                math.log(float(windows["n_p_in"]["max"])),
+                math.log(float(inlet_windows["n_p_in"]["min"])),
+                math.log(float(inlet_windows["n_p_in"]["max"])),
                 "log_n_p_in",
             ),
             (
-                float(windows["T_e_in"]["min"]),
-                float(windows["T_e_in"]["max"]),
+                float(inlet_windows["T_e_in"]["min"]),
+                float(inlet_windows["T_e_in"]["max"]),
                 "T_e_in",
             ),
             (
-                float(windows["Z_in"]["min"]),
-                float(windows["Z_in"]["max"]),
+                float(inlet_windows["Z_in"]["min"]),
+                float(inlet_windows["Z_in"]["max"]),
                 "Z_in",
             ),
             (
-                float(windows["I_0"]["min"]),
-                float(windows["I_0"]["max"]),
+                float(inlet_windows["I_0"]["min"]),
+                float(inlet_windows["I_0"]["max"]),
                 "I_0",
             ),
             (
-                math.log(float(windows["seed_fraction"]["min"])),
-                math.log(float(windows["seed_fraction"]["max"])),
+                math.log(float(inlet_windows["seed_fraction"]["min"])),
+                math.log(float(inlet_windows["seed_fraction"]["max"])),
                 "log_seed_fraction",
             ),
             (
-                float(windows.get("a1", self.area_design_windows["a1"])["min"]),
-                float(windows.get("a1", self.area_design_windows["a1"])["max"]),
+                float(area_windows["a1"]["min"]),
+                float(area_windows["a1"]["max"]),
                 "a1",
             ),
             (
-                float(windows.get("a2", self.area_design_windows["a2"])["min"]),
-                float(windows.get("a2", self.area_design_windows["a2"])["max"]),
+                float(area_windows["a2"]["min"]),
+                float(area_windows["a2"]["max"]),
                 "a2",
             ),
             (
-                float(windows.get("a3", self.area_design_windows["a3"])["min"]),
-                float(windows.get("a3", self.area_design_windows["a3"])["max"]),
+                float(area_windows["a3"]["min"]),
+                float(area_windows["a3"]["max"]),
                 "a3",
             ),
         ]
@@ -334,15 +472,6 @@ class BaselineSeed:
             "inlet_windows": self.inlet_windows,
             "area_design_windows": self.area_design_windows,
             "area_design_nominal": self.area_design_nominal.to_dict(),
-            "area_reference": {
-                "enabled": self.area_reference_x_norm is not None and self.area_reference_factor is not None,
-                "factor_min": None
-                if self.area_reference_factor is None
-                else float(np.min(np.asarray(self.area_reference_factor, dtype=float))),
-                "factor_max": None
-                if self.area_reference_factor is None
-                else float(np.max(np.asarray(self.area_reference_factor, dtype=float))),
-            },
         }
 
 
