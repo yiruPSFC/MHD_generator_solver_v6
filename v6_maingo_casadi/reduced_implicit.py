@@ -535,6 +535,7 @@ class _MAiNGOHybridReducedImplicitModelBase:
             "critical_scale_det": float(self._critical_scales.det),
             "critical_scale_numerator_n": float(self._critical_scales.numerator_n),
             "critical_scale_numerator_Te": float(self._critical_scales.numerator_Te),
+            "implicit_reference": dict(self._reference_profile.diagnostics.get("implicit_reference", {}) or {}),
         }
 
     def get_variables(self):

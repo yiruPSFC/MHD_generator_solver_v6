@@ -4,6 +4,7 @@ import json
 import math
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 import numpy as np
@@ -379,6 +380,27 @@ class HybridComponentTests(unittest.TestCase):
         self.assertTrue(result.diagnostics["acceptable"])
         self.assertLess(float(result.diagnostics["max_eq_residual"]), 1e-9)
         self.assertLess(float(result.diagnostics["max_ineq_residual"]), 0.0)
+        self.assertFalse(result.diagnostics["implicit_reference"]["fallback_used"])
+
+    def test_implicit_reference_newton_failure_is_diagnosed(self):
+        seed = BaselineSeed.from_summary(BASELINE_SUMMARY)
+
+        def failing_rootfinder(*_args, **_kwargs):
+            def solve(_z0, _params):
+                raise RuntimeError("forced reference Newton failure")
+
+            return solve
+
+        with mock.patch("v6_maingo_casadi.implicit.ca.rootfinder", side_effect=failing_rootfinder):
+            _, result, _ = _build_implicit_reference(baseline=seed, n_intervals=4)
+
+        diagnostic = result.diagnostics["implicit_reference"]
+        self.assertTrue(diagnostic["fallback_used"])
+        self.assertEqual(diagnostic["fallback_reason"], "implicit_reference_newton_runtime_error")
+        self.assertEqual(diagnostic["newton_failure_count"], 1)
+        self.assertEqual(diagnostic["first_newton_failure"]["interval_index"], 0)
+        self.assertIn("scaled_residual_at_initial_guess", diagnostic["first_newton_failure"])
+        json.dumps(result.to_summary_dict())
 
     def test_reduced_implicit_model_keeps_maingo_dimension_low(self):
         seed = BaselineSeed.from_summary(BASELINE_SUMMARY)
@@ -391,6 +413,9 @@ class HybridComponentTests(unittest.TestCase):
         self.assertEqual(model.total_variables, 8)
         self.assertEqual(len(model.get_variables()), 8)
         self.assertEqual(len(model.get_initial_point()), 8)
+        metadata = model.summary_metadata()
+        self.assertIn("implicit_reference", metadata)
+        self.assertFalse(metadata["implicit_reference"]["fallback_used"])
         solution = model.decode_solution_point(model.get_initial_point())
         result = model.evaluate_solution(solution)
         self.assertTrue(result.diagnostics["finite_profile"])

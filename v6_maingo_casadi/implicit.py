@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import math
 from dataclasses import dataclass
 from typing import Any
@@ -22,6 +23,8 @@ from .physics import (
     evaluate_inlet_design_numeric,
 )
 from .profiles import _augment_value_terms_with_hall_diagnostics, _normalize_objective_profile, _value_profile_dict
+
+_LOGGER = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class ImplicitTrajectoryVariables:
@@ -459,25 +462,123 @@ def _resample_profile_result(
     )
 
 
+def _json_float(value: Any) -> float | None:
+    numeric = float(np.asarray(value, dtype=float))
+    return numeric if math.isfinite(numeric) else None
+
+
+def _json_float_list(values: Any) -> list[float | None]:
+    return [_json_float(value) for value in np.asarray(values, dtype=float).reshape(-1)]
+
+
+def _exception_diagnostic(exc: BaseException) -> dict[str, str]:
+    return {
+        "type": type(exc).__name__,
+        "message": str(exc),
+    }
+
+
+def _implicit_reference_step_failure_diagnostic(
+    *,
+    interval_index: int,
+    dx: float,
+    length: float,
+    z0: np.ndarray,
+    params: np.ndarray,
+    residual_function,
+    exc: RuntimeError,
+) -> dict[str, Any]:
+    param_names = (
+        "n_prev",
+        "T_e_prev",
+        "A_next",
+        "sigma_next",
+        "dot_N",
+        "I_0",
+        "seed_fraction",
+        "step_n_scale",
+        "step_Te_scale",
+        "momentum_scale",
+        "energy_scale",
+    )
+    diagnostic: dict[str, Any] = {
+        "interval_index": int(interval_index),
+        "x": float((int(interval_index) + 1) * float(dx)),
+        "x_over_L": float((int(interval_index) + 1) * float(dx) / max(float(length), _EPS)),
+        "exception": _exception_diagnostic(exc),
+        "initial_guess": {
+            "n_next": _json_float(z0[0]),
+            "T_e_next": _json_float(z0[1]),
+            "dn_dx": _json_float(z0[2]),
+            "dTe_dx": _json_float(z0[3]),
+        },
+        "parameters": {
+            name: _json_float(value)
+            for name, value in zip(param_names, np.asarray(params, dtype=float).reshape(-1), strict=True)
+        },
+    }
+    try:
+        residual = np.asarray(residual_function(z0, params), dtype=float).reshape(-1)
+        diagnostic["scaled_residual_at_initial_guess"] = {
+            "step_n": _json_float(residual[0]),
+            "step_Te": _json_float(residual[1]),
+            "momentum": _json_float(residual[2]),
+            "energy": _json_float(residual[3]),
+            "max_abs": (
+                float(np.max(np.abs(residual)))
+                if residual.size and np.all(np.isfinite(residual))
+                else None
+            ),
+        }
+    except RuntimeError as residual_exc:
+        diagnostic["scaled_residual_at_initial_guess_error"] = _exception_diagnostic(residual_exc)
+    return diagnostic
+
+
 def _implicit_reference_is_reasonable(*, baseline: BaselineSeed, variables: ImplicitTrajectoryVariables) -> bool:
+    return bool(_implicit_reference_reasonableness_diagnostics(baseline=baseline, variables=variables)["reasonable"])
+
+
+def _implicit_reference_reasonableness_diagnostics(
+    *,
+    baseline: BaselineSeed,
+    variables: ImplicitTrajectoryVariables,
+) -> dict[str, Any]:
     n_nodes = np.asarray(variables.n_p_nodes, dtype=float)
     te_nodes = np.asarray(variables.T_e_nodes, dtype=float)
     dn_dx = np.asarray(variables.dn_dx, dtype=float)
     dte_dx = np.asarray(variables.dTe_dx, dtype=float)
-    if not (
+    finite = bool(
         np.all(np.isfinite(n_nodes))
         and np.all(np.isfinite(te_nodes))
         and np.all(np.isfinite(dn_dx))
         and np.all(np.isfinite(dte_dx))
-    ):
-        return False
-    if np.any(n_nodes <= 0.0) or np.any(te_nodes <= 0.0):
-        return False
+    )
+    positive_state = bool(np.all(n_nodes > 0.0) and np.all(te_nodes > 0.0))
     n_upper = max(float(baseline.inlet_windows["n_p_in"]["max"]) * 100.0, 1e28)
     te_upper = max(float(baseline.inlet_windows["T_e_in"]["max"]) * 20.0, 5e4)
-    if float(np.max(n_nodes)) > n_upper or float(np.max(te_nodes)) > te_upper:
-        return False
-    return True
+    max_n = _json_float(np.max(n_nodes)) if n_nodes.size else None
+    max_te = _json_float(np.max(te_nodes)) if te_nodes.size else None
+    within_upper = bool(
+        max_n is not None
+        and max_te is not None
+        and float(max_n) <= n_upper
+        and float(max_te) <= te_upper
+    )
+    return {
+        "reasonable": bool(finite and positive_state and within_upper),
+        "finite": finite,
+        "positive_state": positive_state,
+        "within_upper_bounds": within_upper,
+        "max_n_p": max_n,
+        "max_T_e": max_te,
+        "n_p_upper_reasonable": float(n_upper),
+        "T_e_upper_reasonable": float(te_upper),
+        "first_n_p_nodes": _json_float_list(n_nodes[: min(3, n_nodes.size)]),
+        "first_T_e_nodes": _json_float_list(te_nodes[: min(3, te_nodes.size)]),
+        "last_n_p_nodes": _json_float_list(n_nodes[max(0, n_nodes.size - 3) :]),
+        "last_T_e_nodes": _json_float_list(te_nodes[max(0, te_nodes.size - 3) :]),
+    }
 
 
 def _constant_implicit_reference(
@@ -648,28 +749,26 @@ def _build_implicit_reference(
         dx=dx,
         working_fluid=fluid,
     )
-    rootfinder = ca.rootfinder(
-        "implicit_reference_step",
-        "newton",
-        ca.Function(
-            "implicit_reference_residual",
-            [z, p],
-            [
-                ca.vertcat(
-                    step_n / p[7],
-                    step_Te / p[8],
-                    momentum / p[9],
-                    energy / p[10],
-                )
-            ],
-        ),
+    residual_function = ca.Function(
+        "implicit_reference_residual",
+        [z, p],
+        [
+            ca.vertcat(
+                step_n / p[7],
+                step_Te / p[8],
+                momentum / p[9],
+                energy / p[10],
+            )
+        ],
     )
+    rootfinder = ca.rootfinder("implicit_reference_step", "newton", residual_function)
 
     n_p_nodes = [float(explicit.n_p[0])]
     T_e_nodes = [float(explicit.T_e[0])]
     dn_dx = []
     dTe_dx = []
     seed_fraction = float(explicit.inlet_design.seed_fraction)
+    newton_failures: list[dict[str, Any]] = []
     for k in range(int(n_intervals)):
         z0 = np.array(
             [
@@ -698,8 +797,23 @@ def _build_implicit_reference(
         )
         try:
             z_sol = np.asarray(rootfinder(z0, params), dtype=float).reshape(-1)
-        except Exception:
-            z_sol = z0
+        except RuntimeError as exc:
+            failure = _implicit_reference_step_failure_diagnostic(
+                interval_index=k,
+                dx=dx,
+                length=float(baseline.L),
+                z0=z0,
+                params=params,
+                residual_function=residual_function,
+                exc=exc,
+            )
+            newton_failures.append(failure)
+            _LOGGER.warning(
+                "implicit reference Newton failed at interval %d (x/L=%.6g); using constant implicit reference fallback",
+                int(k),
+                float(failure["x_over_L"]),
+            )
+            break
         n_p_nodes.append(float(z_sol[0]))
         T_e_nodes.append(float(z_sol[1]))
         dn_dx.append(float(z_sol[2]))
@@ -712,12 +826,33 @@ def _build_implicit_reference(
         dn_dx=np.asarray(dn_dx, dtype=float),
         dTe_dx=np.asarray(dTe_dx, dtype=float),
     )
-    if not _implicit_reference_is_reasonable(baseline=baseline, variables=reference_variables):
+    reference_diagnostics: dict[str, Any] = {
+        "fallback_used": False,
+        "fallback_reason": None,
+        "newton_failure_count": int(len(newton_failures)),
+        "first_newton_failure": newton_failures[0] if newton_failures else None,
+    }
+    reasonableness = _implicit_reference_reasonableness_diagnostics(
+        baseline=baseline,
+        variables=reference_variables,
+    )
+    reference_diagnostics["pre_fallback_reasonableness"] = reasonableness
+    if newton_failures:
         reference_variables, residual_scales = _constant_implicit_reference(
             baseline=baseline,
             n_intervals=int(n_intervals),
             decision_vector=decision_vector,
         )
+        reference_diagnostics["fallback_used"] = True
+        reference_diagnostics["fallback_reason"] = "implicit_reference_newton_runtime_error"
+    elif not bool(reasonableness["reasonable"]):
+        reference_variables, residual_scales = _constant_implicit_reference(
+            baseline=baseline,
+            n_intervals=int(n_intervals),
+            decision_vector=decision_vector,
+        )
+        reference_diagnostics["fallback_used"] = True
+        reference_diagnostics["fallback_reason"] = "implicit_reference_unreasonable"
     reference_result = _build_coarse_result_from_state_trajectory(
         baseline=baseline,
         n_intervals=int(n_intervals),
@@ -726,6 +861,11 @@ def _build_implicit_reference(
         residual_scales=residual_scales,
         objective_profile=objective_profile,
     )
+    reference_diagnostics["post_fallback_reasonableness"] = _implicit_reference_reasonableness_diagnostics(
+        baseline=baseline,
+        variables=reference_variables,
+    )
+    reference_result.diagnostics["implicit_reference"] = reference_diagnostics
     return reference_variables, reference_result, residual_scales
 
 
