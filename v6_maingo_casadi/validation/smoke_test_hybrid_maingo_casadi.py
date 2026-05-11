@@ -39,7 +39,8 @@ def run_available_dependency_smoke() -> None:
         raise AssertionError(f"hybrid main() returned nonzero exit code {exit_code}")
     expected = [
         out_dir / "maingo_summary.json",
-        out_dir / "maingo_best_profile.npz",
+        out_dir / "maingo_coarse_profile.npz",
+        out_dir / "maingo_handoff_profile.npz",
         out_dir / "hybrid_summary.json",
         out_dir / "continuation" / "continuation_summary.json",
     ]

@@ -29,14 +29,15 @@ def _min_op(ops, a, b):
 
 def _safe_pos(ops, value, floor):
     if getattr(ops, "lb_func", None) is not None:
-        return ops.lb_func(value, floor)
+        return ops.lb_func(_max_op(ops, value, floor), floor)
     return _max_op(ops, value, floor)
 
 
 def _clip_range(ops, value, lower, upper):
+    clipped = _min_op(ops, _max_op(ops, value, lower), upper)
     if getattr(ops, "bounding_func", None) is not None:
-        return ops.bounding_func(value, lower, upper)
-    return _min_op(ops, _max_op(ops, value, lower), upper)
+        return ops.bounding_func(clipped, lower, upper)
+    return clipped
 
 
 def _floored_pos(ops, value, floor):

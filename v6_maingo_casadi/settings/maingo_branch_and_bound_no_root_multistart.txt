@@ -1,0 +1,10 @@
+# Branch-and-bound probe without root-node multistart local searches.
+#
+# This is useful when the root IPOPT multistart heuristic dominates runtime.
+# It does not disable B&B; it only prevents the preprocessing phase from
+# spending time on multistart incumbent searches before entering the tree.
+
+PRE_pureMultistart                     0
+PRE_maxLocalSearches                   0
+PRE_printEveryLocalSearch              1
+PRE_obbtMaxRounds                      0

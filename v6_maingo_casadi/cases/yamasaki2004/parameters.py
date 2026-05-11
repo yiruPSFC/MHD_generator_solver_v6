@@ -161,7 +161,7 @@ class Yamasaki2004ModelSeed:
     n_p_in_m3: RangeValue = field(default_factory=lambda: RangeValue(4.0e24, 5.5e24, 4.7587e24))
     electron_temperature_in_K: RangeValue = field(default_factory=lambda: RangeValue(4200.0, 6200.0, 4900.0))
     z_in: RangeValue = field(default_factory=lambda: RangeValue(40.0, 120.0, 80.0))
-    area_deviation_log: RangeValue = field(default_factory=lambda: RangeValue(-0.15, 0.15, 0.0))
+    area_log_window_offset: RangeValue = field(default_factory=lambda: RangeValue(-0.15, 0.15, 0.0))
     schedule_n_intervals: int = 40
     adaptive_bridge_count: int = 2
     adaptive_bridge_max_count: int = 8
@@ -180,7 +180,9 @@ class Yamasaki2004ModelSeed:
         }
 
     def aligned_area_window(self, nominal_log_area: np.ndarray | None = None) -> dict[str, dict[str, float]]:
-        window = self.area_deviation_log.inlet_window_dict()
+        """Return direct spline-coordinate bounds around the fitted paper geometry."""
+
+        window = self.area_log_window_offset.inlet_window_dict()
         nominal = np.zeros(3, dtype=float) if nominal_log_area is None else np.asarray(nominal_log_area, dtype=float)
         nominal = nominal.reshape(3)
         return {

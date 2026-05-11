@@ -682,6 +682,9 @@ class _MAiNGOHybridReducedImplicitModelBase:
         min_g_nodes = _reduce_min(self._ops, [item["G"] for item in rollout.closures])
         min_g_midpoints = _reduce_min(self._ops, [item["G"] for item in midpoint_closures])
         min_g_all = _min_op(self._ops, min_g_nodes, min_g_midpoints)
+        min_tp_nodes = _reduce_min(self._ops, [item["T_p"] for item in rollout.closures])
+        min_tp_midpoints = _reduce_min(self._ops, [item["T_p"] for item in midpoint_closures])
+        min_tp_all = _min_op(self._ops, min_tp_nodes, min_tp_midpoints)
         velikhov_penalty = _velikhov_margin_penalty(self._ops, min_g_all)
         design_score = raw_design_score - velikhov_penalty
 
@@ -720,6 +723,9 @@ class _MAiNGOHybridReducedImplicitModelBase:
             self._maingopy.OutputVariable("reduced_implicit_min_abs_det", rollout.min_abs_det),
             self._maingopy.OutputVariable("inlet_G", rollout.inlet["G"]),
             self._maingopy.OutputVariable("inlet_mach", rollout.inlet["mach"]),
+            self._maingopy.OutputVariable("min_path_Tp_nodes", min_tp_nodes),
+            self._maingopy.OutputVariable("min_path_Tp_midpoints", min_tp_midpoints),
+            self._maingopy.OutputVariable("min_path_Tp_all", min_tp_all),
             self._maingopy.OutputVariable("min_path_G_nodes", min_g_nodes),
             self._maingopy.OutputVariable("min_path_G_midpoints", min_g_midpoints),
             self._maingopy.OutputVariable("min_path_G_all", min_g_all),

@@ -149,20 +149,47 @@ def _top_duals(stage_record: dict, *, limit: int = 6) -> list[dict[str, object]]
     return rows[: int(limit)]
 
 
+def _stage_by_name(stages: list[dict], name: str) -> dict:
+    for stage in stages:
+        if str(stage.get("name", "")) == str(name):
+            return stage
+    return {}
+
+
 def _summarize_final_stage(*, sigma_max: float, payload: dict, case_dir: Path) -> dict:
     stages = [dict(stage) for stage in payload.get("stages", []) or []]
     final = stages[-1] if stages else {}
+    last_trusted_ref = dict(payload.get("last_trusted_stage", {}) or {})
+    last_trusted = _stage_by_name(stages, str(last_trusted_ref.get("name", ""))) if last_trusted_ref else {}
+    bridge_stop = dict(payload.get("bridge_stop", {}) or {})
     artifacts = dict(final.get("artifacts", {}) or {})
     diagnostics = dict(artifacts.get("diagnostics", {}) or payload.get("final_diagnostics", {}) or {})
+    trusted_artifacts = dict(last_trusted.get("artifacts", {}) or {})
+    trusted_diagnostics = dict(trusted_artifacts.get("diagnostics", {}) or {})
     return {
         "sigma_max": float(sigma_max),
         "ok": bool(payload.get("ok", False)),
+        "stopped_after_failed_bridge": bool(payload.get("stopped_after_failed_bridge", False)),
         "final_stage": str(final.get("name", "")),
         "success": bool(final.get("success", False)),
-        "acceptable": bool(final.get("acceptable", False)),
+        "acceptable": bool(payload.get("ok", False)),
         "return_status": str(final.get("return_status", "")),
+        "final_attempt_success": bool(final.get("success", False)),
+        "final_attempt_acceptable": bool(final.get("acceptable", False)),
+        "final_attempt_stage": str(final.get("name", "")),
+        "final_trusted_stage": str(last_trusted_ref.get("name", "")),
+        "final_trusted_return_status": str(last_trusted_ref.get("return_status", "")),
+        "final_trusted_objective_delta_Te_K": _finite_float(
+            last_trusted_ref.get("objective_delta_Te_K", float("nan"))
+        ),
+        "max_stable_alpha": _finite_float(bridge_stop.get("max_stable_alpha", float("nan"))),
+        "next_failed_alpha": _finite_float(bridge_stop.get("next_failed_alpha", float("nan"))),
         "objective_delta_Te_K": _finite_float(final.get("objective_delta_Te_K", float("nan"))),
+        "trusted_objective_delta_Te_K": _finite_float(last_trusted_ref.get("objective_delta_Te_K", float("nan"))),
         "sigma_bound_hit_fraction": _finite_float(diagnostics.get("sigma_bound_hit_fraction", float("nan"))),
+        "trusted_sigma_bound_hit_fraction": _finite_float(
+            trusted_diagnostics.get("sigma_bound_hit_fraction", float("nan"))
+        ),
         "sigma_sign_changes": int(diagnostics.get("sigma_sign_changes", 0)),
         "area_step_sign_changes": int(diagnostics.get("area_step_sign_changes", 0)),
         "min_velikhov_margin": _finite_float(final.get("min_velikhov_margin", diagnostics.get("velikhov_margin_min", float("nan")))),
@@ -180,8 +207,9 @@ def _summarize_final_stage(*, sigma_max: float, payload: dict, case_dir: Path) -
         "top_duals": _top_duals(final),
         "case_dir": str(case_dir),
         "plot_path": str(artifacts.get("plot_path", "")),
-        "dual_plot_path": str(artifacts.get("dual_plot_path", "")),
+        "trusted_plot_path": str(trusted_artifacts.get("plot_path", "")),
         "npz_path": str(artifacts.get("npz_path", "")),
+        "trusted_npz_path": str(trusted_artifacts.get("npz_path", "")),
     }
 
 
@@ -189,11 +217,22 @@ def _write_csv(path: Path, rows: list[dict[str, object]]) -> None:
     fieldnames = [
         "sigma_max",
         "ok",
+        "stopped_after_failed_bridge",
         "success",
         "acceptable",
         "return_status",
+        "final_attempt_stage",
+        "final_attempt_success",
+        "final_attempt_acceptable",
+        "final_trusted_stage",
+        "final_trusted_return_status",
+        "final_trusted_objective_delta_Te_K",
+        "max_stable_alpha",
+        "next_failed_alpha",
         "objective_delta_Te_K",
+        "trusted_objective_delta_Te_K",
         "sigma_bound_hit_fraction",
+        "trusted_sigma_bound_hit_fraction",
         "min_velikhov_margin",
         "min_mach",
         "tp_min",
@@ -208,7 +247,7 @@ def _write_csv(path: Path, rows: list[dict[str, object]]) -> None:
         "dual_A_upper_node_max_abs",
         "case_dir",
         "plot_path",
-        "dual_plot_path",
+        "trusted_plot_path",
     ]
     with path.open("w", encoding="utf-8", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
@@ -274,8 +313,14 @@ def main() -> int:
             json.dumps(
                 {
                     "sigma_max": float(sigma_max),
-                    "acceptable": row["acceptable"],
-                    "dTe_K": row["objective_delta_Te_K"],
+                    "ok": row["ok"],
+                    "stopped_after_failed_bridge": row["stopped_after_failed_bridge"],
+                    "final_attempt_acceptable": row["final_attempt_acceptable"],
+                    "final_attempt_dTe_K": row["objective_delta_Te_K"],
+                    "final_trusted_stage": row["final_trusted_stage"],
+                    "trusted_dTe_K": row["trusted_objective_delta_Te_K"],
+                    "max_stable_alpha": row["max_stable_alpha"],
+                    "next_failed_alpha": row["next_failed_alpha"],
                     "sigma_bound_hit_fraction": row["sigma_bound_hit_fraction"],
                     "top_duals": row["top_duals"][:3],
                 },

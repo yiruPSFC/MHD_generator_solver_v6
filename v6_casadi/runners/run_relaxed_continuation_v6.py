@@ -26,7 +26,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--z-in", type=float, default=75.954994)
     p.add_argument("--tp-in", type=float, default=429.0)
     p.add_argument("--te-in", type=float, default=4420.0)
-    p.add_argument("--A-in", type=float, default=0.447)
+    p.add_argument("--A-in", type=float, default=1.0)
     p.add_argument("--B", type=float, default=10.2)
     p.add_argument("--L", type=float, default=5.4)
     p.add_argument("--seed-fraction", type=float, default=None)
@@ -85,8 +85,8 @@ def _build_parser() -> argparse.ArgumentParser:
         default=1.0,
         help="final-stage Mach lower bound; pass <0 to disable it",
     )
-    p.add_argument("--final-a-min-ratio", type=float, default=0.40)
-    p.add_argument("--final-a-max-ratio", type=float, default=5.0)
+    p.add_argument("--final-a-min-ratio", type=float, default=0.10)
+    p.add_argument("--final-a-max-ratio", type=float, default=10.0)
     p.add_argument("--final-max-abs-dlogA-dx", type=float, default=0.50)
     p.add_argument("--final-np-min-ratio", type=float, default=1e-8)
     p.add_argument("--final-np-max-ratio", type=float, default=150.0)

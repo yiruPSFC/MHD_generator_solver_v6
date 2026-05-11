@@ -11,9 +11,13 @@ v6_batch/outputs/
 v6_core/non_batch/outputs/
 v6_casadi/outputs/
 v6_casadi_v2/outputs/
+v6_maingo_casadi/outputs/
+v6_piecewise/outputs/
 v6_global_marginal/debug/
 v6_global_marginal/diagnostics/
 v6_global_marginal/reference_recovery/*.npz
 v6_global_marginal/reference_recovery/*.png
 v6_global_marginal/reference_recovery/summary.json
 v6_global_marginal/reference_recovery/summary.txt
+MAiNGOresult.txt
+swirl_vs_radial_flow_schematic.png

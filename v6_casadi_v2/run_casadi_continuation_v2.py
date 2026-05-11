@@ -13,13 +13,18 @@ REPO_DIR = Path(__file__).resolve().parents[1]
 if str(REPO_DIR) not in sys.path:
     sys.path.insert(0, str(REPO_DIR))
 
-from v6_core.local_algebraic_closure import E_I, H_P, K_B, M_E
+from v6_core.local_algebraic_closure import E_I, H_P, K_B, M_E, M_P, SIGMA_EP
 from v6_global_marginal.pde_solver_v6_batch_global import project_seed_fraction_to_marginal_inlet
 from v6_casadi_v2.optimize_area_profile_casadi_v2 import (
     WarmStartProfile,
+    OBJECTIVE_PROFILE_ENTHALPY_EXTRACTION,
+    OBJECTIVE_PROFILE_LAB_POC_V2,
     _design_value_weights_lab_poc_v2_objective,
+    _enthalpy_extraction_value_profile,
     _evaluate_inlet_design_numeric,
     _evaluate_profile_numeric,
+    _make_stage_function,
+    _normalize_objective_profile,
     optimize_area_profile,
 )
 from v6_global_marginal.global_postprocess_v6 import (
@@ -94,6 +99,21 @@ def _build_parser() -> argparse.ArgumentParser:
         default=0,
         help="maximum number of bridge stages to use after repeated bridge-count doubling retries",
     )
+    p.add_argument(
+        "--objective-profile",
+        type=str,
+        choices=(OBJECTIVE_PROFILE_LAB_POC_V2, OBJECTIVE_PROFILE_ENTHALPY_EXTRACTION),
+        default=OBJECTIVE_PROFILE_LAB_POC_V2,
+    )
+    p.add_argument(
+        "--area-scale-m2",
+        type=float,
+        default=1.0,
+        help="physical inlet area used by A[0], dot_N, current density, and enthalpy-flux semantics",
+    )
+    p.add_argument("--heavy-particle-mass-kg", type=float, default=None)
+    p.add_argument("--seed-ionization-energy-J", type=float, default=None)
+    p.add_argument("--electron-particle-sigma-m2", type=float, default=None)
     p.add_argument("--out-json", type=str, default="")
     p.add_argument(
         "--out-dir",
@@ -288,6 +308,8 @@ def load_warm_profile_npz(
     seed_fraction_min: float,
     seed_fraction_max: float,
     B: float = 10.2,
+    area_scale: float = 1.0,
+    normalize_inlet_area: bool = True,
 ) -> WarmStartProfile:
     warm_path = Path(path)
     with np.load(warm_path) as data:
@@ -324,7 +346,16 @@ def load_warm_profile_npz(
     inlet_A = float(A_raw[0]) if A_raw.size else 1.0
     if inlet_A <= 0.0 or not np.isfinite(inlet_A):
         raise ValueError("warm profile inlet A must be positive and finite.")
-    A = A_raw / inlet_A
+    if bool(normalize_inlet_area):
+        A = A_raw / inlet_A
+        inlet_area_for_current = 1.0
+    else:
+        A = A_raw.copy()
+        inlet_area_for_current = inlet_A
+        if not np.isclose(inlet_area_for_current, float(area_scale), rtol=1e-9, atol=1e-14):
+            raise ValueError(
+                f"warm profile inlet A={inlet_area_for_current:.12g} does not match area_scale={float(area_scale):.12g}"
+            )
 
     def _infer_seed_fraction() -> float:
         if seed_arr.size and np.isfinite(seed_arr[0]) and float(seed_arr[0]) > 0.0:
@@ -351,7 +382,10 @@ def load_warm_profile_npz(
                 return float(projected)
         return float(seed_fraction_guess)
 
-    inlet_J_x = float(J_x_arr[0]) if J_x_arr.size else float(J_x_in_guess)
+    if J_x_arr.size:
+        inlet_I0 = float(J_x_arr[0]) * float(inlet_area_for_current)
+    else:
+        inlet_I0 = float(J_x_in_guess)
     inferred_seed_fraction = _infer_seed_fraction()
     return WarmStartProfile(
         x=x.copy(),
@@ -362,13 +396,25 @@ def load_warm_profile_npz(
         inlet_n_p=float(np.clip(n_p[0] if n_p.size else n_p_in_guess, n_p_in_min, n_p_in_max)),
         inlet_T_e=float(np.clip(T_e[0] if T_e.size else T_e_in_guess, T_e_in_min, T_e_in_max)),
         inlet_Z=float(np.clip(Z_arr[0] if Z_arr.size else Z_in_guess, Z_in_min, Z_in_max)),
-        inlet_I0=float(np.clip(inlet_J_x, J_x_in_min, J_x_in_max)),
+        inlet_I0=float(np.clip(inlet_I0, J_x_in_min, J_x_in_max)),
         inlet_seed_fraction=float(np.clip(inferred_seed_fraction, seed_fraction_min, seed_fraction_max)),
         source=f"external_npz:{warm_path}",
     )
 
 
-def _save_stage_artifacts(*, out_dir: Path, stage_name: str, result, B: float) -> dict[str, object]:
+def _save_stage_artifacts(
+    *,
+    out_dir: Path,
+    stage_name: str,
+    result,
+    B: float,
+    objective_profile: str = OBJECTIVE_PROFILE_LAB_POC_V2,
+    area_scale: float = 1.0,
+    heavy_particle_mass_kg: float = M_P,
+    seed_ionization_energy_J: float = E_I,
+    sigma_ep: float = SIGMA_EP,
+) -> dict[str, object]:
+    objective_profile = _normalize_objective_profile(objective_profile)
     out_dir.mkdir(parents=True, exist_ok=True)
     base = out_dir / stage_name
     plots_dir = out_dir / "plots"
@@ -402,6 +448,8 @@ def _save_stage_artifacts(*, out_dir: Path, stage_name: str, result, B: float) -
         E_x=result.E_x,
         B=float(B),
         seed_fraction=result.inlet.seed_fraction,
+        v_p=result.v_p,
+        heavy_particle_mass_kg=float(heavy_particle_mass_kg),
     )
     stage_payload = {
         "stage": stage_name,
@@ -421,7 +469,14 @@ def _save_stage_artifacts(*, out_dir: Path, stage_name: str, result, B: float) -
             "seed_fraction": float(result.inlet.seed_fraction),
             "mach_in": float(result.inlet.mach),
             "velikhov_margin_in": float(result.inlet.velikhov_margin),
-            "A_in": 1.0,
+            "A_in": float(area_scale),
+        },
+        "objective_profile": objective_profile,
+        "area_scale_m2": float(area_scale),
+        "working_fluid_parameters": {
+            "heavy_particle_mass_kg": float(heavy_particle_mass_kg),
+            "seed_ionization_energy_J": float(seed_ionization_energy_J),
+            "electron_particle_sigma_m2": float(sigma_ep),
         },
         "diagnostics": result.diagnostics,
         "value_terms": value_terms.to_dict(),
@@ -441,6 +496,7 @@ def _save_stage_artifacts(*, out_dir: Path, stage_name: str, result, B: float) -
                 weights=_design_value_weights_lab_poc_v2_objective(),
                 profile_name="lab_poc_v2_objective",
             ).to_dict(),
+            "enthalpy_extraction_objective": _enthalpy_extraction_value_profile(value_terms),
         },
         "plot_stats": {k: float(v) for k, v in plot_stats.items()},
         "dual_status": (getattr(result, "duals", {}) or {}).get("status", ""),
@@ -521,7 +577,15 @@ def _save_baseline_comparison_plot(*, out_dir: Path, baseline_result, final_resu
     return save_path
 
 
-def _make_external_baseline_result(warm: WarmStartProfile, *, B: float):
+def _make_external_baseline_result(
+    warm: WarmStartProfile,
+    *,
+    B: float,
+    area_scale: float = 1.0,
+    heavy_particle_mass_kg: float = M_P,
+    seed_ionization_energy_J: float = E_I,
+    sigma_ep: float = SIGMA_EP,
+):
     inlet = _evaluate_inlet_design_numeric(
         n_p_in=float(warm.inlet_n_p),
         T_e_in=float(warm.inlet_T_e),
@@ -529,6 +593,16 @@ def _make_external_baseline_result(warm: WarmStartProfile, *, B: float):
         I_0=float(warm.inlet_I0),
         seed_fraction=float(warm.inlet_seed_fraction),
         B=float(B),
+        area_scale=float(area_scale),
+        heavy_particle_mass_kg=float(heavy_particle_mass_kg),
+        seed_ionization_energy_J=float(seed_ionization_energy_J),
+        sigma_ep=float(sigma_ep),
+    )
+    stage = _make_stage_function(
+        B=float(B),
+        heavy_particle_mass_kg=float(heavy_particle_mass_kg),
+        seed_ionization_energy_J=float(seed_ionization_energy_J),
+        sigma_ep=float(sigma_ep),
     )
     profile = _evaluate_profile_numeric(
         x=np.asarray(warm.x, dtype=float),
@@ -538,6 +612,10 @@ def _make_external_baseline_result(warm: WarmStartProfile, *, B: float):
         inlet=inlet,
         B=float(B),
         sigma_logA=np.asarray(warm.sigma_logA, dtype=float),
+        stage_fun=stage,
+        heavy_particle_mass_kg=float(heavy_particle_mass_kg),
+        seed_ionization_energy_J=float(seed_ionization_energy_J),
+        sigma_ep=float(sigma_ep),
     )
     return SimpleNamespace(inlet=inlet, **profile)
 
@@ -766,7 +844,13 @@ def _save_stage_record(
     result,
     out_dir_path: Path | None,
     B: float,
+    objective_profile: str = OBJECTIVE_PROFILE_LAB_POC_V2,
+    area_scale: float = 1.0,
+    heavy_particle_mass_kg: float = M_P,
+    seed_ionization_energy_J: float = E_I,
+    sigma_ep: float = SIGMA_EP,
 ) -> dict[str, object]:
+    objective_profile = _normalize_objective_profile(objective_profile)
     record = {
         "name": stage["name"],
         "success": bool(result.success),
@@ -800,7 +884,10 @@ def _save_stage_record(
             "I_0": float(result.inlet.I_0),
             "dot_N": float(result.inlet.dot_N),
             "seed_fraction": float(result.inlet.seed_fraction),
+            "A_in": float(area_scale),
         },
+        "objective_profile": objective_profile,
+        "area_scale_m2": float(area_scale),
     }
     if bool(stage.get("adaptive_bridge", False)):
         record["adaptive_bridge_alpha"] = float(stage["adaptive_bridge_alpha"])
@@ -814,6 +901,11 @@ def _save_stage_record(
             stage_name=stage["name"],
             result=result,
             B=float(B),
+            objective_profile=objective_profile,
+            area_scale=float(area_scale),
+            heavy_particle_mass_kg=float(heavy_particle_mass_kg),
+            seed_ionization_energy_J=float(seed_ionization_energy_J),
+            sigma_ep=float(sigma_ep),
         )
     return stages_out[-1]
 
@@ -840,6 +932,11 @@ def _run_stage(
     inlet_margin_mode: str,
     B: float,
     L: float,
+    objective_profile: str = OBJECTIVE_PROFILE_LAB_POC_V2,
+    area_scale: float = 1.0,
+    heavy_particle_mass_kg: float = M_P,
+    seed_ionization_energy_J: float = E_I,
+    sigma_ep: float = SIGMA_EP,
 ):
     return optimize_area_profile(
         n_p_in_guess=float(n_p_in_guess),
@@ -861,6 +958,11 @@ def _run_stage(
         B=float(B),
         length=float(L),
         warm_profile=warm_profile,
+        objective_profile=str(objective_profile),
+        area_scale=float(area_scale),
+        heavy_particle_mass_kg=float(heavy_particle_mass_kg),
+        seed_ionization_energy_J=float(seed_ionization_energy_J),
+        sigma_ep=float(sigma_ep),
         **{
             k: v
             for k, v in stage.items()
@@ -960,13 +1062,26 @@ def run_continuation(
     adaptive_bridge_count: int = 0,
     adaptive_bridge_max_count: int = 0,
     warm_profile: WarmStartProfile | None = None,
+    objective_profile: str = OBJECTIVE_PROFILE_LAB_POC_V2,
+    area_scale: float = 1.0,
+    heavy_particle_mass_kg: float = M_P,
+    seed_ionization_energy_J: float = E_I,
+    sigma_ep: float = SIGMA_EP,
 ) -> dict[str, object]:
+    objective_profile = _normalize_objective_profile(objective_profile)
     out_dir_path = None if out_dir in (None, "") else Path(out_dir)
     schedule = _stage_schedule() if stage_schedule is None else list(stage_schedule)
     initial_warm_profile_source = "" if warm_profile is None else str(warm_profile.source)
     stages_out: list[dict] = []
     baseline_result = (
-        _make_external_baseline_result(warm_profile, B=float(B))
+        _make_external_baseline_result(
+            warm_profile,
+            B=float(B),
+            area_scale=float(area_scale),
+            heavy_particle_mass_kg=float(heavy_particle_mass_kg),
+            seed_ionization_energy_J=float(seed_ionization_energy_J),
+            sigma_ep=float(sigma_ep),
+        )
         if warm_profile is not None
         else None
     )
@@ -1032,6 +1147,11 @@ def run_continuation(
                         inlet_margin_mode=str(inlet_margin_mode),
                         B=float(B),
                         L=float(L),
+                        objective_profile=objective_profile,
+                        area_scale=float(area_scale),
+                        heavy_particle_mass_kg=float(heavy_particle_mass_kg),
+                        seed_ionization_energy_J=float(seed_ionization_energy_J),
+                        sigma_ep=float(sigma_ep),
                     )
                     bridge_record = _save_stage_record(
                         stages_out=stages_out,
@@ -1040,6 +1160,11 @@ def run_continuation(
                         result=bridge_result,
                         out_dir_path=out_dir_path,
                         B=float(B),
+                        objective_profile=objective_profile,
+                        area_scale=float(area_scale),
+                        heavy_particle_mass_kg=float(heavy_particle_mass_kg),
+                        seed_ionization_energy_J=float(seed_ionization_energy_J),
+                        sigma_ep=float(sigma_ep),
                     )
                     final_attempt = bridge_result
                     if baseline_result is None:
@@ -1123,6 +1248,11 @@ def run_continuation(
             inlet_margin_mode=str(inlet_margin_mode),
             B=float(B),
             L=float(L),
+            objective_profile=objective_profile,
+            area_scale=float(area_scale),
+            heavy_particle_mass_kg=float(heavy_particle_mass_kg),
+            seed_ionization_energy_J=float(seed_ionization_energy_J),
+            sigma_ep=float(sigma_ep),
         )
         stage_record = _save_stage_record(
             stages_out=stages_out,
@@ -1131,6 +1261,11 @@ def run_continuation(
             result=result,
             out_dir_path=out_dir_path,
             B=float(B),
+            objective_profile=objective_profile,
+            area_scale=float(area_scale),
+            heavy_particle_mass_kg=float(heavy_particle_mass_kg),
+            seed_ionization_energy_J=float(seed_ionization_energy_J),
+            sigma_ep=float(sigma_ep),
         )
         final_attempt = result
         if baseline_result is None:
@@ -1168,6 +1303,13 @@ def run_continuation(
         "warm_start_policy": str(warm_start_policy),
         "adaptive_bridge_count": int(adaptive_bridge_count),
         "adaptive_bridge_max_count": int(effective_bridge_max_count),
+        "objective_profile": objective_profile,
+        "area_scale_m2": float(area_scale),
+        "working_fluid_parameters": {
+            "heavy_particle_mass_kg": float(heavy_particle_mass_kg),
+            "seed_ionization_energy_J": float(seed_ionization_energy_J),
+            "electron_particle_sigma_m2": float(sigma_ep),
+        },
         "inlet_design_problem": {
             "np_in": {"guess": float(n_p_in_guess), "min": float(n_p_in_min), "max": float(n_p_in_max)},
             "te_in": {"guess": float(T_e_in_guess), "min": float(T_e_in_min), "max": float(T_e_in_max)},
@@ -1179,7 +1321,7 @@ def run_continuation(
                 "max": float(seed_fraction_max),
             },
             "inlet_margin_mode": str(inlet_margin_mode),
-            "A_in": 1.0,
+            "A_in": float(area_scale),
         },
         "B": float(B),
         "L": float(L),
@@ -1210,7 +1352,9 @@ def run_continuation(
             "T_p_in": float(final_attempt.inlet.T_p),
             "Z_in": float(final_attempt.inlet.Z),
             "J_x_in": float(final_attempt.inlet.J_x),
+            "I_0": float(final_attempt.inlet.I_0),
             "seed_fraction": float(final_attempt.inlet.seed_fraction),
+            "A_in": float(area_scale),
         },
         "final_trusted_inlet_design": None
         if final_trusted is None
@@ -1220,7 +1364,9 @@ def run_continuation(
             "T_p_in": float(final_trusted.inlet.T_p),
             "Z_in": float(final_trusted.inlet.Z),
             "J_x_in": float(final_trusted.inlet.J_x),
+            "I_0": float(final_trusted.inlet.I_0),
             "seed_fraction": float(final_trusted.inlet.seed_fraction),
+            "A_in": float(area_scale),
         },
     }
 
@@ -1261,6 +1407,10 @@ def run_continuation(
 
 def main() -> int:
     args = _build_parser().parse_args()
+    heavy_particle_mass_kg = float(M_P if args.heavy_particle_mass_kg is None else args.heavy_particle_mass_kg)
+    seed_ionization_energy_J = float(E_I if args.seed_ionization_energy_J is None else args.seed_ionization_energy_J)
+    sigma_ep = float(SIGMA_EP if args.electron_particle_sigma_m2 is None else args.electron_particle_sigma_m2)
+    area_scale = float(args.area_scale_m2)
     warm_profile = None
     if args.warm_profile_npz:
         warm_profile = load_warm_profile_npz(
@@ -1281,6 +1431,8 @@ def main() -> int:
             seed_fraction_min=float(args.seed_fraction_min),
             seed_fraction_max=float(args.seed_fraction_max),
             B=float(args.B),
+            area_scale=area_scale,
+            normalize_inlet_area=bool(np.isclose(area_scale, 1.0, rtol=1e-12, atol=1e-15)),
         )
     run_length = (
         float(args.L)
@@ -1315,6 +1467,11 @@ def main() -> int:
         adaptive_bridge_count=int(args.adaptive_bridge_count),
         adaptive_bridge_max_count=int(args.adaptive_bridge_max_count),
         warm_profile=warm_profile,
+        objective_profile=str(args.objective_profile),
+        area_scale=area_scale,
+        heavy_particle_mass_kg=heavy_particle_mass_kg,
+        seed_ionization_energy_J=seed_ionization_energy_J,
+        sigma_ep=sigma_ep,
     )
     print(json.dumps(payload, ensure_ascii=False, indent=2))
     return 0

@@ -6,6 +6,8 @@ from typing import Any, Dict
 
 import numpy as np
 
+from v6_core.local_algebraic_closure import K_B, M_P
+
 
 MU0 = 4.0e-7 * math.pi
 
@@ -46,6 +48,10 @@ class DesignValueTerms:
     outlet_delta_ratio: float
     outlet_f_ion: float
     outlet_mhd_output_per_100MWe: float
+    mhd_output_power_MWe: float
+    inlet_enthalpy_flux_MW: float
+    outlet_enthalpy_extraction_ratio: float
+    outlet_enthalpy_extraction_percent: float
     inlet_delta_ratio: float
     inlet_mach: float
     magnetic_field_T: float
@@ -141,6 +147,23 @@ def cumulative_mhd_output_power_MWe(*, x, A, J_x, E_x) -> np.ndarray:
         dx = float(x[i] - x[i - 1])
         out[i] = out[i - 1] + 0.5 * dx * (power_density[i - 1] + power_density[i])
     return out
+
+
+def inlet_stagnation_enthalpy_flux_W(
+    *,
+    n_p_in: float,
+    T_p_in: float,
+    T_e_in: float,
+    n_e_in: float,
+    v_p_in: float,
+    A_in: float,
+    heavy_particle_mass_kg: float = M_P,
+) -> float:
+    thermal_density = 2.5 * K_B * (
+        float(n_p_in) * float(T_p_in) + float(n_e_in) * float(T_e_in)
+    )
+    kinetic_density = 0.5 * float(heavy_particle_mass_kg) * float(n_p_in) * float(v_p_in) * float(v_p_in)
+    return float(A_in) * float(v_p_in) * (thermal_density + kinetic_density)
 
 
 def trim_profile_to_mhd_target(
@@ -322,6 +345,8 @@ def compute_design_value_terms(
     E_x,
     B,
     seed_fraction: float,
+    v_p=None,
+    heavy_particle_mass_kg: float = M_P,
 ) -> DesignValueTerms:
     x = _to_float_array(x)
     T_e = _to_float_array(T_e)
@@ -332,9 +357,12 @@ def compute_design_value_terms(
     A = _to_float_array(A)
     J_x = _to_float_array(J_x)
     E_x = _to_float_array(E_x)
+    v_p_arr = None if v_p is None else _to_float_array(v_p)
 
     if len(x) == 0:
         raise ValueError("profile is empty")
+    if v_p_arr is not None and v_p_arr.shape != x.shape:
+        raise ValueError("v_p must be omitted or a same-shape 1D array")
 
     B_arr = np.asarray(B, dtype=float)
     if B_arr.ndim == 0:
@@ -349,7 +377,27 @@ def compute_design_value_terms(
     inlet_delta_ratio = float(T_e[0] / max(T_p[0], 1e-30) - 1.0)
     seed_density_out = float(seed_fraction) * float(n_p[-1])
     outlet_f_ion = _safe_ratio(float(n_e[-1]), seed_density_out)
-    outlet_mhd_output_per_100MWe = float(np.trapezoid(-A * J_x * E_x, x)) / 1e8
+    mhd_output_power_W = float(np.trapezoid(-A * J_x * E_x, x))
+    mhd_output_power_MWe = mhd_output_power_W / 1e6
+    outlet_mhd_output_per_100MWe = mhd_output_power_W / 1e8
+    if v_p_arr is None:
+        inlet_enthalpy_flux_MW = float("nan")
+        outlet_enthalpy_extraction_ratio = float("nan")
+    else:
+        inlet_enthalpy_flux_W = inlet_stagnation_enthalpy_flux_W(
+            n_p_in=float(n_p[0]),
+            T_p_in=float(T_p[0]),
+            T_e_in=float(T_e[0]),
+            n_e_in=float(n_e[0]),
+            v_p_in=float(v_p_arr[0]),
+            A_in=float(A[0]),
+            heavy_particle_mass_kg=float(heavy_particle_mass_kg),
+        )
+        inlet_enthalpy_flux_MW = inlet_enthalpy_flux_W / 1e6
+        outlet_enthalpy_extraction_ratio = _safe_ratio(
+            mhd_output_power_W,
+            inlet_enthalpy_flux_W,
+        )
     length_m = float(x[-1] - x[0]) if len(x) >= 2 else 0.0
 
     return DesignValueTerms(
@@ -358,6 +406,10 @@ def compute_design_value_terms(
         outlet_delta_ratio=outlet_delta_ratio,
         outlet_f_ion=outlet_f_ion,
         outlet_mhd_output_per_100MWe=outlet_mhd_output_per_100MWe,
+        mhd_output_power_MWe=mhd_output_power_MWe,
+        inlet_enthalpy_flux_MW=inlet_enthalpy_flux_MW,
+        outlet_enthalpy_extraction_ratio=outlet_enthalpy_extraction_ratio,
+        outlet_enthalpy_extraction_percent=100.0 * outlet_enthalpy_extraction_ratio,
         inlet_delta_ratio=inlet_delta_ratio,
         inlet_mach=float(mach[0]),
         magnetic_field_T=B_mag,

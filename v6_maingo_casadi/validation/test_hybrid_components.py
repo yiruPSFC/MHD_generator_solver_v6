@@ -297,6 +297,16 @@ class HybridComponentTests(unittest.TestCase):
             float(seed.area_design_nominal.a3),
         )
 
+    def test_legacy_area_reference_seed_is_rejected(self):
+        payload = json.loads(BASELINE_SUMMARY.read_text(encoding="utf-8"))
+        payload["source_alignment"]["area_reference_mode"] = "multiplicative"
+        payload["area_reference"] = {"enabled": True}
+        with tempfile.TemporaryDirectory() as tmpdir:
+            summary_path = Path(tmpdir) / "legacy_area_reference_summary.json"
+            summary_path.write_text(json.dumps(payload), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "legacy reference-geometry area semantics"):
+                BaselineSeed.from_summary(summary_path)
+
     def test_npz_payload_is_compatible_with_casadi_warm_loader(self):
         seed = BaselineSeed.from_summary(BASELINE_SUMMARY)
         runner = CasadiCoarseEvaluator(baseline=seed, n_intervals=80)
@@ -337,6 +347,48 @@ class HybridComponentTests(unittest.TestCase):
             )
         self.assertEqual(warm.x.size, 81)
         self.assertEqual(warm.sigma_logA.size, 80)
+
+    def test_physical_npz_handoff_preserves_area_and_total_current(self):
+        x = np.linspace(0.0, 0.191, 3)
+        A = np.array([0.0069, 0.01, 0.02], dtype=float)
+        total_current = 2553.871602675433
+        J_x = total_current / A
+        with tempfile.TemporaryDirectory() as tmpdir:
+            warm_path = Path(tmpdir) / "physical_profile.npz"
+            np.savez(
+                warm_path,
+                x=x,
+                n_p=np.full_like(x, 4.7e24),
+                T_e=np.full_like(x, 8000.0),
+                A=A,
+                Z=np.full_like(x, 180.0),
+                J_x=J_x,
+                seed_fraction=np.full_like(x, 8.0e-4),
+            )
+            warm = load_warm_profile_npz(
+                warm_path,
+                n_p_in_guess=4.7e24,
+                n_p_in_min=4.0e24,
+                n_p_in_max=5.0e24,
+                T_e_in_guess=8000.0,
+                T_e_in_min=7000.0,
+                T_e_in_max=9000.0,
+                Z_in_guess=180.0,
+                Z_in_min=160.0,
+                Z_in_max=200.0,
+                J_x_in_guess=total_current,
+                J_x_in_min=2000.0,
+                J_x_in_max=3000.0,
+                seed_fraction_guess=8.0e-4,
+                seed_fraction_min=1.0e-4,
+                seed_fraction_max=1.0e-3,
+                B=3.0,
+                area_scale=0.0069,
+                normalize_inlet_area=False,
+            )
+        self.assertAlmostEqual(float(warm.A[0]), 0.0069)
+        self.assertAlmostEqual(float(warm.A[-1]), 0.02)
+        self.assertAlmostEqual(float(warm.inlet_I0), total_current)
 
     def test_enthalpy_extraction_objective_reports_percent_score(self):
         seed = BaselineSeed.from_summary(BASELINE_SUMMARY)

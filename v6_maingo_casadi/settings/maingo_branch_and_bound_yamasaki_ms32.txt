@@ -1,0 +1,9 @@
+# Branch-and-bound settings with a larger root-node multistart incumbent search.
+#
+# This keeps PRE_pureMultistart off, so successful local searches only provide
+# an incumbent before MAiNGO continues into the B&B tree.
+
+PRE_pureMultistart                     0
+PRE_maxLocalSearches                   32
+PRE_printEveryLocalSearch              1
+PRE_obbtMaxRounds                      0

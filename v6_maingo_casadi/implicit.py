@@ -298,6 +298,9 @@ def _build_coarse_result_from_state_trajectory(
     min_g_nodes = float(np.min(np.asarray([item["G"] for item in closures], dtype=float)))
     min_g_midpoints = float(np.min(np.asarray([item["G"] for item in midpoint_closures], dtype=float)))
     min_g_all = min(min_g_nodes, min_g_midpoints)
+    min_tp_nodes = float(np.min(np.asarray([item["T_p"] for item in closures], dtype=float)))
+    min_tp_midpoints = float(np.min(np.asarray([item["T_p"] for item in midpoint_closures], dtype=float)))
+    min_tp_all = min(min_tp_nodes, min_tp_midpoints)
     raw_design_score = float(
         _design_score_generic(
             ops=ops,
@@ -330,6 +333,7 @@ def _build_coarse_result_from_state_trajectory(
         "A": A_nodes,
         "sigma_logA": sigma_nodes,
         "T_p": np.asarray([item["T_p"] for item in closures], dtype=float),
+        "T_p_midpoint": np.asarray([item["T_p"] for item in midpoint_closures], dtype=float),
         "v_p": np.asarray([item["v_p"] for item in closures], dtype=float),
         "n_e": np.asarray([item["n_e"] for item in closures], dtype=float),
         "beta": np.asarray([item["beta"] for item in closures], dtype=float),
@@ -373,6 +377,8 @@ def _build_coarse_result_from_state_trajectory(
     value_terms_dict["outlet_to_inlet_area_ratio"] = float(arrays["A"][-1]) / max(float(arrays["A"][0]), _EPS)
     value_terms_dict["velikhov_margin_penalty"] = float(velikhov_penalty)
     value_terms_dict["raw_design_score"] = float(raw_design_score)
+    value_terms_dict["min_T_p_midpoint"] = float(min_tp_midpoints)
+    value_terms_dict["min_T_p_all_checks"] = float(min_tp_all)
     value_terms_dict["min_velikhov_margin_midpoint"] = float(min_g_midpoints)
     value_profile = _value_profile_dict(
         value_terms,
@@ -388,7 +394,9 @@ def _build_coarse_result_from_state_trajectory(
             and np.all(np.isfinite(eq_arr))
             and np.isfinite(design_score)
         ),
-        "min_T_p": float(np.min(arrays["T_p"])),
+        "min_T_p": float(min_tp_nodes),
+        "min_T_p_midpoint": float(min_tp_midpoints),
+        "min_T_p_all_checks": float(min_tp_all),
         "min_velikhov_margin": float(np.min(arrays["velikhov_margin"])),
         "min_velikhov_margin_midpoint": float(np.min(arrays["velikhov_margin_midpoint"])),
         "min_velikhov_margin_all_checks": float(min_g_all),

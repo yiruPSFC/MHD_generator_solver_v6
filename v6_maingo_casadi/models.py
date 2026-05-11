@@ -88,6 +88,20 @@ def _extract_search_window_sections(payload: dict[str, Any]) -> tuple[dict[str, 
     return dict(inlet_payload), dict(area_payload)
 
 
+def _reject_legacy_area_reference_payload(*, summary_path: Path, payload: dict[str, Any], source_alignment: dict[str, Any]):
+    legacy_markers = []
+    if source_alignment.get("area_reference_mode"):
+        legacy_markers.append("source_alignment.area_reference_mode")
+    if "area_reference" in payload:
+        legacy_markers.append("area_reference")
+    if legacy_markers:
+        raise ValueError(
+            "legacy reference-geometry area semantics are no longer supported "
+            f"({', '.join(legacy_markers)} found in {summary_path}). Regenerate the seed so "
+            "aligned_area_window contains direct log-area spline coordinates fitted from the warm profile."
+        )
+
+
 def _canonicalize_inlet_window_payload(payload: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
     windows: dict[str, Any] = {}
     unknown: list[str] = []
@@ -169,6 +183,11 @@ class BaselineSeed:
         source_alignment = dict(summary.get("source_alignment", {}) or {})
         if not source_alignment:
             raise ValueError("baseline summary is missing source_alignment.")
+        _reject_legacy_area_reference_payload(
+            summary_path=summary_path,
+            payload=summary,
+            source_alignment=source_alignment,
+        )
         warm_profile_npz_path = Path(str(source_alignment.get("warm_profile_npz", "")))
         if not warm_profile_npz_path.is_absolute():
             warm_profile_npz_path = (REPO_DIR / warm_profile_npz_path).resolve()
@@ -189,7 +208,6 @@ class BaselineSeed:
             )
         schedule = [dict(item) for item in list(summary.get("schedule", []) or [])]
         length = float(summary.get("L", 5.4))
-        legacy_area_reference_mode = str(source_alignment.get("area_reference_mode", "")).strip().lower()
         with np.load(warm_profile_npz_path) as warm_data:
             warm_x = np.asarray(warm_data["x"], dtype=float)
             warm_A = np.asarray(warm_data["A"], dtype=float)
@@ -208,23 +226,11 @@ class BaselineSeed:
                     )
         area_window_payload = dict(source_alignment.get("aligned_area_window", {}) or {})
         if area_window_payload:
-            projected_area_values = area_design.to_dict()
-            # Older Yamasaki seed JSON used these windows as deviations around
-            # a reference geometry. Migrate them to direct spline-coordinate
-            # windows when reading those artifacts.
-            legacy_shift = {
-                key: (
-                    float(projected_area_values[key])
-                    if legacy_area_reference_mode == "multiplicative"
-                    else 0.0
-                )
-                for key in ("a1", "a2", "a3")
-            }
             area_design_windows = {
                 key: {
-                    "guess": float(area_window_payload[key]["guess"]) + legacy_shift[key],
-                    "min": float(area_window_payload[key]["min"]) + legacy_shift[key],
-                    "max": float(area_window_payload[key]["max"]) + legacy_shift[key],
+                    "guess": float(area_window_payload[key]["guess"]),
+                    "min": float(area_window_payload[key]["min"]),
+                    "max": float(area_window_payload[key]["max"]),
                 }
                 for key in ("a1", "a2", "a3")
             }
@@ -362,6 +368,11 @@ class BaselineSeed:
     def with_search_window_overrides(self, payload: dict[str, Any]) -> "BaselineSeed":
         if not isinstance(payload, dict):
             raise ValueError("search window override payload must be a JSON object.")
+        _reject_legacy_area_reference_payload(
+            summary_path=Path("<search-window override>"),
+            payload=payload,
+            source_alignment=dict(payload.get("source_alignment", {}) or {}),
+        )
         inlet_payload, area_payload = _extract_search_window_sections(payload)
         inlet_windows = {key: dict(value) for key, value in self.inlet_windows.items()}
         area_windows = {key: dict(value) for key, value in self.area_design_windows.items()}
@@ -546,7 +557,8 @@ class HybridRunResult:
     maingo_best: CoarseProfileResult
     handoff_bounds: dict[str, dict[str, float]]
     maingo_summary_path: Path
-    maingo_best_profile_path: Path
+    maingo_coarse_profile_path: Path
+    maingo_handoff_profile_path: Path
     continuation_out_dir: Path
     continuation_summary: dict[str, Any]
     hybrid_summary_path: Path
@@ -576,7 +588,8 @@ class HybridRunResult:
             },
             "artifacts": {
                 "maingo_summary_json": str(self.maingo_summary_path),
-                "maingo_best_profile_npz": str(self.maingo_best_profile_path),
+                "maingo_coarse_profile_npz": str(self.maingo_coarse_profile_path),
+                "maingo_handoff_profile_npz": str(self.maingo_handoff_profile_path),
                 "hybrid_summary_json": str(self.hybrid_summary_path),
                 "continuation_out_dir": str(self.continuation_out_dir),
             },

@@ -9,8 +9,8 @@ Hybrid MAiNGO + CasADi workflow:
 3. repair the accepted coarse path when needed with a local CasADi Newton
    projection and baseline-to-incumbent homotopy,
 4. export the best MAiNGO profile as a warm-start NPZ,
-5. hand that profile into `v6_casadi_v2.run_continuation(...)` for local
-   refinement when the run uses the same normalized-area convention.
+5. hand that profile into the area-scale-aware `v6_casadi_v2.run_continuation(...)`
+   for local refinement when requested.
 
 ## Decision Variables
 
@@ -29,6 +29,12 @@ while allowing the outlet area to remain an independent third area degree of
 freedom. The physical inlet area is separate: `A_in = baseline.area_scale_m2`.
 For old `v6_casadi_v2`-derived baselines this is `1.0`; for physical benchmark
 seeds, such as Yamasaki 2004, it is the throat area in square meters.
+
+`a1/a2/a3` are always direct spline coordinates in this module. Historical
+Yamasaki seed files that used `area_reference_mode` or `area_reference` as
+reference-geometry perturbations are intentionally rejected; regenerate those
+seeds with `cases/yamasaki2004/build_seed.py` so the fitted paper geometry is
+encoded directly in `aligned_area_window`.
 
 The production MAiNGO problem keeps the global search low-dimensional: five
 inlet/load variables plus three area variables. It does not expose every
@@ -147,7 +153,8 @@ them to the new folder when needed.
 Main outputs:
 
 - `maingo_summary.json`
-- `maingo_best_profile.npz`
+- `maingo_coarse_profile.npz`: the MAiNGO coarse-grid profile actually checked by the reduced problem
+- `maingo_handoff_profile.npz`: the dense exported profile used for handoff/postcheck
 - `hybrid_summary.json`
 - `continuation/`
 
@@ -189,12 +196,10 @@ accepts legacy `jx_in`/`J_x_in` keys because older normalized summaries used
 that name, but in this package those aliases are interpreted as `I_0`, not as a
 physical current-density window.
 
-The current `v6_casadi_v2` continuation handoff is deliberately skipped when
-`baseline.area_scale_m2 != 1.0`. That downstream workflow fixes `A_in = 1` and
-uses `J_x_in` as the normalized inlet intensity, so handing a physical-area
-MAiNGO profile into it would mix total-current and current-density conventions.
-For physical benchmarks, treat the MAiNGO coarse result and its NPZ as the
-trusted artifact unless a future area-scale-aware continuation workflow is used.
+The `v6_casadi_v2` continuation handoff now carries `objective_profile`,
+`area_scale_m2`, and working-fluid constants through the warm-profile loader and
+stage solves. Physical-area handoffs should preserve `A[0] = area_scale_m2` and
+infer total current as `I_0 = J_x[0] * A[0]`.
 
 When a result looks suspicious, check these fields first:
 
@@ -202,7 +207,9 @@ When a result looks suspicious, check these fields first:
 - `maingo_summary.json -> coarse_best.inlet_design.A_in`
 - `maingo_summary.json -> coarse_best.inlet_design.I_0_A`
 - `maingo_summary.json -> coarse_best.inlet_design.J_x_in_A_m2`
-- `maingo_best_profile.npz -> A[0]` and `J_x[0]`
+- `maingo_coarse_profile.npz -> A[0]` and `J_x[0]`
+- `maingo_handoff_profile.npz -> A[0]` and `J_x[0]`
+- `maingo_summary.json -> objective_profile`
 - `hybrid_summary.json -> continuation.skipped` and `continuation.skip_reason`
 
 If a downstream artifact says `A_in = 1.0`, it is in the normalized-area

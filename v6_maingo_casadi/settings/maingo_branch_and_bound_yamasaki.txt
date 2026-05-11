@@ -1,0 +1,10 @@
+# Branch-and-bound settings for Yamasaki mesh-refinement checks.
+#
+# PRE_pureMultistart must stay off here: local searches may still be used as
+# incumbent heuristics, but MAiNGO should continue into the B&B tree and report
+# lower-bound / optimality-gap diagnostics.
+
+PRE_pureMultistart                     0
+PRE_maxLocalSearches                   8
+PRE_printEveryLocalSearch              1
+PRE_obbtMaxRounds                      0

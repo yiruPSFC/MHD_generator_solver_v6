@@ -48,6 +48,25 @@ _FION_MAX = 1.0 - 1e-12
 _SAHA_K_MIN = 1e-100
 _DEFAULT_SEED_FRACTION_GUESS = 1e-4
 _A_IN = 1.0
+OBJECTIVE_PROFILE_LAB_POC_V2 = "lab_poc_v2"
+OBJECTIVE_PROFILE_ENTHALPY_EXTRACTION = "enthalpy_extraction"
+OBJECTIVE_PROFILES = (OBJECTIVE_PROFILE_LAB_POC_V2, OBJECTIVE_PROFILE_ENTHALPY_EXTRACTION)
+
+
+def _normalize_objective_profile(objective_profile: str) -> str:
+    profile = str(objective_profile or OBJECTIVE_PROFILE_LAB_POC_V2).strip().lower()
+    aliases = {
+        "lab": OBJECTIVE_PROFILE_LAB_POC_V2,
+        "lab_poc": OBJECTIVE_PROFILE_LAB_POC_V2,
+        "lab_poc_v2_objective": OBJECTIVE_PROFILE_LAB_POC_V2,
+        "enthalpy": OBJECTIVE_PROFILE_ENTHALPY_EXTRACTION,
+        "enthalpy_extraction_percent": OBJECTIVE_PROFILE_ENTHALPY_EXTRACTION,
+        "enthalpy_extraction_objective": OBJECTIVE_PROFILE_ENTHALPY_EXTRACTION,
+    }
+    profile = aliases.get(profile, profile)
+    if profile not in OBJECTIVE_PROFILES:
+        raise ValueError(f"unknown objective_profile={objective_profile!r}; expected one of {OBJECTIVE_PROFILES!r}")
+    return profile
 
 
 @dataclass(frozen=True)
@@ -191,6 +210,22 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--ipopt-max-iter", type=int, default=1000)
     p.add_argument("--ipopt-tol", type=float, default=1e-7)
     p.add_argument("--objective-weight", type=float, default=1.0)
+    p.add_argument(
+        "--objective-profile",
+        type=str,
+        default=OBJECTIVE_PROFILE_LAB_POC_V2,
+        choices=OBJECTIVE_PROFILES,
+        help="stage objective profile; enthalpy_extraction maximizes percent inlet stagnation enthalpy extracted",
+    )
+    p.add_argument(
+        "--area-scale-m2",
+        type=float,
+        default=_A_IN,
+        help="physical inlet area used by A[0], dot_N, current density, and enthalpy-flux semantics",
+    )
+    p.add_argument("--heavy-particle-mass-kg", type=float, default=M_P)
+    p.add_argument("--seed-ionization-energy-J", type=float, default=E_I)
+    p.add_argument("--electron-particle-sigma-m2", type=float, default=SIGMA_EP)
     p.add_argument("--out-json", type=str, default="")
     p.add_argument("--out-npz", type=str, default="")
     return p
@@ -264,25 +299,31 @@ def _fraction_near_bounds(values: np.ndarray, *, lower: float, upper: float) -> 
     return near_lower, near_upper, min(1.0, near_lower + near_upper)
 
 
-def _saha_n_e_symbolic(n_p, T_e, seed_fraction):
+def _saha_n_e_symbolic(n_p, T_e, seed_fraction, *, seed_ionization_energy_J: float = E_I):
     n_p_safe = ca.fmax(n_p, 1.0)
     T_e_safe = ca.fmax(T_e, 1.0)
     seed_safe = ca.fmax(seed_fraction, 1e-12)
     saha_a = 2.0 * math.pi * M_E * K_B * T_e_safe / (H_P * H_P)
-    saha_k = (saha_a ** 1.5) * ca.exp(-E_I / (K_B * T_e_safe))
+    saha_k = (saha_a ** 1.5) * ca.exp(-float(seed_ionization_energy_J) / (K_B * T_e_safe))
     saha_k_safe = ca.fmax(saha_k, _SAHA_K_MIN)
     n_s = seed_safe * n_p_safe
     return 2.0 * n_s / (1.0 + ca.sqrt(1.0 + 4.0 * n_s / saha_k_safe))
 
 
-def _beta_symbolic(n_p, T_e, *, B: float):
+def _beta_symbolic(n_p, T_e, *, B: float, sigma_ep: float = SIGMA_EP):
     n_p_safe = ca.fmax(n_p, 1.0)
     T_e_safe = ca.fmax(T_e, 1.0)
     v_te = ca.sqrt(2.0 * K_B * T_e_safe / M_E)
-    return E_CHARGE * float(B) / (M_E * n_p_safe * SIGMA_EP * v_te + _EPS)
+    return E_CHARGE * float(B) / (M_E * n_p_safe * float(sigma_ep) * v_te + _EPS)
 
 
-def _make_stage_function(*, B: float) -> ca.Function:
+def _make_stage_function(
+    *,
+    B: float,
+    heavy_particle_mass_kg: float = M_P,
+    seed_ionization_energy_J: float = E_I,
+    sigma_ep: float = SIGMA_EP,
+) -> ca.Function:
     x = ca.SX.sym("x", 3)
     sigma = ca.SX.sym("sigma")
     params = ca.SX.sym("params", 3)
@@ -298,9 +339,19 @@ def _make_stage_function(*, B: float) -> ca.Function:
     T_e_safe = ca.fmax(T_e, 1.0)
     A_safe = ca.fmax(A, 1e-12)
 
-    beta = _beta_symbolic(n_p_safe, T_e_safe, B=float(B))
-    n_e = _saha_n_e_symbolic(n_p_safe, T_e_safe, seed_fraction)
-    eta = M_E * n_p_safe * SIGMA_EP * ca.sqrt(2.0 * K_B * T_e_safe / M_E) / (E_CHARGE * E_CHARGE * n_e + _EPS)
+    mass = float(heavy_particle_mass_kg)
+    ionization_energy = float(seed_ionization_energy_J)
+    sigma_ep_value = float(sigma_ep)
+    beta = _beta_symbolic(n_p_safe, T_e_safe, B=float(B), sigma_ep=sigma_ep_value)
+    n_e = _saha_n_e_symbolic(
+        n_p_safe,
+        T_e_safe,
+        seed_fraction,
+        seed_ionization_energy_J=ionization_energy,
+    )
+    eta = M_E * n_p_safe * sigma_ep_value * ca.sqrt(2.0 * K_B * T_e_safe / M_E) / (
+        E_CHARGE * E_CHARGE * n_e + _EPS
+    )
     q = E_CHARGE * n_e * dot_N / (I_0 * n_p_safe + _EPS)
     b2 = beta * beta
     Z = b2 * (q - 1.0) - 1.0
@@ -310,7 +361,7 @@ def _make_stage_function(*, B: float) -> ca.Function:
     F = b2 * (b2 + one_plus_z * one_plus_z) / (den * den + _EPS)
 
     v_p = dot_N / (n_p_safe * A_safe)
-    T_p = T_e_safe - M_P * v_p * v_p * F / (3.0 * K_B)
+    T_p = T_e_safe - mass * v_p * v_p * F / (3.0 * K_B)
     T_p_safe_for_math = ca.fmax(T_p, _TP_MIN)
     dTp_dnp = ca.gradient(T_p, n_p)
     dTp_dTe = ca.gradient(T_p, T_e)
@@ -320,13 +371,13 @@ def _make_stage_function(*, B: float) -> ca.Function:
     J_x = I_0 / A_safe
     J_y = -beta * one_plus_z / (den + _EPS) * jfac
     E_x = -b2 * Z / (den + _EPS) * eta * jfac
-    nu_E = eta * 2.0 * E_CHARGE * E_CHARGE * n_e / M_P
+    nu_E = eta * 2.0 * E_CHARGE * E_CHARGE * n_e / mass
 
     dA_dx = sigma * A_safe
 
-    M11 = (-M_P * v_p * v_p + K_B * T_p) + K_B * n_p_safe * dTp_dnp
+    M11 = (-mass * v_p * v_p + K_B * T_p) + K_B * n_p_safe * dTp_dnp
     M12 = K_B * n_p_safe * dTp_dTe
-    M13 = K_B * n_p_safe * dTp_dA - M_P * n_p_safe * v_p * v_p / A_safe
+    M13 = K_B * n_p_safe * dTp_dA - mass * n_p_safe * v_p * v_p / A_safe
 
     E11 = -T_p + 1.5 * n_p_safe * dTp_dnp
     E12 = 1.5 * n_p_safe * dTp_dTe
@@ -340,7 +391,7 @@ def _make_stage_function(*, B: float) -> ca.Function:
     dn_dx = (rhs_m * E12 - M12 * rhs_e) / det_safe
     dTe_dx = (M11 * rhs_e - rhs_m * E11) / det_safe
 
-    c_s = ca.sqrt((5.0 / 3.0) * K_B * T_p_safe_for_math / M_P + _EPS)
+    c_s = ca.sqrt((5.0 / 3.0) * K_B * T_p_safe_for_math / mass + _EPS)
     mach = v_p / c_s
 
     n_s = ca.fmax(seed_fraction, 1e-12) * n_p_safe
@@ -348,7 +399,7 @@ def _make_stage_function(*, B: float) -> ca.Function:
     f_I = ca.fmin(ca.fmax(f_I_raw, _FION_MIN), _FION_MAX)
     delta_raw = T_e_safe / T_p_safe_for_math - 1.0
     delta = ca.fmax(delta_raw, _DELTA_MIN)
-    alpha = (K_B * T_e_safe / (2.0 * E_I)) * (2.0 - f_I) / (1.0 - f_I + _EPS)
+    alpha = (K_B * T_e_safe / (2.0 * ionization_energy)) * (2.0 - f_I) / (1.0 - f_I + _EPS)
     G = 4.0 * alpha * (2.0 + 1.0 / delta) * (
         1.0 + alpha * (1.0 + 1.0 / delta)
     ) - b2
@@ -365,29 +416,43 @@ def _evaluate_inlet_design_numeric(
     I_0: float,
     seed_fraction: float,
     B: float,
+    area_scale: float = _A_IN,
+    heavy_particle_mass_kg: float = M_P,
+    seed_ionization_energy_J: float = E_I,
+    sigma_ep: float = SIGMA_EP,
 ) -> InletDesign:
-    n_e_in = float(_saha_n_e_numeric(n_p_in, T_e_in, seed_fraction))
-    beta_in = float(_beta_numeric(n_p_in, T_e_in, B=float(B)))
+    n_e_in = float(
+        _saha_n_e_numeric(
+            n_p_in,
+            T_e_in,
+            seed_fraction,
+            seed_ionization_energy_J=float(seed_ionization_energy_J),
+        )
+    )
+    beta_in = float(_beta_numeric(n_p_in, T_e_in, B=float(B), sigma_ep=float(sigma_ep)))
     b2 = beta_in * beta_in
     den = _safe_signed_scalar(b2 + 1.0 + float(Z_in))
     v_in = float(I_0) * den / (b2 * E_CHARGE * n_e_in + _EPS)
-    dot_N = float(n_p_in) * v_in * _A_IN
+    dot_N = float(n_p_in) * v_in * float(area_scale)
     one_plus_z = 1.0 + float(Z_in)
     F = b2 * (b2 + one_plus_z * one_plus_z) / (den * den + _EPS)
-    T_p_in = float(T_e_in) - M_P * v_in * v_in * F / (3.0 * K_B)
-    c_s = math.sqrt((5.0 / 3.0) * K_B * max(T_p_in, _TP_MIN) / M_P + _EPS)
+    mass = float(heavy_particle_mass_kg)
+    T_p_in = float(T_e_in) - mass * v_in * v_in * F / (3.0 * K_B)
+    c_s = math.sqrt((5.0 / 3.0) * K_B * max(T_p_in, _TP_MIN) / mass + _EPS)
     mach = v_in / max(c_s, _EPS)
     n_s = max(float(seed_fraction) * float(n_p_in), 1e-30)
     f_I = min(max(n_e_in / n_s, _FION_MIN), _FION_MAX)
     delta = max(float(T_e_in) / max(T_p_in, _TP_MIN) - 1.0, _DELTA_MIN)
-    alpha = (K_B * float(T_e_in) / (2.0 * E_I)) * (2.0 - f_I) / (1.0 - f_I + _EPS)
+    alpha = (K_B * float(T_e_in) / (2.0 * float(seed_ionization_energy_J))) * (2.0 - f_I) / (
+        1.0 - f_I + _EPS
+    )
     G = 4.0 * alpha * (2.0 + 1.0 / delta) * (1.0 + alpha * (1.0 + 1.0 / delta)) - b2
     return InletDesign(
         n_p=float(n_p_in),
         T_e=float(T_e_in),
         T_p=float(T_p_in),
         Z=float(Z_in),
-        J_x=float(I_0),
+        J_x=float(I_0) / max(float(area_scale), _EPS),
         I_0=float(I_0),
         dot_N=float(dot_N),
         v_in=float(v_in),
@@ -397,22 +462,28 @@ def _evaluate_inlet_design_numeric(
     )
 
 
-def _saha_n_e_numeric(n_p: float, T_e: float, seed_fraction: float) -> float:
+def _saha_n_e_numeric(
+    n_p: float,
+    T_e: float,
+    seed_fraction: float,
+    *,
+    seed_ionization_energy_J: float = E_I,
+) -> float:
     n_p_safe = max(float(n_p), 1.0)
     T_e_safe = max(float(T_e), 1.0)
     seed_safe = max(float(seed_fraction), 1e-12)
     saha_a = 2.0 * math.pi * M_E * K_B * T_e_safe / (H_P * H_P)
-    saha_k = (saha_a ** 1.5) * math.exp(-E_I / (K_B * T_e_safe))
+    saha_k = (saha_a ** 1.5) * math.exp(-float(seed_ionization_energy_J) / (K_B * T_e_safe))
     saha_k_safe = max(saha_k, _SAHA_K_MIN)
     n_s = seed_safe * n_p_safe
     return 2.0 * n_s / (1.0 + math.sqrt(1.0 + 4.0 * n_s / saha_k_safe))
 
 
-def _beta_numeric(n_p: float, T_e: float, *, B: float) -> float:
+def _beta_numeric(n_p: float, T_e: float, *, B: float, sigma_ep: float = SIGMA_EP) -> float:
     n_p_safe = max(float(n_p), 1.0)
     T_e_safe = max(float(T_e), 1.0)
     v_te = math.sqrt(2.0 * K_B * T_e_safe / M_E)
-    return E_CHARGE * float(B) / (M_E * n_p_safe * SIGMA_EP * v_te + _EPS)
+    return E_CHARGE * float(B) / (M_E * n_p_safe * float(sigma_ep) * v_te + _EPS)
 
 
 def _project_inlet_z_guess_to_margin(
@@ -425,6 +496,10 @@ def _project_inlet_z_guess_to_margin(
     I_0: float,
     seed_fraction: float,
     B: float,
+    area_scale: float = _A_IN,
+    heavy_particle_mass_kg: float = M_P,
+    seed_ionization_energy_J: float = E_I,
+    sigma_ep: float = SIGMA_EP,
     sample_count: int = 33,
     bisection_steps: int = 80,
 ) -> float:
@@ -454,6 +529,10 @@ def _project_inlet_z_guess_to_margin(
                 I_0=float(I_0),
                 seed_fraction=float(seed_fraction),
                 B=float(B),
+                area_scale=float(area_scale),
+                heavy_particle_mass_kg=float(heavy_particle_mass_kg),
+                seed_ionization_energy_J=float(seed_ionization_energy_J),
+                sigma_ep=float(sigma_ep),
             )
         except Exception:
             continue
@@ -498,6 +577,10 @@ def _project_inlet_z_guess_to_margin(
             I_0=float(I_0),
             seed_fraction=float(seed_fraction),
             B=float(B),
+            area_scale=float(area_scale),
+            heavy_particle_mass_kg=float(heavy_particle_mass_kg),
+            seed_ionization_energy_J=float(seed_ionization_energy_J),
+            sigma_ep=float(sigma_ep),
         )
         g_m = float(inlet_m.velikhov_margin)
         if not np.isfinite(g_m):
@@ -522,6 +605,10 @@ def _build_integrated_warm_start(
     I_0_guess: float,
     seed_fraction_guess: float,
     B: float,
+    area_scale: float = _A_IN,
+    heavy_particle_mass_kg: float = M_P,
+    seed_ionization_energy_J: float = E_I,
+    sigma_ep: float = SIGMA_EP,
 ) -> WarmStartProfile | None:
     try:
         projected_Z = _project_inlet_z_guess_to_margin(
@@ -533,6 +620,10 @@ def _build_integrated_warm_start(
             I_0=float(I_0_guess),
             seed_fraction=float(seed_fraction_guess),
             B=float(B),
+            area_scale=float(area_scale),
+            heavy_particle_mass_kg=float(heavy_particle_mass_kg),
+            seed_ionization_energy_J=float(seed_ionization_energy_J),
+            sigma_ep=float(sigma_ep),
         )
         inlet = _evaluate_inlet_design_numeric(
             n_p_in=float(n_p_in_guess),
@@ -541,17 +632,26 @@ def _build_integrated_warm_start(
             I_0=float(I_0_guess),
             seed_fraction=float(seed_fraction_guess),
             B=float(B),
+            area_scale=float(area_scale),
+            heavy_particle_mass_kg=float(heavy_particle_mass_kg),
+            seed_ionization_energy_J=float(seed_ionization_energy_J),
+            sigma_ep=float(sigma_ep),
         )
         x_nodes = np.asarray(x, dtype=float)
         if x_nodes.ndim != 1 or x_nodes.size < 2 or np.any(np.diff(x_nodes) <= 0.0):
             return None
 
-        stage = _make_stage_function(B=float(B))
+        stage = _make_stage_function(
+            B=float(B),
+            heavy_particle_mass_kg=float(heavy_particle_mass_kg),
+            seed_ionization_energy_J=float(seed_ionization_energy_J),
+            sigma_ep=float(sigma_ep),
+        )
         params = np.array([inlet.dot_N, inlet.I_0, inlet.seed_fraction], dtype=float)
         n_points = x_nodes.size
         n_p = np.full(n_points, np.nan, dtype=float)
         T_e = np.full(n_points, np.nan, dtype=float)
-        A = np.full(n_points, _A_IN, dtype=float)
+        A = np.full(n_points, float(area_scale), dtype=float)
         sigma = np.zeros(n_points - 1, dtype=float)
         n_p[0] = float(inlet.n_p)
         T_e[0] = float(inlet.T_e)
@@ -562,7 +662,7 @@ def _build_integrated_warm_start(
 
         for k in range(n_points - 1):
             dx = float(x_nodes[k + 1] - x_nodes[k])
-            state_k = np.array([n_p[k], T_e[k], _A_IN], dtype=float)
+            state_k = np.array([n_p[k], T_e[k], float(area_scale)], dtype=float)
             k1 = rhs(state_k)
             k2 = rhs(state_k + 0.5 * dx * k1)
             k3 = rhs(state_k + 0.5 * dx * k2)
@@ -603,8 +703,19 @@ def _build_global_marginal_warm_start(
     seed_fraction_guess: float,
     B: float,
     length: float,
+    area_scale: float = _A_IN,
+    heavy_particle_mass_kg: float = M_P,
+    seed_ionization_energy_J: float = E_I,
+    sigma_ep: float = SIGMA_EP,
 ) -> WarmStartProfile | None:
     try:
+        if (
+            not np.isclose(float(area_scale), float(_A_IN), rtol=1e-12, atol=1e-15)
+            or not np.isclose(float(heavy_particle_mass_kg), float(M_P), rtol=1e-12, atol=0.0)
+            or not np.isclose(float(seed_ionization_energy_J), float(E_I), rtol=1e-12, atol=0.0)
+            or not np.isclose(float(sigma_ep), float(SIGMA_EP), rtol=1e-12, atol=0.0)
+        ):
+            return None
         projected_Z = _project_inlet_z_guess_to_margin(
             n_p_in=float(n_p_in_guess),
             T_e_in=float(T_e_in_guess),
@@ -614,6 +725,10 @@ def _build_global_marginal_warm_start(
             I_0=float(I_0_guess),
             seed_fraction=float(seed_fraction_guess),
             B=float(B),
+            area_scale=float(area_scale),
+            heavy_particle_mass_kg=float(heavy_particle_mass_kg),
+            seed_ionization_energy_J=float(seed_ionization_energy_J),
+            sigma_ep=float(sigma_ep),
         )
         inlet = _evaluate_inlet_design_numeric(
             n_p_in=float(n_p_in_guess),
@@ -622,6 +737,10 @@ def _build_global_marginal_warm_start(
             I_0=float(I_0_guess),
             seed_fraction=float(seed_fraction_guess),
             B=float(B),
+            area_scale=float(area_scale),
+            heavy_particle_mass_kg=float(heavy_particle_mass_kg),
+            seed_ionization_energy_J=float(seed_ionization_energy_J),
+            sigma_ep=float(sigma_ep),
         )
 
         x_nodes = np.asarray(x, dtype=float)
@@ -636,7 +755,7 @@ def _build_global_marginal_warm_start(
             Z_in=np.array([inlet.Z], dtype=float),
             T_p_in=np.array([inlet.T_p], dtype=float),
             T_e_in=np.array([inlet.T_e], dtype=float),
-            A_in=np.array([_A_IN], dtype=float),
+            A_in=np.array([float(area_scale)], dtype=float),
             dx=dx,
             store_profiles=True,
         )
@@ -682,13 +801,14 @@ def _build_constant_warm_start(
     Z_in_guess: float,
     I_0_guess: float,
     seed_fraction_guess: float,
+    area_scale: float = _A_IN,
 ) -> WarmStartProfile:
     n_points = x.size
     return WarmStartProfile(
         x=x.copy(),
         n_p=np.full(n_points, float(n_p_in_guess), dtype=float),
         T_e=np.full(n_points, float(T_e_in_guess), dtype=float),
-        A=np.full(n_points, _A_IN, dtype=float),
+        A=np.full(n_points, float(area_scale), dtype=float),
         sigma_logA=np.zeros(n_points - 1, dtype=float),
         inlet_n_p=float(n_p_in_guess),
         inlet_T_e=float(T_e_in_guess),
@@ -708,6 +828,10 @@ def _evaluate_profile_numeric(
     inlet: InletDesign,
     B: float,
     sigma_logA: np.ndarray,
+    stage_fun: ca.Function | None = None,
+    heavy_particle_mass_kg: float = M_P,
+    seed_ionization_energy_J: float = E_I,
+    sigma_ep: float = SIGMA_EP,
 ) -> dict[str, np.ndarray]:
     n_points = x.size
 
@@ -724,34 +848,57 @@ def _evaluate_profile_numeric(
     G = np.full(n_points, np.nan, dtype=float)
 
     for i in range(n_points):
-        vals = local_closure_global_with_partials(
-            n_p=float(n_p[i]),
-            T_e=float(T_e[i]),
-            A=float(A[i]),
-            dot_N=inlet.dot_N,
-            I_0=inlet.I_0,
-            seed_fraction=inlet.seed_fraction,
-            B=float(B),
-            sigma_ep=SIGMA_EP,
-        )
-        v_p[i] = float(vals[0])
-        n_e[i] = float(vals[1])
-        beta[i] = float(vals[2])
-        eta[i] = float(vals[3])
-        Z[i] = float(vals[4])
-        T_p[i] = float(vals[5])
-        G[i] = float(vals[13])
-        J_x[i], J_y[i], E_x[i], _ = compute_currents_fields_global(
-            v_p=float(v_p[i]),
-            n_e=float(n_e[i]),
-            beta=float(beta[i]),
-            eta=float(eta[i]),
-            Z=float(Z[i]),
-            I_0=float(inlet.I_0),
-            A=float(A[i]),
-        )
-        c_s = math.sqrt((5.0 / 3.0) * K_B * max(T_p[i], _TP_MIN) / M_P)
-        mach[i] = v_p[i] / max(c_s, _EPS)
+        if stage_fun is not None:
+            sigma_idx = min(max(i, 0), max(sigma_logA.size - 1, 0))
+            sigma_i = float(sigma_logA[sigma_idx]) if sigma_logA.size else 0.0
+            out = np.asarray(
+                stage_fun(
+                    np.array([float(n_p[i]), float(T_e[i]), float(A[i])], dtype=float),
+                    sigma_i,
+                    np.array([float(inlet.dot_N), float(inlet.I_0), float(inlet.seed_fraction)], dtype=float),
+                ),
+                dtype=float,
+            ).reshape(-1)
+            T_p[i] = float(out[3])
+            v_p[i] = float(out[4])
+            n_e[i] = float(out[5])
+            beta[i] = float(out[6])
+            eta[i] = float(out[7])
+            Z[i] = float(out[8])
+            J_x[i] = float(out[9])
+            J_y[i] = float(out[10])
+            E_x[i] = float(out[11])
+            mach[i] = float(out[12])
+            G[i] = float(out[13])
+        else:
+            vals = local_closure_global_with_partials(
+                n_p=float(n_p[i]),
+                T_e=float(T_e[i]),
+                A=float(A[i]),
+                dot_N=inlet.dot_N,
+                I_0=inlet.I_0,
+                seed_fraction=inlet.seed_fraction,
+                B=float(B),
+                sigma_ep=float(sigma_ep),
+            )
+            v_p[i] = float(vals[0])
+            n_e[i] = float(vals[1])
+            beta[i] = float(vals[2])
+            eta[i] = float(vals[3])
+            Z[i] = float(vals[4])
+            T_p[i] = float(vals[5])
+            G[i] = float(vals[13])
+            J_x[i], J_y[i], E_x[i], _ = compute_currents_fields_global(
+                v_p=float(v_p[i]),
+                n_e=float(n_e[i]),
+                beta=float(beta[i]),
+                eta=float(eta[i]),
+                Z=float(Z[i]),
+                I_0=float(inlet.I_0),
+                A=float(A[i]),
+            )
+            c_s = math.sqrt((5.0 / 3.0) * K_B * max(T_p[i], _TP_MIN) / float(heavy_particle_mass_kg))
+            mach[i] = v_p[i] / max(c_s, _EPS)
 
     return {
         "x": x,
@@ -816,13 +963,14 @@ def _project_warm_profile_to_bounds(
     inlet_Z_bounds: tuple[float, float],
     inlet_I0_bounds: tuple[float, float],
     inlet_seed_fraction_bounds: tuple[float, float],
+    area_scale: float = _A_IN,
 ) -> WarmStartProfile:
     n_p = np.clip(np.asarray(warm.n_p, dtype=float), n_p_floor, n_p_ceil)
     T_e = np.clip(np.asarray(warm.T_e, dtype=float), T_e_floor, T_e_ceil)
     A = np.clip(np.asarray(warm.A, dtype=float), A_floor, A_ceil)
     n_p[0] = float(np.clip(warm.inlet_n_p, *inlet_n_p_bounds))
     T_e[0] = float(np.clip(warm.inlet_T_e, *inlet_T_e_bounds))
-    A[0] = _A_IN
+    A[0] = float(area_scale)
     sigma = np.diff(np.log(np.maximum(A, 1e-20))) / np.diff(np.asarray(warm.x, dtype=float))
     sigma = np.clip(sigma, sigma_floor, sigma_ceil)
     return WarmStartProfile(
@@ -1176,6 +1324,11 @@ def optimize_area_profile(
     ipopt_max_iter: int = 1000,
     ipopt_tol: float = 1e-7,
     objective_weight: float = 1.0,
+    objective_profile: str = OBJECTIVE_PROFILE_LAB_POC_V2,
+    area_scale: float = _A_IN,
+    heavy_particle_mass_kg: float = M_P,
+    seed_ionization_energy_J: float = E_I,
+    sigma_ep: float = SIGMA_EP,
 ) -> OptimizedAreaProfile:
     if length <= 0.0:
         raise ValueError("length must be positive.")
@@ -1209,12 +1362,26 @@ def optimize_area_profile(
         raise ValueError("seed_fraction_guess must lie within (seed_fraction_min, seed_fraction_max).")
     if inlet_margin_mode not in ("equality", "lower-bound"):
         raise ValueError("inlet_margin_mode must be either 'equality' or 'lower-bound'.")
+    objective_profile = _normalize_objective_profile(objective_profile)
+    if area_scale <= 0.0:
+        raise ValueError("area_scale must be positive.")
+    if heavy_particle_mass_kg <= 0.0:
+        raise ValueError("heavy_particle_mass_kg must be positive.")
+    if seed_ionization_energy_J <= 0.0:
+        raise ValueError("seed_ionization_energy_J must be positive.")
+    if sigma_ep <= 0.0:
+        raise ValueError("sigma_ep must be positive.")
     if feasibility_thresholds is None:
         feasibility_thresholds = FeasibilityThresholds()
 
     x_nodes = np.linspace(0.0, float(length), int(n_intervals) + 1, dtype=float)
     dx = float(length) / int(n_intervals)
-    stage = _make_stage_function(B=float(B))
+    stage = _make_stage_function(
+        B=float(B),
+        heavy_particle_mass_kg=float(heavy_particle_mass_kg),
+        seed_ionization_energy_J=float(seed_ionization_energy_J),
+        sigma_ep=float(sigma_ep),
+    )
 
     if warm_profile is not None:
         warm = _resample_warm_profile(warm_profile, x_nodes)
@@ -1230,6 +1397,10 @@ def optimize_area_profile(
             seed_fraction_guess=float(seed_fraction_guess),
             B=float(B),
             length=float(length),
+            area_scale=float(area_scale),
+            heavy_particle_mass_kg=float(heavy_particle_mass_kg),
+            seed_ionization_energy_J=float(seed_ionization_energy_J),
+            sigma_ep=float(sigma_ep),
         )
         integrated_warm = _build_integrated_warm_start(
             x=x_nodes,
@@ -1241,6 +1412,10 @@ def optimize_area_profile(
             I_0_guess=float(J_x_in_guess),
             seed_fraction_guess=float(seed_fraction_guess),
             B=float(B),
+            area_scale=float(area_scale),
+            heavy_particle_mass_kg=float(heavy_particle_mass_kg),
+            seed_ionization_energy_J=float(seed_ionization_energy_J),
+            sigma_ep=float(sigma_ep),
         )
         warm = (
             marginal_warm
@@ -1254,14 +1429,15 @@ def optimize_area_profile(
                 Z_in_guess=float(Z_in_guess),
                 I_0_guess=float(J_x_in_guess),
                 seed_fraction_guess=float(seed_fraction_guess),
+                area_scale=float(area_scale),
             )
         )
 
     np_scale = float(max(n_p_in_guess, 1e10))
     te_scale = float(max(T_e_in_guess, te_min))
-    A_scale = _A_IN
-    A_floor = float(A_min_ratio) * _A_IN
-    A_ceil = float(A_max_ratio) * _A_IN
+    A_scale = float(area_scale)
+    A_floor = float(A_min_ratio) * float(area_scale)
+    A_ceil = float(A_max_ratio) * float(area_scale)
     global_np_floor = float(np_min_ratio) * float(n_p_in_min)
     global_np_ceil = float(np_max_ratio) * float(n_p_in_max)
     global_te_ceil = float(te_max_ratio) * float(T_e_in_max)
@@ -1280,6 +1456,7 @@ def optimize_area_profile(
         inlet_Z_bounds=(float(Z_in_min), float(Z_in_max)),
         inlet_I0_bounds=(float(J_x_in_min), float(J_x_in_max)),
         inlet_seed_fraction_bounds=(float(seed_fraction_min), float(seed_fraction_max)),
+        area_scale=float(area_scale),
     )
 
     opti = ca.Opti()
@@ -1366,21 +1543,30 @@ def optimize_area_profile(
         _subject_to(None, opti.bounded(0.0, S_node, float(margin_slack_max)))
         _subject_to(None, opti.bounded(0.0, S_mid, float(margin_slack_max)))
 
-    beta_in = _beta_symbolic(inlet_n_p, inlet_T_e, B=float(B))
-    n_e_in = _saha_n_e_symbolic(inlet_n_p, inlet_T_e, inlet_seed_fraction)
+    beta_in = _beta_symbolic(inlet_n_p, inlet_T_e, B=float(B), sigma_ep=float(sigma_ep))
+    n_e_in = _saha_n_e_symbolic(
+        inlet_n_p,
+        inlet_T_e,
+        inlet_seed_fraction,
+        seed_ionization_energy_J=float(seed_ionization_energy_J),
+    )
     b2_in = beta_in * beta_in
     one_plus_z_in = 1.0 + inlet_Z
     den_in = b2_in + one_plus_z_in
     v_in = inlet_I0 * den_in / (b2_in * E_CHARGE * n_e_in + _EPS)
-    dot_N = inlet_n_p * v_in * _A_IN
+    dot_N = inlet_n_p * v_in * float(area_scale)
     F_in = b2_in * (b2_in + one_plus_z_in * one_plus_z_in) / (den_in * den_in + _EPS)
-    T_p_in = inlet_T_e - M_P * v_in * v_in * F_in / (3.0 * K_B)
-    c_s_in = ca.sqrt((5.0 / 3.0) * K_B * ca.fmax(T_p_in, _TP_MIN) / M_P + _EPS)
+    T_p_in = inlet_T_e - float(heavy_particle_mass_kg) * v_in * v_in * F_in / (3.0 * K_B)
+    c_s_in = ca.sqrt(
+        (5.0 / 3.0) * K_B * ca.fmax(T_p_in, _TP_MIN) / float(heavy_particle_mass_kg) + _EPS
+    )
     mach_in = v_in / c_s_in
     seed_density_in = ca.fmax(inlet_seed_fraction * inlet_n_p, 1e-30)
     f_I_in = ca.fmin(ca.fmax(n_e_in / seed_density_in, _FION_MIN), _FION_MAX)
     delta_in = ca.fmax(inlet_T_e / ca.fmax(T_p_in, _TP_MIN) - 1.0, _DELTA_MIN)
-    alpha_in = (K_B * inlet_T_e / (2.0 * E_I)) * (2.0 - f_I_in) / (1.0 - f_I_in + _EPS)
+    alpha_in = (K_B * inlet_T_e / (2.0 * float(seed_ionization_energy_J))) * (2.0 - f_I_in) / (
+        1.0 - f_I_in + _EPS
+    )
     G_in = 4.0 * alpha_in * (2.0 + 1.0 / delta_in) * (1.0 + alpha_in * (1.0 + 1.0 / delta_in)) - b2_in
 
     _subject_to("Inlet_Tp_lower", T_p_in >= float(tp_min))
@@ -1499,14 +1685,10 @@ def optimize_area_profile(
     if mach_max is not None:
         _subject_to("Mach_upper_node", out_end[12] <= float(mach_max))
 
-    weights = _design_value_weights_lab_poc_v2_objective()
     outlet_T_e = te_scale * T_e_hat[-1]
     outlet_T_p = out_end[3]
     outlet_n_p = np_scale * n_p_hat[-1]
     outlet_n_e = out_end[5]
-    outlet_delta_te_per_kK = (outlet_T_e - inlet_T_e) / 1e3
-    outlet_delta_ratio = outlet_T_e / ca.fmax(outlet_T_p, _TP_MIN) - 1.0
-    outlet_f_ion = outlet_n_e / ca.fmax(inlet_seed_fraction * outlet_n_p, 1e-30)
     power_density_samples = []
     for j, out_j in enumerate(node_outputs):
         A_j = A_scale * A_hat[j]
@@ -1514,18 +1696,28 @@ def optimize_area_profile(
     outlet_mhd_output_per_100MWe = 0.0
     for j in range(n_intervals):
         outlet_mhd_output_per_100MWe += 0.5 * dx * (power_density_samples[j] + power_density_samples[j + 1])
-    inlet_delta_ratio = inlet_T_e / ca.fmax(T_p_in, _TP_MIN) - 1.0
-    device_length_per_5m = float(length) / 5.0
-    design_score = (
-        float(weights.outlet_delta_te_per_kK) * outlet_delta_te_per_kK
-        + float(weights.outlet_delta_ratio) * outlet_delta_ratio
-        + float(weights.outlet_f_ion) * outlet_f_ion
-        + float(weights.outlet_mhd_output_per_100MWe) * outlet_mhd_output_per_100MWe
-        - float(weights.inlet_delta_ratio_penalty) * inlet_delta_ratio
-        - float(weights.inlet_mach_penalty) * mach_in
-        - float(weights.magnetic_field_T_penalty) * abs(float(B))
-        - float(weights.device_length_per_5m_penalty) * device_length_per_5m
-    )
+    if objective_profile == OBJECTIVE_PROFILE_ENTHALPY_EXTRACTION:
+        inlet_thermal_density = 2.5 * K_B * (inlet_n_p * T_p_in + n_e_in * inlet_T_e)
+        inlet_kinetic_density = 0.5 * float(heavy_particle_mass_kg) * inlet_n_p * v_in * v_in
+        inlet_enthalpy_flux_W = float(area_scale) * v_in * (inlet_thermal_density + inlet_kinetic_density)
+        design_score = 100.0 * (outlet_mhd_output_per_100MWe * 1e8) / ca.fmax(inlet_enthalpy_flux_W, _EPS)
+    else:
+        weights = _design_value_weights_lab_poc_v2_objective()
+        outlet_delta_te_per_kK = (outlet_T_e - inlet_T_e) / 1e3
+        outlet_delta_ratio = outlet_T_e / ca.fmax(outlet_T_p, _TP_MIN) - 1.0
+        outlet_f_ion = outlet_n_e / ca.fmax(inlet_seed_fraction * outlet_n_p, 1e-30)
+        inlet_delta_ratio = inlet_T_e / ca.fmax(T_p_in, _TP_MIN) - 1.0
+        device_length_per_5m = float(length) / 5.0
+        design_score = (
+            float(weights.outlet_delta_te_per_kK) * outlet_delta_te_per_kK
+            + float(weights.outlet_delta_ratio) * outlet_delta_ratio
+            + float(weights.outlet_f_ion) * outlet_f_ion
+            + float(weights.outlet_mhd_output_per_100MWe) * outlet_mhd_output_per_100MWe
+            - float(weights.inlet_delta_ratio_penalty) * inlet_delta_ratio
+            - float(weights.inlet_mach_penalty) * mach_in
+            - float(weights.magnetic_field_T_penalty) * abs(float(B))
+            - float(weights.device_length_per_5m_penalty) * device_length_per_5m
+        )
     objective += -float(objective_weight) * design_score
 
     opti.minimize(objective)
@@ -1587,6 +1779,10 @@ def optimize_area_profile(
         I_0=inlet_I0_sol,
         seed_fraction=inlet_seed_fraction_sol,
         B=float(B),
+        area_scale=float(area_scale),
+        heavy_particle_mass_kg=float(heavy_particle_mass_kg),
+        seed_ionization_energy_J=float(seed_ionization_energy_J),
+        sigma_ep=float(sigma_ep),
     )
 
     n_p_sol = np_scale * X_sol[0, :]
@@ -1601,6 +1797,10 @@ def optimize_area_profile(
         inlet=inlet,
         B=float(B),
         sigma_logA=U_sol,
+        stage_fun=stage,
+        heavy_particle_mass_kg=float(heavy_particle_mass_kg),
+        seed_ionization_energy_J=float(seed_ionization_energy_J),
+        sigma_ep=float(sigma_ep),
     )
     stage_params_numeric = np.array([inlet.dot_N, inlet.I_0, inlet.seed_fraction], dtype=float)
     diagnostics = _compute_feasibility_diagnostics(
@@ -1615,7 +1815,7 @@ def optimize_area_profile(
         velikhov_margin=profile["velikhov_margin"],
         stage_fun=stage,
         stage_params=stage_params_numeric,
-        inlet_target=(float(inlet.n_p), float(inlet.T_e), _A_IN),
+        inlet_target=(float(inlet.n_p), float(inlet.T_e), float(area_scale)),
         state_bounds={
             "np_floor": float(np_min_ratio) * float(inlet.n_p),
             "np_ceil": float(np_max_ratio) * float(inlet.n_p),
@@ -1642,6 +1842,11 @@ def optimize_area_profile(
     diagnostics["inlet_velikhov_target"] = float(min_margin)
     diagnostics["inlet_velikhov_violation"] = float(inlet_margin_violation)
     diagnostics["inlet_velikhov_equality_abs"] = abs(float(inlet.velikhov_margin) - float(min_margin))
+    diagnostics["objective_profile"] = objective_profile
+    diagnostics["area_scale_m2"] = float(area_scale)
+    diagnostics["heavy_particle_mass_kg"] = float(heavy_particle_mass_kg)
+    diagnostics["seed_ionization_energy_J"] = float(seed_ionization_energy_J)
+    diagnostics["electron_particle_sigma_m2"] = float(sigma_ep)
     diagnostics["max_constraint_violation"] = max(
         float(diagnostics["max_constraint_violation"]),
         float(inlet_margin_violation),
@@ -1667,7 +1872,12 @@ def optimize_area_profile(
         "dot_N": float(inlet.dot_N),
         "mach_in": float(inlet.mach),
         "velikhov_margin_in": float(inlet.velikhov_margin),
-        "A_in": float(_A_IN),
+        "A_in": float(area_scale),
+        "objective_profile": objective_profile,
+        "area_scale_m2": float(area_scale),
+        "heavy_particle_mass_kg": float(heavy_particle_mass_kg),
+        "seed_ionization_energy_J": float(seed_ionization_energy_J),
+        "electron_particle_sigma_m2": float(sigma_ep),
     }
     objective_value = float(value_fn(objective))
     dual_status = "converged" if bool(stats.get("success", False)) else "debug_last_iterate"
@@ -1755,7 +1965,29 @@ def optimize_area_profile(
     )
 
 
-def _payload_from_result(result: OptimizedAreaProfile, B: float) -> dict[str, object]:
+def _enthalpy_extraction_value_profile(value_terms) -> dict[str, object]:
+    score = float(value_terms.outlet_enthalpy_extraction_percent)
+    return {
+        "profile_name": "enthalpy_extraction_objective",
+        "total_score": score,
+        "score_units": "percent_of_inlet_stagnation_enthalpy_flux",
+        "contributions": {"reward_outlet_enthalpy_extraction_percent": score},
+        "terms": value_terms.to_dict(),
+        "weights": {"outlet_enthalpy_extraction_percent": 1.0},
+    }
+
+
+def _payload_from_result(
+    result: OptimizedAreaProfile,
+    B: float,
+    *,
+    objective_profile: str = OBJECTIVE_PROFILE_LAB_POC_V2,
+    heavy_particle_mass_kg: float = M_P,
+    seed_ionization_energy_J: float = E_I,
+    sigma_ep: float = SIGMA_EP,
+    area_scale: float = _A_IN,
+) -> dict[str, object]:
+    objective_profile = _normalize_objective_profile(objective_profile)
     metrics = compute_global_metrics(
         x=result.x,
         A=result.A,
@@ -1779,6 +2011,8 @@ def _payload_from_result(result: OptimizedAreaProfile, B: float) -> dict[str, ob
         E_x=result.E_x,
         B=float(B),
         seed_fraction=result.inlet.seed_fraction,
+        v_p=result.v_p,
+        heavy_particle_mass_kg=float(heavy_particle_mass_kg),
     )
     value_profiles = {
         "delta_te_only": evaluate_design_value(
@@ -1796,6 +2030,7 @@ def _payload_from_result(result: OptimizedAreaProfile, B: float) -> dict[str, ob
             weights=_design_value_weights_lab_poc_v2_objective(),
             profile_name="lab_poc_v2_objective",
         ).to_dict(),
+        "enthalpy_extraction_objective": _enthalpy_extraction_value_profile(value_terms),
     }
     return {
         "ok": bool(result.acceptable),
@@ -1803,9 +2038,19 @@ def _payload_from_result(result: OptimizedAreaProfile, B: float) -> dict[str, ob
         "acceptable": bool(result.acceptable),
         "solver": f"casadi-ipopt-{result.transcription}",
         "return_status": result.return_status,
-        "objective": "maximize_lab_poc_v2_objective",
+        "objective": f"maximize_{objective_profile}",
+        "objective_profile": objective_profile,
         "objective_delta_Te_K": float(result.objective_delta_Te),
         "nlp_objective_value": float(result.objective_value),
+        "objective_score": float(value_profiles["enthalpy_extraction_objective"]["total_score"])
+        if objective_profile == OBJECTIVE_PROFILE_ENTHALPY_EXTRACTION
+        else float(value_profiles["lab_poc_v2_objective"]["total_score"]),
+        "area_scale_m2": float(area_scale),
+        "working_fluid_parameters": {
+            "heavy_particle_mass_kg": float(heavy_particle_mass_kg),
+            "seed_ionization_energy_J": float(seed_ionization_energy_J),
+            "electron_particle_sigma_m2": float(sigma_ep),
+        },
         "warm_start_source": result.warm_start_source,
         "inlet_design": {
             "n_p_in": float(result.inlet.n_p),
@@ -1819,7 +2064,7 @@ def _payload_from_result(result: OptimizedAreaProfile, B: float) -> dict[str, ob
             "seed_fraction": float(result.inlet.seed_fraction),
             "mach_in": float(result.inlet.mach),
             "velikhov_margin_in": float(result.inlet.velikhov_margin),
-            "A_in": float(_A_IN),
+            "A_in": float(area_scale),
             "inlet_margin_mode": str(result.diagnostics.get("inlet_margin_mode", "")),
         },
         "min_velikhov_margin": float(np.nanmin(result.velikhov_margin)),
@@ -1882,8 +2127,21 @@ def main() -> int:
         ipopt_max_iter=int(args.ipopt_max_iter),
         ipopt_tol=float(args.ipopt_tol),
         objective_weight=float(args.objective_weight),
+        objective_profile=str(args.objective_profile),
+        area_scale=float(args.area_scale_m2),
+        heavy_particle_mass_kg=float(args.heavy_particle_mass_kg),
+        seed_ionization_energy_J=float(args.seed_ionization_energy_J),
+        sigma_ep=float(args.electron_particle_sigma_m2),
     )
-    payload = _payload_from_result(result, float(args.B))
+    payload = _payload_from_result(
+        result,
+        float(args.B),
+        objective_profile=str(args.objective_profile),
+        area_scale=float(args.area_scale_m2),
+        heavy_particle_mass_kg=float(args.heavy_particle_mass_kg),
+        seed_ionization_energy_J=float(args.seed_ionization_energy_J),
+        sigma_ep=float(args.electron_particle_sigma_m2),
+    )
     if args.out_json:
         out_path = Path(args.out_json)
         out_path.parent.mkdir(parents=True, exist_ok=True)

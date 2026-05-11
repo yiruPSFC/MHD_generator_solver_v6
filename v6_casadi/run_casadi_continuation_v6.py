@@ -148,88 +148,27 @@ def _dual_npz_payload(result) -> dict[str, np.ndarray]:
     return arrays
 
 
-def _save_dual_plot(*, out_dir: Path, stage_name: str, result) -> Path | None:
-    dual_arrays = dict((getattr(result, "duals", {}) or {}).get("arrays", {}) or {})
-    if not dual_arrays:
-        return None
-
-    import matplotlib
-
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-
-    x_node = np.asarray(result.x, dtype=float)
-    if x_node.size < 2:
-        return None
-    x_mid = 0.5 * (x_node[:-1] + x_node[1:])
-
-    def _x_for(values: np.ndarray) -> np.ndarray:
-        arr = np.asarray(values, dtype=float).reshape(-1)
-        if arr.size == x_node.size:
-            return x_node
-        if arr.size == x_mid.size:
-            return x_mid
-        return np.linspace(float(x_node[0]), float(x_node[-1]), arr.size, dtype=float)
-
-    def _plot_group(ax, names: list[str], title: str) -> None:
-        plotted = False
-        for name in names:
-            values = np.asarray(dual_arrays.get(name, []), dtype=float).reshape(-1)
-            if values.size == 0 or not np.any(np.isfinite(values)):
-                continue
-            ax.plot(_x_for(values), values, lw=1.8, label=name)
-            plotted = True
-        ax.set_title(title)
-        ax.set_xlabel("x (m)")
-        ax.grid(True, alpha=0.3, which="both")
-        if plotted:
-            ax.set_yscale("symlog", linthresh=1e-8, linscale=1.0)
-            ax.legend(loc="best", fontsize=8)
-        else:
-            ax.text(0.5, 0.5, "no active series", transform=ax.transAxes, ha="center", va="center")
-
-    save_path = out_dir / f"{stage_name}_duals.png"
-    fig, axes = plt.subplots(3, 1, figsize=(12, 10), constrained_layout=True)
-    _plot_group(
-        axes[0],
-        ["G_lower_node", "G_lower_mid", "Tp_lower_node", "Tp_lower_mid"],
-        "Path constraint multipliers",
-    )
-    _plot_group(
-        axes[1],
-        ["A_lower_node", "A_upper_node", "sigma_lower_interval", "sigma_upper_interval"],
-        "Area and dlogA/dx bound multipliers",
-    )
-    _plot_group(
-        axes[2],
-        ["Mach_lower_node", "Mach_lower_mid", "Mach_upper_node", "Mach_upper_mid"],
-        "Mach bound multipliers",
-    )
-    status = str((getattr(result, "duals", {}) or {}).get("status", ""))
-    fig.suptitle(f"{stage_name}: IPOPT/CasADi constraint duals ({status})", fontsize=13)
-    fig.savefig(save_path, dpi=180)
-    plt.close(fig)
-    return save_path
-
-
 def _save_stage_artifacts(*, out_dir: Path, stage_name: str, result, B: float) -> dict[str, object]:
     out_dir.mkdir(parents=True, exist_ok=True)
     base = out_dir / stage_name
+    plots_dir = out_dir / "plots"
     npz_path = base.with_suffix(".npz")
-    png_path = base.with_suffix(".png")
+    png_path = (plots_dir / stage_name).with_suffix(".png")
     json_path = base.with_suffix(".json")
 
     np.savez(npz_path, **_profile_payload(result), **_dual_npz_payload(result))
 
+    stage_status = "TRUSTED" if bool(result.success) and bool(result.acceptable) else "FAILED"
     plot_stats = plot_global_results_v6(
         _profile_payload(result),
         png_path,
         B=B,
         seed_fraction=result.inlet.seed_fraction,
         title=(
-            f"{stage_name}: {result.transcription}, status={result.return_status}, "
+            f"{stage_status}: {stage_name}: {result.transcription}, status={result.return_status}, "
             f"acceptable={result.acceptable}, dTe={result.objective_delta_Te:.2f} K"
         ),
+        dual_arrays=(getattr(result, "duals", {}) or {}).get("arrays", {}),
     )
     value_terms = compute_design_value_terms(
         x=result.x,
@@ -271,9 +210,6 @@ def _save_stage_artifacts(*, out_dir: Path, stage_name: str, result, B: float) -
         "npz_path": str(npz_path),
         "plot_path": str(png_path),
     }
-    dual_plot_path = _save_dual_plot(out_dir=out_dir, stage_name=stage_name, result=result)
-    if dual_plot_path is not None:
-        stage_payload["dual_plot_path"] = str(dual_plot_path)
     json_path.write_text(json.dumps(stage_payload, ensure_ascii=False, indent=2), encoding="utf-8")
     return stage_payload
 
@@ -284,7 +220,7 @@ def _save_baseline_comparison_plot(*, out_dir: Path, baseline_result, final_resu
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    save_path = out_dir / "baseline_vs_final.png"
+    save_path = out_dir / "plots" / "baseline_vs_final.png"
     xb = np.asarray(baseline_result.x, dtype=float)
     xf = np.asarray(final_result.x, dtype=float)
     series = [
@@ -430,6 +366,7 @@ def _warm_start_gate(result, *, policy: str) -> tuple[bool, str]:
         return False, "unsupported_profile"
 
     diagnostics = dict(getattr(result, "diagnostics", {}) or {})
+    solver_success = bool(getattr(result, "success", False))
     finite_profile = bool(diagnostics.get("finite_profile", False))
     acceptable = bool(diagnostics.get("acceptable", False))
     regularity_ok = bool(diagnostics.get("regularity_ok", False))
@@ -439,10 +376,14 @@ def _warm_start_gate(result, *, policy: str) -> tuple[bool, str]:
     if policy == "acceptable":
         if not finite_profile:
             return False, "non_finite_profile"
+        if not solver_success:
+            return False, "solver_not_successful"
         return acceptable, "" if acceptable else "unacceptable_profile"
     if policy == "regular":
         if not finite_profile:
             return False, "non_finite_profile"
+        if not solver_success:
+            return False, "solver_not_successful"
         if not acceptable:
             return False, "unacceptable_profile"
         if not regularity_ok:
@@ -620,6 +561,45 @@ def _make_warm_profile(result, *, source: str) -> WarmStartProfile:
     )
 
 
+def _stage_ref(record: dict | None) -> dict[str, object] | None:
+    if record is None:
+        return None
+    out = {
+        "name": str(record.get("name", "")),
+        "success": bool(record.get("success", False)),
+        "acceptable": bool(record.get("acceptable", False)),
+        "return_status": str(record.get("return_status", "")),
+        "objective_delta_Te_K": record.get("objective_delta_Te_K"),
+        "stage_kind": str(record.get("stage_kind", "")),
+        "warm_start_adopted": bool(record.get("warm_start_adopted", False)),
+        "warm_start_rejection_reason": str(record.get("warm_start_rejection_reason", "")),
+    }
+    if "adaptive_bridge_alpha" in record:
+        out["adaptive_bridge_alpha"] = float(record["adaptive_bridge_alpha"])
+        out["adaptive_bridge_target"] = str(record.get("adaptive_bridge_target", ""))
+        out["adaptive_bridge_refinement_round"] = int(record.get("adaptive_bridge_refinement_round", 0))
+    return out
+
+
+def _partition_stage_records(stages: list[dict]) -> dict[str, object]:
+    trusted = [stage for stage in stages if bool(stage.get("warm_start_adopted", False))]
+    failed = [
+        stage
+        for stage in stages
+        if (
+            not bool(stage.get("success", False))
+            or not bool(stage.get("acceptable", False))
+            or not bool(stage.get("warm_start_adopted", False))
+        )
+    ]
+    return {
+        "trusted_stages": [_stage_ref(stage) for stage in trusted],
+        "failed_attempts": [_stage_ref(stage) for stage in failed],
+        "last_trusted_stage": _stage_ref(trusted[-1] if trusted else None),
+        "first_failed_stage": _stage_ref(failed[0] if failed else None),
+    }
+
+
 def _next_bridge_count(current: int, *, max_count: int) -> int:
     if current <= 0 or current >= max_count:
         return current
@@ -650,11 +630,15 @@ def run_continuation(
     warm_profile: WarmStartProfile | None = None
     stages_out: list[dict] = []
     baseline_result = None
-    final = None
+    final_attempt = None
+    final_trusted = None
     stopped_early = False
+    stopped_after_failed_bridge = False
+    bridge_stop: dict[str, object] | None = None
     continued_unacceptable_stages = 0
     last_adopted_stage: dict | None = None
     effective_bridge_max_count = max(int(adaptive_bridge_count), int(adaptive_bridge_max_count))
+    completed_schedule = True
 
     for stage in schedule:
         if adaptive_bridge_count > 0 and warm_profile is not None and last_adopted_stage is not None:
@@ -662,6 +646,9 @@ def run_continuation(
             backup_source_stage = dict(last_adopted_stage)
             current_bridge_count = int(adaptive_bridge_count)
             refinement_round = 0
+            bridge_attempted = False
+            bridge_sequence_completed = False
+            last_failed_bridge_record: dict | None = None
             while current_bridge_count > 0:
                 bridge_sequence = _build_adaptive_bridge_sequence(
                     source_stage=backup_source_stage,
@@ -672,6 +659,7 @@ def run_continuation(
                 if not bridge_sequence:
                     break
 
+                bridge_attempted = True
                 round_warm_profile = backup_warm_profile
                 round_source_stage = dict(backup_source_stage)
                 sequence_completed = True
@@ -698,6 +686,9 @@ def run_continuation(
                         out_dir_path=out_dir_path,
                         B=float(B),
                     )
+                    final_attempt = bridge_result
+                    if baseline_result is None:
+                        baseline_result = bridge_result
                     bridge_adopted, bridge_reason = _warm_start_gate(
                         bridge_result,
                         policy=str(warm_start_policy),
@@ -706,16 +697,19 @@ def run_continuation(
                     bridge_record["warm_start_rejection_reason"] = bridge_reason
                     if not bridge_adopted:
                         sequence_completed = False
+                        last_failed_bridge_record = bridge_record
                         break
                     round_warm_profile = _make_warm_profile(
                         bridge_result,
                         source=f"continuation:{bridge_stage['name']}",
                     )
                     round_source_stage = dict(bridge_stage)
+                    final_trusted = bridge_result
 
                 if sequence_completed:
                     warm_profile = round_warm_profile
                     last_adopted_stage = round_source_stage
+                    bridge_sequence_completed = True
                     break
                 next_bridge_count = _next_bridge_count(
                     int(current_bridge_count),
@@ -725,6 +719,32 @@ def run_continuation(
                     break
                 current_bridge_count = next_bridge_count
                 refinement_round += 1
+            if bridge_attempted and not bridge_sequence_completed:
+                stopped_early = True
+                stopped_after_failed_bridge = True
+                completed_schedule = False
+                bridge_stop = {
+                    "blocked_target_stage": str(stage.get("name", "")),
+                    "reason": "adaptive_bridge_failed_before_target_stage",
+                    "last_trusted_stage": _stage_ref(stages_out[-2] if len(stages_out) >= 2 else None),
+                    "failed_stage": _stage_ref(last_failed_bridge_record),
+                    "max_stable_alpha": None,
+                    "next_failed_alpha": None,
+                }
+                trusted_for_target = [
+                    item
+                    for item in stages_out
+                    if (
+                        bool(item.get("warm_start_adopted", False))
+                        and str(item.get("adaptive_bridge_target", "")) == str(stage.get("name", ""))
+                    )
+                ]
+                if trusted_for_target:
+                    bridge_stop["last_trusted_stage"] = _stage_ref(trusted_for_target[-1])
+                    bridge_stop["max_stable_alpha"] = float(trusted_for_target[-1]["adaptive_bridge_alpha"])
+                if last_failed_bridge_record is not None and "adaptive_bridge_alpha" in last_failed_bridge_record:
+                    bridge_stop["next_failed_alpha"] = float(last_failed_bridge_record["adaptive_bridge_alpha"])
+                break
 
         stage_input_warm_source = "marginal_auto" if warm_profile is None else str(warm_profile.source)
         result = _run_stage(
@@ -748,7 +768,7 @@ def run_continuation(
             out_dir_path=out_dir_path,
             B=float(B),
         )
-        final = result
+        final_attempt = result
         if baseline_result is None:
             baseline_result = result
 
@@ -764,26 +784,43 @@ def run_continuation(
                 source=f"continuation:{stage['name']}",
             )
             last_adopted_stage = dict(stage)
+            final_trusted = result
 
         if (not result.acceptable) and bool(stop_on_unacceptable):
             stopped_early = True
+            completed_schedule = False
             break
         if not result.acceptable:
             continued_unacceptable_stages += 1
 
+    record_partitions = _partition_stage_records(stages_out)
     payload = {
-        "ok": bool(final.acceptable) if final is not None else False,
-        "solver_success": bool(final.success) if final is not None else False,
+        "ok": bool(completed_schedule and final_attempt is not None and final_attempt.acceptable),
+        "solver_success": bool(final_attempt.success) if final_attempt is not None else False,
         "stopped_early": bool(stopped_early),
+        "stopped_after_failed_bridge": bool(stopped_after_failed_bridge),
         "stop_on_unacceptable": bool(stop_on_unacceptable),
         "continued_unacceptable_stages": int(continued_unacceptable_stages),
         "warm_start_policy": str(warm_start_policy),
         "adaptive_bridge_count": int(adaptive_bridge_count),
         "adaptive_bridge_max_count": int(effective_bridge_max_count),
         "stages": stages_out,
-        "final_return_status": "" if final is None else final.return_status,
-        "final_objective_delta_Te_K": None if final is None else float(final.objective_delta_Te),
-        "final_diagnostics": None if final is None else final.diagnostics,
+        **record_partitions,
+        "bridge_stop": bridge_stop,
+        "final_attempt_return_status": "" if final_attempt is None else final_attempt.return_status,
+        "final_attempt_objective_delta_Te_K": None
+        if final_attempt is None
+        else float(final_attempt.objective_delta_Te),
+        "final_attempt_diagnostics": None if final_attempt is None else final_attempt.diagnostics,
+        "final_trusted_return_status": "" if final_trusted is None else final_trusted.return_status,
+        "final_trusted_objective_delta_Te_K": None
+        if final_trusted is None
+        else float(final_trusted.objective_delta_Te),
+        "final_trusted_diagnostics": None if final_trusted is None else final_trusted.diagnostics,
+        # Legacy aliases now refer to the last attempted stage for compatibility.
+        "final_return_status": "" if final_attempt is None else final_attempt.return_status,
+        "final_objective_delta_Te_K": None if final_attempt is None else float(final_attempt.objective_delta_Te),
+        "final_diagnostics": None if final_attempt is None else final_attempt.diagnostics,
     }
 
     if out_json:
@@ -795,26 +832,26 @@ def run_continuation(
         summary_path.parent.mkdir(parents=True, exist_ok=True)
         summary_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    if out_dir_path is not None and final is not None:
+    if out_dir_path is not None and final_trusted is not None:
         final_npz = out_dir_path / "final_acceptable.npz"
-        final_png = out_dir_path / "final_acceptable.png"
-        np.savez(final_npz, **_profile_payload(final), **_dual_npz_payload(final))
+        final_png = out_dir_path / "plots" / "final_acceptable.png"
+        np.savez(final_npz, **_profile_payload(final_trusted), **_dual_npz_payload(final_trusted))
         plot_global_results_v6(
-            _profile_payload(final),
+            _profile_payload(final_trusted),
             final_png,
             B=float(B),
-            seed_fraction=final.inlet.seed_fraction,
+            seed_fraction=final_trusted.inlet.seed_fraction,
             title=(
-                f"final refined profile: {final.transcription}, status={final.return_status}, "
-                f"acceptable={final.acceptable}, dTe={final.objective_delta_Te:.2f} K"
+                f"final trusted profile: {final_trusted.transcription}, status={final_trusted.return_status}, "
+                f"acceptable={final_trusted.acceptable}, dTe={final_trusted.objective_delta_Te:.2f} K"
             ),
+            dual_arrays=(getattr(final_trusted, "duals", {}) or {}).get("arrays", {}),
         )
-        _save_dual_plot(out_dir=out_dir_path, stage_name="final_acceptable", result=final)
         if baseline_result is not None:
             _save_baseline_comparison_plot(
                 out_dir=out_dir_path,
                 baseline_result=baseline_result,
-                final_result=final,
+                final_result=final_trusted,
             )
 
     return payload

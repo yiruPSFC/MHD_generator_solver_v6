@@ -77,6 +77,7 @@ def plot_global_results_v6(
     title: str = "",
     furnace_power_MW: float | None = None,
     steam_cycle_efficiency: float | None = None,
+    dual_arrays: Mapping[str, np.ndarray] | None = None,
 ) -> dict[str, float]:
     x = _to_1d("x", profile["x"])
     n_p = _to_1d("n_p", profile["n_p"])
@@ -163,7 +164,27 @@ def plot_global_results_v6(
         ("wall loading (MW/m^2)", wall_loading, None),
     ]
 
-    fig, axes = plt.subplots(5, 4, figsize=(18, 13), constrained_layout=True)
+    dual_groups = []
+    if dual_arrays:
+        dual_groups = [
+            (
+                "duals: path constraints",
+                ["G_lower_node", "G_lower_mid", "Tp_lower_node", "Tp_lower_mid"],
+            ),
+            (
+                "duals: area / sigma bounds",
+                ["A_lower_node", "A_upper_node", "sigma_lower_interval", "sigma_upper_interval"],
+            ),
+            (
+                "duals: Mach bounds",
+                ["Mach_lower_node", "Mach_lower_mid", "Mach_upper_node", "Mach_upper_mid"],
+            ),
+        ]
+
+    n_panels = len(series) + len(dual_groups)
+    n_cols = 4
+    n_rows = int(np.ceil(n_panels / n_cols))
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(18, 2.6 * n_rows), constrained_layout=True)
     axes_flat = axes.ravel()
 
     for idx, (label, data, yscale) in enumerate(series):
@@ -208,7 +229,35 @@ def plot_global_results_v6(
         ax.set_xlabel("x (mm)")
         ax.grid(True, alpha=0.3, which="both")
 
-    for idx in range(len(series), len(axes_flat)):
+    def _dual_x_for(values: np.ndarray) -> np.ndarray:
+        arr = np.asarray(values, dtype=float).reshape(-1)
+        if arr.size == x.size:
+            return x_mm
+        if arr.size == x.size - 1:
+            return 0.5 * (x_mm[:-1] + x_mm[1:])
+        if arr.size:
+            return np.linspace(float(x_mm[0]), float(x_mm[-1]), arr.size, dtype=float)
+        return np.asarray([], dtype=float)
+
+    for offset, (label, names) in enumerate(dual_groups):
+        ax = axes_flat[len(series) + offset]
+        plotted = False
+        for name in names:
+            values = np.asarray((dual_arrays or {}).get(name, []), dtype=float).reshape(-1)
+            if values.size == 0 or not np.any(np.isfinite(values)):
+                continue
+            ax.plot(_dual_x_for(values), values, lw=1.4, label=name)
+            plotted = True
+        ax.set_title(label, fontsize=10)
+        ax.set_xlabel("x (mm)")
+        ax.grid(True, alpha=0.3, which="both")
+        if plotted:
+            ax.set_yscale("symlog", linthresh=1e-8, linscale=1.0)
+            ax.legend(loc="best", fontsize=7)
+        else:
+            ax.text(0.5, 0.5, "no active dual series", transform=ax.transAxes, ha="center", va="center")
+
+    for idx in range(n_panels, len(axes_flat)):
         axes_flat[idx].axis("off")
 
     if title:

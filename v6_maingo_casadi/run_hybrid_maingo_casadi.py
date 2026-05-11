@@ -28,7 +28,10 @@ def _build_parser() -> argparse.ArgumentParser:
         "--out-dir",
         type=str,
         default=str(Path(__file__).resolve().parent / "outputs" / "hybrid_default"),
-        help="output directory for maingo_summary.json, maingo_best_profile.npz, hybrid_summary.json, and continuation artifacts",
+        help=(
+            "output directory for maingo_summary.json, maingo_coarse_profile.npz, "
+            "maingo_handoff_profile.npz, hybrid_summary.json, and continuation artifacts"
+        ),
     )
     p.add_argument(
         "--coarse-n-intervals",

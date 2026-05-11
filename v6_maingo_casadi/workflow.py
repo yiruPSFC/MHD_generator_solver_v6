@@ -67,6 +67,41 @@ def _write_json(path: str | Path, payload: dict[str, Any]) -> Path:
     return out_path
 
 
+def _physical_handoff_stage_schedule(best: CoarseProfileResult) -> list[dict[str, Any]]:
+    A = np.asarray(best.A, dtype=float)
+    sigma = np.asarray(best.sigma_logA, dtype=float)
+    inlet_A = max(float(A[0]) if A.size else 1.0, 1e-30)
+    max_area_ratio = float(np.nanmax(A) / inlet_A) if A.size else 1.0
+    min_area_ratio = float(np.nanmin(A) / inlet_A) if A.size else 1.0
+    max_sigma = float(np.nanmax(np.abs(sigma))) if sigma.size else 0.0
+    return [
+        {
+            "name": "physical_handoff_enthalpy_trapezoid_track",
+            "n_intervals": int(max(A.size - 1, 2)),
+            "transcription": "trapezoid",
+            "min_margin": 0.0,
+            "mach_min": None,
+            "A_min_ratio": float(max(0.05, 0.95 * min_area_ratio)),
+            "A_max_ratio": float(max(1.2, 1.05 * max_area_ratio)),
+            "max_abs_dlogA_dx": float(max(0.5, 1.05 * max_sigma)),
+            "np_min_ratio": 1e-6,
+            "np_max_ratio": 100.0,
+            "te_min": 100.0,
+            "te_max_ratio": 20.0,
+            "tp_min": 1.0,
+            "smooth_weight": 0.0,
+            "control_slew_weight": 0.0,
+            "control_curvature_weight": 0.0,
+            "state_curvature_weight": 0.0,
+            "warm_profile_track_weight": 1024.0,
+            "warm_control_track_weight": 256.0,
+            "objective_weight": 0.001,
+            "ipopt_max_iter": 1000,
+            "ipopt_tol": 1e-7,
+        }
+    ]
+
+
 def run_hybrid_maingo_casadi(
     *,
     out_dir: str | Path,
@@ -281,12 +316,15 @@ def run_hybrid_maingo_casadi(
         "rk4_benchmark": rk4_benchmark,
         "incumbent_diagnostics": incumbent_result.diagnostics,
         "coarse_best": coarse_best.to_summary_dict(),
+        "handoff_best": handoff_best.to_summary_dict(),
         "handoff_bounds": handoff_bounds,
     }
     maingo_summary_path = _write_json(out_dir_path / "maingo_summary.json", maingo_summary_payload)
 
-    maingo_best_profile_path = out_dir_path / "maingo_best_profile.npz"
-    np.savez(maingo_best_profile_path, **handoff_best.to_npz_payload())
+    maingo_coarse_profile_path = out_dir_path / "maingo_coarse_profile.npz"
+    maingo_handoff_profile_path = out_dir_path / "maingo_handoff_profile.npz"
+    np.savez(maingo_coarse_profile_path, **coarse_best.to_npz_payload())
+    np.savez(maingo_handoff_profile_path, **handoff_best.to_npz_payload())
 
     continuation_out_dir = out_dir_path / "continuation"
     if bool(skip_casadi_handoff):
@@ -296,21 +334,35 @@ def run_hybrid_maingo_casadi(
             "reason": "skip_casadi_handoff",
             "summary_path": None,
         }
-    elif not np.isclose(float(baseline.area_scale_m2), float(_A_IN), rtol=1e-12, atol=1e-15):
+    elif not bool(handoff_best.diagnostics.get("acceptable", False)):
         continuation_payload = {
             "ok": False,
             "skipped": True,
-            "reason": "physical_area_scale_not_supported_by_v6_casadi_v2_handoff",
+            "reason": "handoff_resample_not_acceptable",
             "summary_path": None,
-            "area_scale_m2": float(baseline.area_scale_m2),
+            "handoff_diagnostics": dict(handoff_best.diagnostics),
             "handoff_convention": (
-                "v6_maingo_casadi stores physical A and total I_0, while "
-                "v6_casadi_v2 continuation fixes A_in=1 and names the inlet intensity J_x_in."
+                "CasADi handoff requires the resampled MAiNGO profile to pass the same "
+                "CasADi-free physical checks before any IPOPT polishing is attempted."
             ),
         }
     else:
+        generated_physical_handoff_schedule = (
+            not baseline.schedule
+            and (
+                not np.isclose(float(baseline.area_scale_m2), float(_A_IN), rtol=1e-12, atol=1e-15)
+                or objective_profile != OBJECTIVE_PROFILE_LAB_POC_V2
+            )
+        )
+        continuation_stage_schedule = (
+            _physical_handoff_stage_schedule(handoff_best)
+            if generated_physical_handoff_schedule
+            else [dict(item) for item in baseline.schedule]
+            if baseline.schedule
+            else None
+        )
         warm_profile = load_warm_profile_npz(
-            maingo_best_profile_path,
+            maingo_handoff_profile_path,
             n_p_in_guess=float(handoff_bounds["n_p_in"]["guess"]),
             n_p_in_min=float(handoff_bounds["n_p_in"]["min"]),
             n_p_in_max=float(handoff_bounds["n_p_in"]["max"]),
@@ -327,6 +379,8 @@ def run_hybrid_maingo_casadi(
             seed_fraction_min=float(handoff_bounds["seed_fraction"]["min"]),
             seed_fraction_max=float(handoff_bounds["seed_fraction"]["max"]),
             B=float(baseline.B),
+            area_scale=float(baseline.area_scale_m2),
+            normalize_inlet_area=bool(np.isclose(float(baseline.area_scale_m2), float(_A_IN), rtol=1e-12, atol=1e-15)),
         )
         continuation_payload = run_continuation(
             n_p_in_guess=float(handoff_bounds["n_p_in"]["guess"]),
@@ -347,14 +401,25 @@ def run_hybrid_maingo_casadi(
             inlet_margin_mode="lower-bound",
             B=float(baseline.B),
             L=float(baseline.L),
-            stage_schedule=[dict(item) for item in baseline.schedule],
+            stage_schedule=continuation_stage_schedule,
             out_dir=continuation_out_dir,
             stop_on_unacceptable=True,
             warm_start_policy="regular",
-            adaptive_bridge_count=int(baseline.adaptive_bridge_count),
-            adaptive_bridge_max_count=int(baseline.adaptive_bridge_max_count),
+            adaptive_bridge_count=0
+            if generated_physical_handoff_schedule
+            else int(baseline.adaptive_bridge_count),
+            adaptive_bridge_max_count=0
+            if generated_physical_handoff_schedule
+            else int(baseline.adaptive_bridge_max_count),
             warm_profile=warm_profile,
+            objective_profile=objective_profile,
+            area_scale=float(baseline.area_scale_m2),
+            heavy_particle_mass_kg=float(baseline.working_fluid.heavy_particle_mass_kg),
+            seed_ionization_energy_J=float(baseline.working_fluid.seed_ionization_energy_J),
+            sigma_ep=float(baseline.working_fluid.sigma_ep),
         )
+        if generated_physical_handoff_schedule:
+            continuation_payload["generated_physical_handoff_schedule"] = continuation_stage_schedule
 
     hybrid = HybridRunResult(
         baseline_seed=baseline,
@@ -362,7 +427,8 @@ def run_hybrid_maingo_casadi(
         maingo_best=coarse_best,
         handoff_bounds=handoff_bounds,
         maingo_summary_path=maingo_summary_path,
-        maingo_best_profile_path=maingo_best_profile_path,
+        maingo_coarse_profile_path=maingo_coarse_profile_path,
+        maingo_handoff_profile_path=maingo_handoff_profile_path,
         continuation_out_dir=continuation_out_dir,
         continuation_summary=continuation_payload,
         hybrid_summary_path=out_dir_path / "hybrid_summary.json",
@@ -374,7 +440,8 @@ def run_hybrid_maingo_casadi(
         maingo_best=hybrid.maingo_best,
         handoff_bounds=hybrid.handoff_bounds,
         maingo_summary_path=hybrid.maingo_summary_path,
-        maingo_best_profile_path=hybrid.maingo_best_profile_path,
+        maingo_coarse_profile_path=hybrid.maingo_coarse_profile_path,
+        maingo_handoff_profile_path=hybrid.maingo_handoff_profile_path,
         continuation_out_dir=hybrid.continuation_out_dir,
         continuation_summary=hybrid.continuation_summary,
         hybrid_summary_path=hybrid_summary_path,

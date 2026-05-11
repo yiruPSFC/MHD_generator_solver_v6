@@ -135,9 +135,13 @@ def _seed_from_hybrid_payload(hybrid: dict[str, Any]) -> BaselineSeed:
         overrides["I_0_nominal"] = float(overrides["inlet_windows"]["I_0"]["guess"])
         overrides["seed_fraction_nominal"] = float(overrides["inlet_windows"]["seed_fraction"]["guess"])
 
+    if "area_reference" in baseline_payload:
+        raise ValueError(
+            "legacy baseline_seed.area_reference payload is no longer supported; "
+            "regenerate the seed/run with direct area_design_nominal spline coordinates."
+        )
     area_design = baseline_payload.get("area_design_nominal")
-    legacy_area_reference = bool(dict(baseline_payload.get("area_reference", {}) or {}).get("enabled", False))
-    if area_design and not legacy_area_reference:
+    if area_design:
         overrides["area_design_nominal"] = SplineAreaDesign(
             a1=float(area_design["a1"]),
             a2=float(area_design["a2"]),
@@ -197,8 +201,12 @@ def _decision_from_hybrid(hybrid: dict[str, Any]) -> dict[str, float]:
 def _resolve_profile_path(summary_path: str | Path, hybrid: dict[str, Any]) -> Path | None:
     artifacts = dict(hybrid.get("artifacts", {}) or {})
     candidates = [
+        artifacts.get("maingo_coarse_profile_npz"),
+        artifacts.get("maingo_handoff_profile_npz"),
         artifacts.get("maingo_best_profile_npz"),
         hybrid.get("maingo_best_profile_path"),
+        Path(summary_path).with_name("maingo_coarse_profile.npz"),
+        Path(summary_path).with_name("maingo_handoff_profile.npz"),
         Path(summary_path).with_name("maingo_best_profile.npz"),
     ]
     for candidate in candidates:
@@ -222,7 +230,7 @@ def _load_curve_snapshot(
     profile_path = _resolve_profile_path(summary_path, hybrid)
     if profile_path is None:
         raise FileNotFoundError(
-            "could not find maingo_best_profile.npz from hybrid summary artifacts or next to the summary"
+            "could not find a MAiNGO profile NPZ from hybrid summary artifacts or next to the summary"
         )
     with np.load(profile_path) as data:
         n_p = np.asarray(data["n_p"], dtype=float).reshape(-1)
