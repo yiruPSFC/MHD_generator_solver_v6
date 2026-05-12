@@ -40,6 +40,13 @@ def _build_parser() -> argparse.ArgumentParser:
         help="number of coarse intervals used inside the reduced MAiNGO rollout",
     )
     p.add_argument(
+        "--coarse-model",
+        type=str,
+        default="reduced_implicit",
+        choices=("reduced_implicit", "mach_spline"),
+        help="reduced MAiNGO coarse model: existing area-spline closure or Mach-spline-derived area closure",
+    )
+    p.add_argument(
         "--reduced-implicit-newton-steps",
         type=int,
         default=10,
@@ -60,6 +67,21 @@ def _build_parser() -> argparse.ArgumentParser:
         "--skip-rk4-benchmark",
         action="store_true",
         help="skip the post-hoc RK4 reduced benchmark at the reduced-implicit handoff decision",
+    )
+    p.add_argument(
+        "--mach-reference-profile",
+        type=str,
+        default="",
+        help=(
+            "optional NPZ profile used to project the nominal Mach spline for --coarse-model mach_spline; "
+            "if omitted, the workflow tries to infer one from --initial-solution-json"
+        ),
+    )
+    p.add_argument(
+        "--mach-window-radius",
+        type=float,
+        default=1.0,
+        help="half-width applied around the projected Mach-spline coefficients for --coarse-model mach_spline",
     )
     p.add_argument(
         "--handoff-n-intervals",
@@ -100,6 +122,15 @@ def _build_parser() -> argparse.ArgumentParser:
         help=(
             "optional JSON file with absolute inlet_windows and/or area_design_windows "
             "guess/min/max overrides; applied after baseline loading and before bound factors"
+        ),
+    )
+    p.add_argument(
+        "--initial-solution-json",
+        type=str,
+        default="",
+        help=(
+            "optional JSON or maingo_summary.json containing status.solution_point; "
+            "used as the MAiNGO initial point before solve()"
         ),
     )
     p.add_argument(
@@ -180,13 +211,21 @@ def main(argv: list[str] | None = None) -> int:
         handoff_n_intervals=int(args.handoff_n_intervals),
         maingo_settings_path=str(args.maingo_settings),
         maingo_max_time=None if float(args.maingo_max_time) <= 0.0 else float(args.maingo_max_time),
+        coarse_model=str(args.coarse_model),
         reduced_implicit_newton_steps=int(args.reduced_implicit_newton_steps),
         critical_mode=bool(args.critical_mode),
         critical_residual_tolerance=float(args.critical_residual_tolerance),
+        mach_reference_profile_path=(
+            None if not str(args.mach_reference_profile).strip() else str(args.mach_reference_profile)
+        ),
+        mach_window_radius=float(args.mach_window_radius),
         include_rk4_benchmark=not bool(args.skip_rk4_benchmark),
         objective_profile=str(args.objective_profile),
         working_fluid_profile=args.working_fluid_profile,
         search_window_json=None if not str(args.search_window_json).strip() else str(args.search_window_json),
+        initial_solution_json=(
+            None if not str(args.initial_solution_json).strip() else str(args.initial_solution_json)
+        ),
         skip_casadi_handoff=bool(args.skip_casadi_handoff),
         n_p_in_lower_factor=float(args.n_p_in_lower_factor),
         n_p_in_upper_factor=float(args.n_p_in_upper_factor),

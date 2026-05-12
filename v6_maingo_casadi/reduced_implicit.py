@@ -553,6 +553,35 @@ class _MAiNGOHybridReducedImplicitModelBase:
     def get_initial_point(self):
         return list(self._initial_point)
 
+    def set_initial_point_from_decision(self, decision: dict[str, Any]) -> dict[str, float]:
+        decision = dict(decision)
+        if "log_n_p_in" not in decision and "n_p_in" in decision:
+            decision["log_n_p_in"] = math.log(float(decision["n_p_in"]))
+        if "log_seed_fraction" not in decision and "seed_fraction" in decision:
+            decision["log_seed_fraction"] = math.log(float(decision["seed_fraction"]))
+
+        values: list[float] = []
+        normalized: dict[str, float] = {}
+        for idx, (lower, upper, name) in enumerate(self._variable_specs):
+            if name in decision:
+                value = float(decision[name])
+            elif idx < len(self._initial_point):
+                value = float(self._initial_point[idx])
+            else:
+                raise ValueError(f"missing initial decision value for {name!r}.")
+            if not math.isfinite(value):
+                raise ValueError(f"non-finite initial decision value for {name!r}: {value!r}.")
+            tol = 1e-8 * max(1.0, abs(float(lower)), abs(float(upper)))
+            if value < float(lower) - tol or value > float(upper) + tol:
+                raise ValueError(
+                    f"initial decision value for {name!r}={value:.16g} is outside "
+                    f"bounds [{float(lower):.16g}, {float(upper):.16g}]."
+                )
+            values.append(value)
+            normalized[str(name)] = value
+        self._initial_point = values
+        return normalized
+
     def _decision_from_values(self, values) -> dict[str, Any]:
         values = list(values)
         expected_names = list(_DECISION_NAMES)

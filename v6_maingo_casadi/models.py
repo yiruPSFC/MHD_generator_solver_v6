@@ -376,6 +376,20 @@ class BaselineSeed:
         inlet_payload, area_payload = _extract_search_window_sections(payload)
         inlet_windows = {key: dict(value) for key, value in self.inlet_windows.items()}
         area_windows = {key: dict(value) for key, value in self.area_design_windows.items()}
+        schedule = [dict(item) for item in self.schedule]
+        if "schedule" in payload:
+            raw_schedule = payload["schedule"]
+            if not isinstance(raw_schedule, list) or not all(isinstance(item, dict) for item in raw_schedule):
+                raise ValueError("search window override schedule must be a list of objects.")
+            schedule = [dict(item) for item in raw_schedule]
+        raw_schedule_overrides = payload.get("schedule_overrides", payload.get("schedule_override"))
+        if raw_schedule_overrides is not None:
+            if not isinstance(raw_schedule_overrides, dict):
+                raise ValueError("search window override schedule_overrides must be an object.")
+            if not schedule:
+                schedule = [dict(raw_schedule_overrides)]
+            else:
+                schedule = [dict(item, **raw_schedule_overrides) for item in schedule]
         canonical_inlet, unknown_inlet_keys = _canonicalize_inlet_window_payload(inlet_payload)
         for canonical, raw_window in canonical_inlet.items():
             inlet_windows[canonical] = _coerce_window_payload(raw_window, key=canonical, positive=True)
@@ -398,6 +412,7 @@ class BaselineSeed:
             )
         return replace(
             self,
+            schedule=schedule,
             inlet_windows=inlet_windows,
             area_design_windows=area_windows,
             n_p_in_nominal=float(inlet_windows["n_p_in"]["guess"]),
@@ -480,6 +495,7 @@ class BaselineSeed:
             "area_scale_m2": float(self.area_scale_m2),
             "adaptive_bridge_count": int(self.adaptive_bridge_count),
             "adaptive_bridge_max_count": int(self.adaptive_bridge_max_count),
+            "schedule": [dict(item) for item in self.schedule],
             "inlet_windows": self.inlet_windows,
             "area_design_windows": self.area_design_windows,
             "area_design_nominal": self.area_design_nominal.to_dict(),

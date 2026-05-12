@@ -67,6 +67,99 @@ def _write_json(path: str | Path, payload: dict[str, Any]) -> Path:
     return out_path
 
 
+def _extract_initial_solution_payload(payload: dict[str, Any], *, source_path: Path) -> dict[str, Any]:
+    candidate_paths = [
+        ("status", "solution_point"),
+        ("status", "handoff_solution_point"),
+        ("maingo_status", "solution_point"),
+        ("solution_point",),
+        ("handoff_solution_point",),
+    ]
+    for path in candidate_paths:
+        cursor: Any = payload
+        for key in path:
+            if not isinstance(cursor, dict) or key not in cursor:
+                cursor = None
+                break
+            cursor = cursor[key]
+        if isinstance(cursor, dict):
+            return dict(cursor)
+    direct_area_keys = {"log_n_p_in", "T_e_in", "Z_in", "I_0", "log_seed_fraction", "a1", "a2", "a3"}
+    direct_mach_keys = {"log_n_p_in", "T_e_in", "Z_in", "I_0", "log_seed_fraction", "m1", "m2", "m3"}
+    if direct_area_keys.issubset(payload.keys()) or direct_mach_keys.issubset(payload.keys()):
+        return dict(payload)
+    raise ValueError(
+        f"could not find an initial solution point in {source_path}. Expected status.solution_point "
+        "or a direct decision-vector JSON."
+    )
+
+
+def _load_initial_solution_payload(path: str | Path) -> tuple[Path, dict[str, Any]]:
+    source_path = Path(path).resolve()
+    payload = json.loads(source_path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError(f"initial solution JSON must contain an object: {source_path}")
+    return source_path, _extract_initial_solution_payload(payload, source_path=source_path)
+
+
+def _profile_has_mach_state_arrays(path: str | Path) -> bool:
+    try:
+        with np.load(Path(path)) as data:
+            return {"x", "n_p", "T_e", "A", "mach"}.issubset(set(data.files))
+    except Exception:
+        return False
+
+
+def _resolve_mach_reference_profile_path(
+    *,
+    explicit_profile_path: str | Path | None,
+    initial_solution_json: str | Path | None,
+    baseline: BaselineSeed,
+) -> Path:
+    candidates: list[Path] = []
+    if explicit_profile_path is not None:
+        explicit = Path(explicit_profile_path).resolve()
+        if explicit.exists() and _profile_has_mach_state_arrays(explicit):
+            return explicit
+        raise ValueError(
+            f"--mach-reference-profile must point to an NPZ with x, n_p, T_e, A, and mach arrays: {explicit}"
+        )
+    if initial_solution_json is not None:
+        source = Path(initial_solution_json).resolve()
+        if source.suffix == ".npz":
+            candidates.append(source)
+        parent = source.parent
+        candidates.extend(
+            [
+                parent / "maingo_best_profile.npz",
+                parent / "maingo_handoff_profile.npz",
+                parent / "maingo_coarse_profile.npz",
+            ]
+        )
+        try:
+            payload = json.loads(source.read_text(encoding="utf-8"))
+            for key in ("maingo_best_profile_path", "maingo_handoff_profile_path", "maingo_coarse_profile_path"):
+                if isinstance(payload, dict) and payload.get(key):
+                    candidates.append(Path(str(payload[key])).resolve())
+        except Exception:
+            pass
+    candidates.append(Path(baseline.warm_profile_npz_path).resolve())
+
+    seen: set[Path] = set()
+    for candidate in candidates:
+        candidate = candidate.resolve()
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        if candidate.exists() and _profile_has_mach_state_arrays(candidate):
+            return candidate
+    raise ValueError(
+        "coarse_model=mach_spline requires a reference NPZ with x, n_p, T_e, A, and mach arrays. "
+        "Pass --mach-reference-profile, or provide --initial-solution-json from a MAiNGO output directory "
+        "containing maingo_best_profile.npz / maingo_handoff_profile.npz."
+    )
+
+
 def _physical_handoff_stage_schedule(best: CoarseProfileResult) -> list[dict[str, Any]]:
     A = np.asarray(best.A, dtype=float)
     sigma = np.asarray(best.sigma_logA, dtype=float)
@@ -114,10 +207,13 @@ def run_hybrid_maingo_casadi(
     reduced_implicit_newton_steps: int = 10,
     critical_mode: bool = False,
     critical_residual_tolerance: float = 1e-4,
+    mach_reference_profile_path: str | Path | None = None,
+    mach_window_radius: float = 1.0,
     include_rk4_benchmark: bool = True,
     objective_profile: str = OBJECTIVE_PROFILE_LAB_POC_V2,
     working_fluid_profile: str | WorkingFluidProfile | None = None,
     search_window_json: str | Path | None = None,
+    initial_solution_json: str | Path | None = None,
     skip_casadi_handoff: bool = False,
     n_p_in_lower_factor: float = 1.0,
     n_p_in_upper_factor: float = 1.0,
@@ -135,12 +231,16 @@ def run_hybrid_maingo_casadi(
     coarse_model_name = str(coarse_model).strip().replace("-", "_").lower()
     if coarse_model_name in {"newton_reduced_implicit", "reduced_newton_implicit"}:
         coarse_model_name = "reduced_implicit"
-    if coarse_model_name != "reduced_implicit":
+    if coarse_model_name in {"mach", "mach_spline_reduced_implicit", "reduced_mach_spline"}:
+        coarse_model_name = "mach_spline"
+    if coarse_model_name not in {"reduced_implicit", "mach_spline"}:
         raise ValueError(
-            f"unsupported coarse_model={coarse_model!r}; the production MAiNGO path is reduced_implicit. "
+            f"unsupported coarse_model={coarse_model!r}; supported values are reduced_implicit and mach_spline. "
             "RK4 is evaluated only as a post-hoc benchmark because its explicit RHS can cross singular "
             "denominators during MAiNGO relaxation."
         )
+    if coarse_model_name == "mach_spline" and bool(critical_mode):
+        raise ValueError("critical_mode is not supported by the Mach-spline reduced model.")
     baseline = BaselineSeed.from_summary(baseline_summary_path)
     if working_fluid_profile is not None:
         baseline = baseline.with_working_fluid_profile(working_fluid_profile)
@@ -164,15 +264,38 @@ def run_hybrid_maingo_casadi(
     )
     out_dir_path = Path(out_dir).resolve()
     out_dir_path.mkdir(parents=True, exist_ok=True)
-    model_impl = _MAiNGOHybridReducedImplicitModelBase(
-        baseline=baseline,
-        n_intervals=int(coarse_n_intervals),
-        maingopy_module=maingopy,
-        objective_profile=objective_profile,
-        newton_steps=int(reduced_implicit_newton_steps),
-        critical_mode=bool(critical_mode),
-        critical_residual_tolerance=float(critical_residual_tolerance),
-    )
+    if coarse_model_name == "mach_spline":
+        from v6_maingo_mach_spline.maingo_model import MachSplineReducedImplicitModelBase
+
+        mach_reference_profile = _resolve_mach_reference_profile_path(
+            explicit_profile_path=mach_reference_profile_path,
+            initial_solution_json=initial_solution_json,
+            baseline=baseline,
+        )
+        model_impl = MachSplineReducedImplicitModelBase(
+            baseline=baseline,
+            reference_profile_path=mach_reference_profile,
+            n_intervals=int(coarse_n_intervals),
+            maingopy_module=maingopy,
+            objective_profile=objective_profile,
+            newton_steps=int(reduced_implicit_newton_steps),
+            mach_window_radius=float(mach_window_radius),
+        )
+    else:
+        model_impl = _MAiNGOHybridReducedImplicitModelBase(
+            baseline=baseline,
+            n_intervals=int(coarse_n_intervals),
+            maingopy_module=maingopy,
+            objective_profile=objective_profile,
+            newton_steps=int(reduced_implicit_newton_steps),
+            critical_mode=bool(critical_mode),
+            critical_residual_tolerance=float(critical_residual_tolerance),
+        )
+    initial_solution_source_path = None
+    initial_solution_decision = None
+    if initial_solution_json:
+        initial_solution_source_path, initial_solution_payload = _load_initial_solution_payload(initial_solution_json)
+        initial_solution_decision = model_impl.set_initial_point_from_decision(initial_solution_payload)
 
     class HybridMAiNGOModel(maingopy.MAiNGOmodel):
         def __init__(self, *, impl):
@@ -217,20 +340,26 @@ def run_hybrid_maingo_casadi(
         if hasattr(incumbent_solution, "decision_vector")
         else dict(incumbent_solution)
     )
-    best_solution, coarse_best, feasibility_restoration = _restore_feasible_implicit_solution(
-        baseline=baseline,
-        n_intervals=int(coarse_n_intervals),
-        reference_variables=model_impl._reference_variables,
-        reference_result=model_impl._reference_profile,
-        residual_scales=model_impl._residual_scales,
-        candidate_variables=incumbent_solution,
-        candidate_result=incumbent_result,
-        objective_profile=objective_profile,
-    )
+    if coarse_model_name == "mach_spline":
+        best_solution = incumbent_solution
+        coarse_best = incumbent_result
+        feasibility_restoration = {"used": False, "reason": None, "alpha": 1.0}
+    else:
+        best_solution, coarse_best, feasibility_restoration = _restore_feasible_implicit_solution(
+            baseline=baseline,
+            n_intervals=int(coarse_n_intervals),
+            reference_variables=model_impl._reference_variables,
+            reference_result=model_impl._reference_profile,
+            residual_scales=model_impl._residual_scales,
+            candidate_variables=incumbent_solution,
+            candidate_result=incumbent_result,
+            objective_profile=objective_profile,
+        )
     coarse_best = model_impl.evaluate_solution(best_solution)
     handoff_decision_vector = dict(best_solution.decision_vector)
     incumbent_result.diagnostics["formulation"] = str(getattr(model_impl, "formulation", coarse_model_name))
     coarse_best.diagnostics["formulation"] = str(getattr(model_impl, "formulation", coarse_model_name))
+    coarse_best.diagnostics["coarse_model"] = coarse_model_name
     coarse_best.diagnostics["reduced_implicit_newton_steps"] = int(reduced_implicit_newton_steps)
     if not bool(coarse_best.diagnostics.get("acceptable", False)):
         raise RuntimeError(
@@ -239,34 +368,48 @@ def run_hybrid_maingo_casadi(
             f"candidate max_eq_residual={incumbent_result.diagnostics.get('max_eq_residual')!r}."
         )
 
-    handoff_best = _resample_profile_result(
-        baseline=baseline,
-        result=coarse_best,
-        n_intervals=int(handoff_n_intervals),
-        objective_profile=objective_profile,
-    )
+    if coarse_model_name == "mach_spline":
+        handoff_best = model_impl.resample_solution_result(
+            coarse_best,
+            n_intervals=int(handoff_n_intervals),
+        )
+    else:
+        handoff_best = _resample_profile_result(
+            baseline=baseline,
+            result=coarse_best,
+            n_intervals=int(handoff_n_intervals),
+            objective_profile=objective_profile,
+        )
     handoff_bounds = _handoff_bounds_from_best(handoff_best)
     rk4_benchmark = None
     if bool(include_rk4_benchmark):
-        try:
-            rk4_result = CasadiCoarseEvaluator(
-                baseline=baseline,
-                n_intervals=int(coarse_n_intervals),
-                objective_profile=objective_profile,
-            ).evaluate(handoff_decision_vector)
-            rk4_benchmark = {
-                "ok": True,
-                "coarse_model": "rk4_reduced_benchmark",
-                "score_delta_vs_reduced_implicit": float(rk4_result.objective_score - coarse_best.objective_score),
-                "diagnostics": rk4_result.diagnostics,
-                "result": rk4_result.to_summary_dict(),
-            }
-        except Exception as exc:
+        if coarse_model_name == "mach_spline":
             rk4_benchmark = {
                 "ok": False,
+                "skipped": True,
                 "coarse_model": "rk4_reduced_benchmark",
-                "error": str(exc),
+                "reason": "not_applicable_to_mach_spline_decision_vector",
             }
+        else:
+            try:
+                rk4_result = CasadiCoarseEvaluator(
+                    baseline=baseline,
+                    n_intervals=int(coarse_n_intervals),
+                    objective_profile=objective_profile,
+                ).evaluate(handoff_decision_vector)
+                rk4_benchmark = {
+                    "ok": True,
+                    "coarse_model": "rk4_reduced_benchmark",
+                    "score_delta_vs_reduced_implicit": float(rk4_result.objective_score - coarse_best.objective_score),
+                    "diagnostics": rk4_result.diagnostics,
+                    "result": rk4_result.to_summary_dict(),
+                }
+            except Exception as exc:
+                rk4_benchmark = {
+                    "ok": False,
+                    "coarse_model": "rk4_reduced_benchmark",
+                    "error": str(exc),
+                }
 
     maingo_summary_payload = {
         "solver": "maingo",
@@ -279,6 +422,7 @@ def run_hybrid_maingo_casadi(
         "working_fluid_profile": baseline.working_fluid.to_dict(),
         "skip_casadi_handoff": bool(skip_casadi_handoff),
         "search_window_json": None if search_window_path is None else str(search_window_path),
+        "initial_solution_json": None if initial_solution_source_path is None else str(initial_solution_source_path),
         "baseline_seed": baseline.to_dict(),
         "search_window_expansion": {
             "n_p_in_lower_factor": float(n_p_in_lower_factor),
@@ -302,6 +446,7 @@ def run_hybrid_maingo_casadi(
             "cpu_solution_time_s": _safe_solver_metric(lambda: float(solver.get_cpu_solution_time())),
             "wallclock_solution_time_s": _safe_solver_metric(lambda: float(solver.get_wallclock_solution_time())),
             "solution_point": incumbent_decision_vector,
+            "initial_solution_point": initial_solution_decision,
             "variable_count": int(model_impl.total_variables),
             "used_fallback_initial_point": used_fallback_initial_point,
             "fallback_reason": fallback_reason,
