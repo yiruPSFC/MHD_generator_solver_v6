@@ -5,12 +5,19 @@ import math
 from dataclasses import dataclass
 from typing import Any
 
-import casadi as ca
 import numpy as np
 
 from v6_global_marginal.global_postprocess_v6 import compute_design_value_terms
 
-from .casadi_evaluator import CasadiCoarseEvaluator
+try:
+    import casadi as ca
+except ModuleNotFoundError:
+    ca = None
+
+if ca is None:
+    CasadiCoarseEvaluator = None
+else:
+    from .casadi_evaluator import CasadiCoarseEvaluator
 from .constants import _EPS, _G_HARD_MARGIN, _TP_MIN, OBJECTIVE_PROFILE_LAB_POC_V2
 from .geometry import SplineAreaDesign, _evaluate_area_design_nodes
 from .models import BaselineSeed, CoarseProfileResult

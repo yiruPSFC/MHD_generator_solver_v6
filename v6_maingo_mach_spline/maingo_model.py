@@ -119,6 +119,7 @@ class MachSplineReducedImplicitModelBase:
         maingopy_module,
         objective_profile: str = OBJECTIVE_PROFILE_LAB_POC_V2,
         newton_steps: int = 10,
+        jacobian_mode: str = "analytic",
         residual_tolerance: float = 1e-5,
         mach_window_radius: float = 1.0,
     ):
@@ -129,6 +130,7 @@ class MachSplineReducedImplicitModelBase:
         self._ops = _ops_for_maingo(maingopy_module)
         self._objective_profile = _normalize_objective_profile(objective_profile)
         self._newton_steps = int(newton_steps)
+        self._jacobian_mode = str(jacobian_mode)
         self._residual_tolerance = float(residual_tolerance)
         self._mach_window_radius = float(mach_window_radius)
         self._config = MachReducedConfig(
@@ -203,6 +205,7 @@ class MachSplineReducedImplicitModelBase:
         return {
             "formulation": self.formulation,
             "newton_steps": int(self._newton_steps),
+            "jacobian_mode": self._jacobian_mode,
             "residual_tolerance": float(self._residual_tolerance),
             "mach_window_radius": float(self._mach_window_radius),
             "reference_profile_path": str(self._reference_profile_path),
@@ -268,6 +271,7 @@ class MachSplineReducedImplicitModelBase:
             decision_vector=numeric_decision,
             residual_scales=self._residual_scales,
             newton_steps=self._newton_steps,
+            jacobian_mode=self._jacobian_mode,
         )
 
     def decode_solution_point(self, values) -> MachReducedRollout:
@@ -576,6 +580,7 @@ class MachSplineReducedImplicitModelBase:
             decision_vector=decision,
             residual_scales=self._residual_scales,
             newton_steps=self._newton_steps,
+            jacobian_mode=self._jacobian_mode,
         )
         midpoint_closures = _mach_midpoint_closures(
             ops=self._ops,

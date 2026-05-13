@@ -6,8 +6,12 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
-import casadi as ca
 import numpy as np
+
+try:
+    import casadi as ca
+except ModuleNotFoundError:
+    ca = None
 
 from .constants import _EPS, _G_HARD_MARGIN, _G_PENALTY_SCALE, _G_PENALTY_WEIGHT
 
@@ -80,6 +84,8 @@ def _ops_for_numeric():
 
 
 def _ops_for_casadi():
+    if ca is None:
+        raise ModuleNotFoundError("casadi is required for _ops_for_casadi().")
     return SimpleNamespace(
         exp=ca.exp,
         log=ca.log,

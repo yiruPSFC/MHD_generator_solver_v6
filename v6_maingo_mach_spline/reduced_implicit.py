@@ -5,6 +5,7 @@ import json
 import math
 from dataclasses import dataclass
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import numpy as np
@@ -22,7 +23,15 @@ from v6_maingo_casadi.constants import (
 )
 from v6_maingo_casadi.geometry import SplineAreaDesign
 from v6_maingo_casadi.implicit import ImplicitResidualScales
-from v6_maingo_casadi.numerics import _clip_range, _floored_pos, _max_op, _ops_for_numeric, _reduce_min, _safe_pos
+from v6_maingo_casadi.numerics import (
+    _clip_range,
+    _floored_pos,
+    _max_op,
+    _min_op,
+    _ops_for_numeric,
+    _reduce_min,
+    _safe_pos,
+)
 from v6_maingo_casadi.physics import (
     _dynamic_system_terms,
     _implicit_step_residuals,
@@ -102,6 +111,217 @@ def _reduce_max(ops, values: list[Any]):
     for value in values[1:]:
         acc = _max_op(ops, acc, value)
     return acc
+
+
+def _clip_value(ops, value, lower: float, upper: float):
+    return _min_op(ops, float(upper), _max_op(ops, float(lower), value))
+
+
+def _safe_positive_denom(ops, value, floor: float):
+    return _safe_pos(ops, value + float(floor), float(floor))
+
+
+@dataclass(frozen=True)
+class _Dual2:
+    """Forward-mode pair derivative for current-step log(n), log(T_e)."""
+
+    value: Any
+    d_log_n: Any
+    d_log_Te: Any
+
+    __array_priority__ = 1000
+
+    @classmethod
+    def variable_log_n(cls, value):
+        return cls(value=value, d_log_n=1.0, d_log_Te=0.0)
+
+    @classmethod
+    def variable_log_Te(cls, value):
+        return cls(value=value, d_log_n=0.0, d_log_Te=1.0)
+
+    def __add__(self, other):
+        other = _as_dual2(other)
+        return _Dual2(self.value + other.value, self.d_log_n + other.d_log_n, self.d_log_Te + other.d_log_Te)
+
+    def __radd__(self, other):
+        return self.__add__(other)
+
+    def __sub__(self, other):
+        other = _as_dual2(other)
+        return _Dual2(self.value - other.value, self.d_log_n - other.d_log_n, self.d_log_Te - other.d_log_Te)
+
+    def __rsub__(self, other):
+        other = _as_dual2(other)
+        return other.__sub__(self)
+
+    def __mul__(self, other):
+        other = _as_dual2(other)
+        return _Dual2(
+            self.value * other.value,
+            self.d_log_n * other.value + self.value * other.d_log_n,
+            self.d_log_Te * other.value + self.value * other.d_log_Te,
+        )
+
+    def __rmul__(self, other):
+        return self.__mul__(other)
+
+    def __truediv__(self, other):
+        other = _as_dual2(other)
+        denom = other.value * other.value
+        return _Dual2(
+            self.value / other.value,
+            (self.d_log_n * other.value - self.value * other.d_log_n) / denom,
+            (self.d_log_Te * other.value - self.value * other.d_log_Te) / denom,
+        )
+
+    def __rtruediv__(self, other):
+        other = _as_dual2(other)
+        return other.__truediv__(self)
+
+    def __neg__(self):
+        return _Dual2(-self.value, -self.d_log_n, -self.d_log_Te)
+
+
+def _as_dual2(value) -> _Dual2:
+    if isinstance(value, _Dual2):
+        return value
+    return _Dual2(value=value, d_log_n=0.0, d_log_Te=0.0)
+
+
+def _maybe_float(value) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _dual_exp(base_ops, value):
+    if not isinstance(value, _Dual2):
+        return base_ops.exp(value)
+    primal = base_ops.exp(value.value)
+    return _Dual2(primal, primal * value.d_log_n, primal * value.d_log_Te)
+
+
+def _dual_log(base_ops, value):
+    if not isinstance(value, _Dual2):
+        return base_ops.log(value)
+    primal = base_ops.log(value.value)
+    return _Dual2(primal, value.d_log_n / value.value, value.d_log_Te / value.value)
+
+
+def _dual_sqrt(base_ops, value):
+    if not isinstance(value, _Dual2):
+        return base_ops.sqrt(value)
+    primal = base_ops.sqrt(value.value)
+    scale = 0.5 / primal
+    return _Dual2(primal, scale * value.d_log_n, scale * value.d_log_Te)
+
+
+def _dual_fabs(base_ops, value):
+    if not isinstance(value, _Dual2):
+        return base_ops.fabs(value)
+    primal_value = _maybe_float(value.value)
+    if primal_value is not None:
+        sign = 1.0 if primal_value >= 0.0 else -1.0
+        return _Dual2(abs(primal_value), sign * value.d_log_n, sign * value.d_log_Te)
+    return _Dual2(base_ops.fabs(value.value), value.d_log_n, value.d_log_Te)
+
+
+def _dual_extreme(base_ops, a, b, *, choose_max: bool):
+    a_dual = _as_dual2(a)
+    b_dual = _as_dual2(b)
+    a_float = _maybe_float(a_dual.value)
+    b_float = _maybe_float(b_dual.value)
+    if a_float is not None and b_float is not None:
+        if (a_float >= b_float) if choose_max else (a_float <= b_float):
+            return a_dual
+        return b_dual
+
+    value = base_ops.max(a_dual.value, b_dual.value) if choose_max else base_ops.min(a_dual.value, b_dual.value)
+    # For MAiNGO expressions we cannot branch on interval variables. The reduced
+    # Newton corrector is intended to run in the smooth physical interior, so
+    # preserve the derivative of the expression-side branch when a constant
+    # floor/ceiling is involved, and otherwise keep the first branch derivative.
+    if isinstance(a, _Dual2) and not isinstance(b, _Dual2):
+        return _Dual2(value, a_dual.d_log_n, a_dual.d_log_Te)
+    if isinstance(b, _Dual2) and not isinstance(a, _Dual2):
+        return _Dual2(value, b_dual.d_log_n, b_dual.d_log_Te)
+    return _Dual2(value, a_dual.d_log_n, a_dual.d_log_Te)
+
+
+def _dual_lb_func(base_ops, value, lower):
+    if not isinstance(value, _Dual2):
+        return base_ops.lb_func(value, lower)
+    return _Dual2(base_ops.lb_func(value.value, lower), value.d_log_n, value.d_log_Te)
+
+
+def _dual_ub_func(base_ops, value, upper):
+    if not isinstance(value, _Dual2):
+        return base_ops.ub_func(value, upper)
+    return _Dual2(base_ops.ub_func(value.value, upper), value.d_log_n, value.d_log_Te)
+
+
+def _dual_bounding_func(base_ops, value, lower, upper):
+    if not isinstance(value, _Dual2):
+        return base_ops.bounding_func(value, lower, upper)
+    return _Dual2(base_ops.bounding_func(value.value, lower, upper), value.d_log_n, value.d_log_Te)
+
+
+def _ops_for_dual2(base_ops):
+    return SimpleNamespace(
+        exp=lambda value: _dual_exp(base_ops, value),
+        log=lambda value: _dual_log(base_ops, value),
+        sqrt=lambda value: _dual_sqrt(base_ops, value),
+        fabs=lambda value: _dual_fabs(base_ops, value),
+        max=lambda a, b: _dual_extreme(base_ops, a, b, choose_max=True),
+        min=lambda a, b: _dual_extreme(base_ops, a, b, choose_max=False),
+        pos=getattr(base_ops, "pos", None),
+        neg=getattr(base_ops, "neg", None),
+        lb_func=(
+            None
+            if getattr(base_ops, "lb_func", None) is None
+            else lambda value, lower: _dual_lb_func(base_ops, value, lower)
+        ),
+        ub_func=(
+            None
+            if getattr(base_ops, "ub_func", None) is None
+            else lambda value, upper: _dual_ub_func(base_ops, value, upper)
+        ),
+        bounding_func=(
+            None
+            if getattr(base_ops, "bounding_func", None) is None
+            else lambda value, lower, upper: _dual_bounding_func(base_ops, value, lower, upper)
+        ),
+    )
+
+
+def _fixed_gauss_newton_log_state_2d_analytic(
+    *,
+    ops,
+    initial_log_n,
+    initial_log_Te,
+    residual_jacobian_fn,
+    steps: int,
+    regularization: float,
+    max_log_step: float,
+):
+    log_n = initial_log_n
+    log_Te = initial_log_Te
+    for _ in range(int(steps)):
+        r_m, r_e, j11, j12, j21, j22 = residual_jacobian_fn(log_n, log_Te)
+        a11 = j11 * j11 + j21 * j21 + float(regularization)
+        a12 = j11 * j12 + j21 * j22
+        a22 = j12 * j12 + j22 * j22 + float(regularization)
+        g1 = j11 * r_m + j21 * r_e
+        g2 = j12 * r_m + j22 * r_e
+        denom = _safe_positive_denom(ops, a11 * a22 - a12 * a12, float(regularization))
+        delta_log_n = (a22 * g1 - a12 * g2) / denom
+        delta_log_Te = (-a12 * g1 + a11 * g2) / denom
+        delta_log_n = _clip_value(ops, delta_log_n, -float(max_log_step), float(max_log_step))
+        delta_log_Te = _clip_value(ops, delta_log_Te, -float(max_log_step), float(max_log_step))
+        log_n = log_n - delta_log_n
+        log_Te = log_Te - delta_log_Te
+    return log_n, log_Te
 
 
 def _mach_design_nodes_generic(
@@ -278,6 +498,56 @@ def _scaled_momentum_energy_residuals_mach(
     )
 
 
+def _scaled_momentum_energy_residuals_mach_log_jacobian(
+    *,
+    ops,
+    log_n_next,
+    log_Te_next,
+    n_prev,
+    T_e_prev,
+    A_prev,
+    mach_next,
+    dot_N,
+    I_0,
+    seed_fraction,
+    B: float,
+    dx: float,
+    momentum_scale: float,
+    energy_scale: float,
+    working_fluid: WorkingFluidProfile,
+) -> tuple[Any, Any, Any, Any, Any, Any]:
+    dual_ops = _ops_for_dual2(ops)
+    dual_log_n = _Dual2.variable_log_n(log_n_next)
+    dual_log_Te = _Dual2.variable_log_Te(log_Te_next)
+    r_m, r_e, _, _, _, _, _, _ = _scaled_momentum_energy_residuals_mach(
+        ops=dual_ops,
+        n_prev=n_prev,
+        T_e_prev=T_e_prev,
+        A_prev=A_prev,
+        n_next=dual_ops.exp(dual_log_n),
+        T_e_next=dual_ops.exp(dual_log_Te),
+        mach_next=mach_next,
+        dot_N=dot_N,
+        I_0=I_0,
+        seed_fraction=seed_fraction,
+        B=float(B),
+        dx=float(dx),
+        momentum_scale=float(momentum_scale),
+        energy_scale=float(energy_scale),
+        working_fluid=working_fluid,
+    )
+    r_m = _as_dual2(r_m)
+    r_e = _as_dual2(r_e)
+    return (
+        r_m.value,
+        r_e.value,
+        r_m.d_log_n,
+        r_m.d_log_Te,
+        r_e.d_log_n,
+        r_e.d_log_Te,
+    )
+
+
 def rollout_reduced_mach_generic(
     *,
     ops,
@@ -287,9 +557,13 @@ def rollout_reduced_mach_generic(
     residual_scales: ImplicitResidualScales,
     newton_steps: int = 10,
     finite_difference_step: float = 1e-4,
+    jacobian_mode: str = "analytic",
     regularization: float = 1e-8,
     max_log_step: float = 0.5,
 ) -> MachReducedRollout:
+    jacobian_mode = str(jacobian_mode).lower()
+    if jacobian_mode not in {"analytic", "finite_difference"}:
+        raise ValueError(f"unsupported jacobian_mode={jacobian_mode!r}; expected 'analytic' or 'finite_difference'.")
     n_intervals = int(n_intervals)
     dx = float(config.length) / n_intervals
     log_n_p_in = decision_vector["log_n_p_in"]
@@ -343,11 +617,11 @@ def rollout_reduced_mach_generic(
         log_n = ops.log(n_initial)
         log_Te = ops.log(T_initial)
 
-        def residual_pair(candidate_log_n, candidate_log_Te):
-            n_next_candidate = ops.exp(candidate_log_n)
-            T_next_candidate = ops.exp(candidate_log_Te)
+        def residual_pair(candidate_log_n, candidate_log_Te, *, eval_ops=ops):
+            n_next_candidate = eval_ops.exp(candidate_log_n)
+            T_next_candidate = eval_ops.exp(candidate_log_Te)
             r_m, r_e, _, _, _, _, _, _ = _scaled_momentum_energy_residuals_mach(
-                ops=ops,
+                ops=eval_ops,
                 n_prev=n_prev,
                 T_e_prev=T_prev,
                 A_prev=A_prev,
@@ -365,16 +639,45 @@ def rollout_reduced_mach_generic(
             )
             return r_m, r_e
 
-        log_n, log_Te = _fixed_gauss_newton_log_state_2d(
-            ops=ops,
-            initial_log_n=log_n,
-            initial_log_Te=log_Te,
-            residual_fn=residual_pair,
-            steps=int(newton_steps),
-            finite_difference_step=float(finite_difference_step),
-            regularization=float(regularization),
-            max_log_step=float(max_log_step),
-        )
+        if jacobian_mode == "analytic":
+            log_n, log_Te = _fixed_gauss_newton_log_state_2d_analytic(
+                ops=ops,
+                initial_log_n=log_n,
+                initial_log_Te=log_Te,
+                residual_jacobian_fn=lambda candidate_log_n, candidate_log_Te: (
+                    _scaled_momentum_energy_residuals_mach_log_jacobian(
+                        ops=ops,
+                        log_n_next=candidate_log_n,
+                        log_Te_next=candidate_log_Te,
+                        n_prev=n_prev,
+                        T_e_prev=T_prev,
+                        A_prev=A_prev,
+                        mach_next=mach_next,
+                        dot_N=inlet["dot_N"],
+                        I_0=I_0,
+                        seed_fraction=seed_fraction,
+                        B=float(config.B),
+                        dx=dx,
+                        momentum_scale=momentum_scale,
+                        energy_scale=energy_scale,
+                        working_fluid=config.working_fluid,
+                    )
+                ),
+                steps=int(newton_steps),
+                regularization=float(regularization),
+                max_log_step=float(max_log_step),
+            )
+        else:
+            log_n, log_Te = _fixed_gauss_newton_log_state_2d(
+                ops=ops,
+                initial_log_n=log_n,
+                initial_log_Te=log_Te,
+                residual_fn=residual_pair,
+                steps=int(newton_steps),
+                finite_difference_step=float(finite_difference_step),
+                regularization=float(regularization),
+                max_log_step=float(max_log_step),
+            )
         n_next = ops.exp(log_n)
         T_next = ops.exp(log_Te)
         r_m, r_e, closure, terms, dn_dx, dTe_dx, A_next, sigma_next = _scaled_momentum_energy_residuals_mach(
@@ -571,6 +874,7 @@ def rollout_summary_from_profile(
     profile_path: str | Path,
     summary_path: str | Path,
     newton_steps: int = 10,
+    jacobian_mode: str = "analytic",
 ) -> dict[str, Any]:
     config = MachReducedConfig.from_summary_and_profile(summary_path, profile_path)
     decision = decision_from_profile(profile_path)
@@ -588,6 +892,7 @@ def rollout_summary_from_profile(
         decision_vector=decision,
         residual_scales=scales,
         newton_steps=int(newton_steps),
+        jacobian_mode=jacobian_mode,
     )
     n = np.asarray(rollout.n_p_nodes, dtype=float)
     te = np.asarray(rollout.T_e_nodes, dtype=float)
@@ -599,6 +904,7 @@ def rollout_summary_from_profile(
         "summary_path": str(Path(summary_path).resolve()),
         "decision_vector": {key: float(value) for key, value in decision.items()},
         "newton_steps": int(newton_steps),
+        "jacobian_mode": str(jacobian_mode),
         "max_abs_scaled_residual": max_residual,
         "min_abs_det": float(rollout.min_abs_det),
         "max_rel_n_p_error": float(np.nanmax(np.abs(n - n_ref) / np.maximum(np.abs(n_ref), 1e-300))),
@@ -627,12 +933,14 @@ def main() -> int:
     parser.add_argument("profile", type=Path)
     parser.add_argument("--summary", type=Path, required=True)
     parser.add_argument("--newton-steps", type=int, default=10)
+    parser.add_argument("--jacobian-mode", choices=("analytic", "finite_difference"), default="analytic")
     parser.add_argument("--out", type=Path, default=None)
     args = parser.parse_args()
     report = rollout_summary_from_profile(
         profile_path=args.profile,
         summary_path=args.summary,
         newton_steps=int(args.newton_steps),
+        jacobian_mode=args.jacobian_mode,
     )
     text = json.dumps(report, indent=2, sort_keys=True)
     if args.out is None:

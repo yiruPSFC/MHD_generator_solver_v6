@@ -1,0 +1,39 @@
+{
+  "decision_vector": {
+    "I_0": 1000.0,
+    "T_e_in": 4900.0,
+    "Z_in": 80.0,
+    "log_n_p_in": 56.82201675355561,
+    "log_seed_fraction": -7.600902459542082,
+    "m1": 0.28768207245178085,
+    "m2": 0.5108256237659906,
+    "m3": 0.6931471805599453
+  },
+  "diagnostics": {
+    "A_in_m2": 0.0069,
+    "A_out_m2": 0.003894008078477749,
+    "A_out_over_A_in": 0.5643489968808332,
+    "T_e_in_K": 4900.0,
+    "T_e_out_K": 4671.688741444315,
+    "T_p_min_K": 4575.73588160744,
+    "finite_profile": true,
+    "mach_in": 0.09689754049334405,
+    "mach_out": 0.1937950809866881,
+    "max_abs_scaled_residual": 1.5989683249707614e-12,
+    "max_abs_sigma_logA": 3.608522472311802,
+    "min_abs_det": 540936.67369034,
+    "min_mach": 0.09689754049334405,
+    "min_velikhov_margin": 10155.555713012935,
+    "n_p_in": 4.7587000000000106e+24,
+    "n_p_out": 4.3384924411821576e+24
+  },
+  "jacobian_mode": "analytic",
+  "kind": "forward_mach_spline_numeric_sample",
+  "n_intervals": 20,
+  "newton_steps": 3,
+  "note": "Generated from outer design variables by rollout_reduced_mach_generic; not a MAiNGO optimum.",
+  "outputs": {
+    "csv": "/home/yiruxiao/MHD_generator_solver/MHD_generator_solver_v6/v6_maingo_mach_spline/outputs/forward_sample_nominal_machx2_20260513/forward_sample_curve.csv",
+    "npz": "/home/yiruxiao/MHD_generator_solver/MHD_generator_solver_v6/v6_maingo_mach_spline/outputs/forward_sample_nominal_machx2_20260513/forward_sample_curve.npz"
+  }
+}
