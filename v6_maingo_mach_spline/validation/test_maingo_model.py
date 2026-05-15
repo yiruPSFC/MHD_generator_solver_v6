@@ -7,7 +7,11 @@ import unittest
 from v6_maingo_casadi.models import BaselineSeed
 from v6_maingo_casadi.workflow import _resolve_mach_reference_profile_path
 
-from v6_maingo_mach_spline.maingo_model import MachSplineReducedImplicitModelBase
+from v6_maingo_mach_spline.maingo_model import (
+    MachSplineRK4SoftModelBase,
+    MachSplineReducedImplicitModelBase,
+    MachSplineTrapezoidModelBase,
+)
 
 
 REPO = Path(__file__).resolve().parents[2]
@@ -124,6 +128,115 @@ class MachSplineMAiNGOModelTest(unittest.TestCase):
             baseline=_baseline_from_case_summary(),
         )
         self.assertEqual(resolved, PROFILE_41.resolve())
+
+    def test_rk4_soft_model_returns_candidate_diagnostics(self) -> None:
+        model = MachSplineRK4SoftModelBase(
+            baseline=_baseline_from_case_summary(),
+            reference_profile_path=PROFILE_41,
+            n_intervals=10,
+            maingopy_module=_FakeMaingo,
+            newton_steps=10,
+        )
+        variables = model.get_variables()
+        self.assertEqual([item.name for item in variables][-3:], ["m1", "m2", "m3"])
+
+        result = model.evaluate(model.get_initial_point())
+        self.assertTrue(math.isfinite(float(result.objective)))
+        self.assertGreater(len(result.ineq), 0)
+        self.assertLessEqual(max(float(item) for item in result.ineq), 0.0)
+        output_names = {item.name for item in result.output}
+        self.assertIn("sigma_smoothness_penalty", output_names)
+        self.assertIn("tp_shortfall_penalty", output_names)
+        self.assertIn("mach_spline_min_signed_det", output_names)
+
+        solution = model.decode_solution_point(model.get_initial_point())
+        profile = model.evaluate_solution(solution)
+        self.assertEqual(profile.diagnostics["formulation"], "mach_spline_rk4_soft")
+        self.assertEqual(profile.diagnostics["det_branch_sign"], "positive")
+        self.assertTrue(profile.diagnostics["det_branch_acceptable"])
+        self.assertIn("freidberg_interval_defects", profile.diagnostics)
+        self.assertIn("physical_acceptable", profile.diagnostics)
+        self.assertTrue(math.isfinite(float(profile.objective_score)))
+
+    def test_trapezoid_model_keeps_low_dimensional_parametric_profiles(self) -> None:
+        model = MachSplineTrapezoidModelBase(
+            baseline=_baseline_from_case_summary(),
+            reference_profile_path=PROFILE_41,
+            n_intervals=4,
+            maingopy_module=_FakeMaingo,
+            newton_steps=10,
+        )
+        variables = model.get_variables()
+        self.assertEqual(len(variables), 14)
+        self.assertEqual([item.name for item in variables[:8]], [
+            "log_n_p_in",
+            "T_e_in",
+            "Z_in",
+            "I_0",
+            "log_seed_fraction",
+            "m1",
+            "m2",
+            "m3",
+        ])
+        self.assertEqual([item.name for item in variables[-6:]], [
+            "log_n_ratio_1",
+            "log_n_ratio_2",
+            "log_n_ratio_3",
+            "log_Te_ratio_1",
+            "log_Te_ratio_2",
+            "log_Te_ratio_3",
+        ])
+
+        result = model.evaluate(model.get_initial_point())
+        self.assertTrue(math.isfinite(float(result.objective)))
+        self.assertGreater(len(result.ineq), 0)
+        self.assertEqual(len(result.eq), 0)
+        output_names = {item.name for item in result.output}
+        self.assertIn("mach_spline_max_scaled_residual", output_names)
+        self.assertIn("mach_spline_min_signed_det", output_names)
+
+        solution = model.decode_solution_point(model.get_initial_point())
+        profile = model.evaluate_solution(solution)
+        self.assertEqual(profile.diagnostics["formulation"], "mach_spline_trapezoid_parametric")
+        self.assertEqual(profile.diagnostics["coarse_model"], "mach_spline_trapezoid")
+        self.assertEqual(profile.diagnostics["equality_count"], 0)
+        self.assertEqual(profile.diagnostics["residual_constraint_count"], 10)
+        self.assertTrue(math.isfinite(float(profile.objective_score)))
+
+    def test_trapezoid_model_can_freeze_inlet_variables(self) -> None:
+        model = MachSplineTrapezoidModelBase(
+            baseline=_baseline_from_case_summary(),
+            reference_profile_path=PROFILE_41,
+            n_intervals=4,
+            maingopy_module=_FakeMaingo,
+            newton_steps=10,
+            fixed_inlet=True,
+        )
+        variables = model.get_variables()
+        self.assertEqual(len(variables), 9)
+        self.assertEqual([item.name for item in variables[:3]], ["m1", "m2", "m3"])
+        self.assertEqual([item.name for item in variables[-6:]], [
+            "log_n_ratio_1",
+            "log_n_ratio_2",
+            "log_n_ratio_3",
+            "log_Te_ratio_1",
+            "log_Te_ratio_2",
+            "log_Te_ratio_3",
+        ])
+        self.assertEqual(len(model.get_initial_point()), 9)
+        self.assertTrue(model.summary_metadata()["fixed_inlet"])
+
+        result = model.evaluate(model.get_initial_point())
+        self.assertTrue(math.isfinite(float(result.objective)))
+        self.assertEqual(len(result.eq), 0)
+
+        solution = model.decode_solution_point(model.get_initial_point())
+        self.assertIn("log_n_p_in", solution.decision_vector)
+        self.assertIn("m1", solution.decision_vector)
+        profile = model.evaluate_solution(solution)
+        self.assertTrue(profile.diagnostics["fixed_inlet"])
+        self.assertEqual(profile.diagnostics["residual_constraint_count"], 10)
+        self.assertTrue(math.isfinite(float(profile.objective_score)))
 
 
 if __name__ == "__main__":

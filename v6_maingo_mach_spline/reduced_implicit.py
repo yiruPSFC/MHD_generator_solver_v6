@@ -104,6 +104,10 @@ def _reduce_max(ops, values: list[Any]):
     return acc
 
 
+def _positive_denom(ops, value, floor: float):
+    return _safe_pos(ops, value, float(floor))
+
+
 def _mach_design_nodes_generic(
     *,
     ops,
@@ -158,42 +162,43 @@ def _mach_area_closure_generic(
     M2 = M * M
     v_te = ops.sqrt(2.0 * K_B * T_e_safe / M_E)
     beta = E_CHARGE * float(B) / (
-        _safe_pos(ops, M_E * n_p_safe * float(fluid.sigma_ep) * v_te, _EPS)
+        _positive_denom(ops, M_E * n_p_safe * float(fluid.sigma_ep) * v_te, _EPS)
         if is_maingo
         else (M_E * n_p_safe * float(fluid.sigma_ep) * v_te + _EPS)
     )
     eta = M_E * n_p_safe * float(fluid.sigma_ep) * v_te / (
-        _safe_pos(ops, E_CHARGE * E_CHARGE * n_e, _EPS)
+        _positive_denom(ops, E_CHARGE * E_CHARGE * n_e, _EPS)
         if is_maingo
         else (E_CHARGE * E_CHARGE * n_e + _EPS)
     )
-    q_factor = E_CHARGE * dot_N / (_safe_pos(ops, I_0, 1e-12) if is_maingo else (I_0 + _EPS))
-    q = q_factor * n_e / (n_p_safe if is_maingo else (n_p_safe + _EPS))
+    q_factor = E_CHARGE * dot_N / (_positive_denom(ops, I_0, 1e-12) if is_maingo else (I_0 + _EPS))
+    q = q_factor * n_e / (_positive_denom(ops, n_p_safe, 1.0) if is_maingo else (n_p_safe + _EPS))
     b2 = beta * beta
     Z = b2 * (q - 1.0) - 1.0
     one_plus_z = 1.0 + Z
-    den = _safe_pos(ops, b2 * q, _EPS) if is_maingo else (b2 * q + _EPS)
+    den = _positive_denom(ops, b2 * q, _EPS) if is_maingo else (b2 * q + _EPS)
     F = b2 * (b2 + one_plus_z * one_plus_z) / (den * den)
-    T_p = 9.0 * T_e_safe / (9.0 + 5.0 * M2 * F)
+    tp_denom = 9.0 + (_max_op(ops, 5.0 * M2 * F, 0.0) if is_maingo else 5.0 * M2 * F)
+    T_p = 9.0 * T_e_safe / tp_denom
     v_p = ops.sqrt(5.0 * K_B * T_p * M2 / (3.0 * float(fluid.heavy_particle_mass_kg)) + _EPS)
-    A = dot_N / (_safe_pos(ops, n_p_safe * v_p, _EPS) if is_maingo else (n_p_safe * v_p + _EPS))
-    J_x = I_0 / (_safe_pos(ops, A, _EPS) if is_maingo else (A + _EPS))
-    den_current = b2 + one_plus_z
-    if not is_maingo:
-        den_current = den_current + _EPS
+    A = dot_N / (_positive_denom(ops, n_p_safe * v_p, _EPS) if is_maingo else (n_p_safe * v_p + _EPS))
+    J_x = I_0 / (_positive_denom(ops, A, _EPS) if is_maingo else (A + _EPS))
+    den_current = den
     jfac = E_CHARGE * n_e * v_p
     J_y = -beta * one_plus_z / den_current * jfac
     E_x = -b2 * Z / den_current * eta * jfac
     nu_E = eta * 2.0 * E_CHARGE * E_CHARGE * n_e / float(fluid.heavy_particle_mass_kg)
 
     T_p_floor = _floored_pos(ops, T_p, _TP_MIN)
-    f_I_raw = n_e / (_safe_pos(ops, n_s, _EPS) if is_maingo else (n_s + _EPS))
+    f_I_raw = n_e / (_positive_denom(ops, n_s, _EPS) if is_maingo else (n_s + _EPS))
     f_I = _clip_range(ops, f_I_raw, _FION_MIN, _FION_MAX)
-    delta = _floored_pos(ops, T_e_safe / T_p_floor - 1.0, _DELTA_MIN)
+    T_p_denom = _positive_denom(ops, T_p_floor, _TP_MIN) if is_maingo else T_p_floor
+    delta = _floored_pos(ops, T_e_safe / T_p_denom - 1.0, _DELTA_MIN)
     alpha = (K_B * T_e_safe / (2.0 * float(fluid.seed_ionization_energy_J))) * (2.0 - f_I) / (
-        _safe_pos(ops, 1.0 - f_I, _EPS) if is_maingo else (1.0 - f_I + _EPS)
+        _positive_denom(ops, 1.0 - f_I, _EPS) if is_maingo else (1.0 - f_I + _EPS)
     )
-    G = 4.0 * alpha * (2.0 + 1.0 / delta) * (1.0 + alpha * (1.0 + 1.0 / delta)) - b2
+    delta_denom = _positive_denom(ops, delta, _DELTA_MIN) if is_maingo else delta
+    G = 4.0 * alpha * (2.0 + 1.0 / delta_denom) * (1.0 + alpha * (1.0 + 1.0 / delta_denom)) - b2
     return {
         "n_p_safe": n_p_safe,
         "T_e_safe": T_e_safe,

@@ -43,8 +43,12 @@ def _build_parser() -> argparse.ArgumentParser:
         "--coarse-model",
         type=str,
         default="reduced_implicit",
-        choices=("reduced_implicit", "mach_spline"),
-        help="reduced MAiNGO coarse model: existing area-spline closure or Mach-spline-derived area closure",
+        choices=("reduced_implicit", "mach_spline", "mach_spline_rk4_soft", "mach_spline_trapezoid"),
+        help=(
+            "reduced MAiNGO coarse model: existing area-spline closure, "
+            "Mach-spline-derived area closure, soft RK4 Mach-spline candidate generator, "
+            "or low-dimensional Mach-spline parametric residual transcription"
+        ),
     )
     p.add_argument(
         "--reduced-implicit-newton-steps",
@@ -82,6 +86,27 @@ def _build_parser() -> argparse.ArgumentParser:
         type=float,
         default=1.0,
         help="half-width applied around the projected Mach-spline coefficients for --coarse-model mach_spline",
+    )
+    p.add_argument(
+        "--mach-fixed-inlet",
+        action="store_true",
+        help=(
+            "for --coarse-model mach_spline_trapezoid, freeze inlet variables at the "
+            "reference/initial values and expose only Mach plus state spline controls"
+        ),
+    )
+    p.add_argument(
+        "--mach-rk4-det-branch",
+        type=str,
+        default="positive",
+        choices=("positive", "negative", "none"),
+        help="determinant sign branch enforced by --coarse-model mach_spline_rk4_soft",
+    )
+    p.add_argument(
+        "--mach-rk4-det-floor",
+        type=float,
+        default=1e-3,
+        help="minimum signed scaled determinant margin for --coarse-model mach_spline_rk4_soft",
     )
     p.add_argument(
         "--handoff-n-intervals",
@@ -219,6 +244,9 @@ def main(argv: list[str] | None = None) -> int:
             None if not str(args.mach_reference_profile).strip() else str(args.mach_reference_profile)
         ),
         mach_window_radius=float(args.mach_window_radius),
+        mach_fixed_inlet=bool(args.mach_fixed_inlet),
+        mach_rk4_det_branch=str(args.mach_rk4_det_branch),
+        mach_rk4_det_floor=float(args.mach_rk4_det_floor),
         include_rk4_benchmark=not bool(args.skip_rk4_benchmark),
         objective_profile=str(args.objective_profile),
         working_fluid_profile=args.working_fluid_profile,

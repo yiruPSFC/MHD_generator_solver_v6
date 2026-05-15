@@ -209,6 +209,9 @@ def run_hybrid_maingo_casadi(
     critical_residual_tolerance: float = 1e-4,
     mach_reference_profile_path: str | Path | None = None,
     mach_window_radius: float = 1.0,
+    mach_fixed_inlet: bool = False,
+    mach_rk4_det_branch: str = "positive",
+    mach_rk4_det_floor: float = 1e-3,
     include_rk4_benchmark: bool = True,
     objective_profile: str = OBJECTIVE_PROFILE_LAB_POC_V2,
     working_fluid_profile: str | WorkingFluidProfile | None = None,
@@ -233,14 +236,25 @@ def run_hybrid_maingo_casadi(
         coarse_model_name = "reduced_implicit"
     if coarse_model_name in {"mach", "mach_spline_reduced_implicit", "reduced_mach_spline"}:
         coarse_model_name = "mach_spline"
-    if coarse_model_name not in {"reduced_implicit", "mach_spline"}:
+    if coarse_model_name in {"mach_spline_rk4", "mach_rk4_soft", "reduced_mach_spline_rk4_soft"}:
+        coarse_model_name = "mach_spline_rk4_soft"
+    if coarse_model_name in {
+        "mach_spline_trap",
+        "mach_trapezoid",
+        "mach_spline_trapezoid_direct",
+        "mach_spline_collocation",
+        "mach_spline_parametric_residual",
+    }:
+        coarse_model_name = "mach_spline_trapezoid"
+    if coarse_model_name not in {"reduced_implicit", "mach_spline", "mach_spline_rk4_soft", "mach_spline_trapezoid"}:
         raise ValueError(
-            f"unsupported coarse_model={coarse_model!r}; supported values are reduced_implicit and mach_spline. "
+            f"unsupported coarse_model={coarse_model!r}; supported values are reduced_implicit, "
+            "mach_spline, mach_spline_rk4_soft, and mach_spline_trapezoid. "
             "RK4 is evaluated only as a post-hoc benchmark because its explicit RHS can cross singular "
             "denominators during MAiNGO relaxation."
         )
-    if coarse_model_name == "mach_spline" and bool(critical_mode):
-        raise ValueError("critical_mode is not supported by the Mach-spline reduced model.")
+    if coarse_model_name in {"mach_spline", "mach_spline_rk4_soft", "mach_spline_trapezoid"} and bool(critical_mode):
+        raise ValueError("critical_mode is not supported by the Mach-spline reduced models.")
     baseline = BaselineSeed.from_summary(baseline_summary_path)
     if working_fluid_profile is not None:
         baseline = baseline.with_working_fluid_profile(working_fluid_profile)
@@ -264,23 +278,43 @@ def run_hybrid_maingo_casadi(
     )
     out_dir_path = Path(out_dir).resolve()
     out_dir_path.mkdir(parents=True, exist_ok=True)
-    if coarse_model_name == "mach_spline":
-        from v6_maingo_mach_spline.maingo_model import MachSplineReducedImplicitModelBase
+    if coarse_model_name in {"mach_spline", "mach_spline_rk4_soft", "mach_spline_trapezoid"}:
+        from v6_maingo_mach_spline.maingo_model import (
+            MachSplineRK4SoftModelBase,
+            MachSplineReducedImplicitModelBase,
+            MachSplineTrapezoidModelBase,
+        )
 
         mach_reference_profile = _resolve_mach_reference_profile_path(
             explicit_profile_path=mach_reference_profile_path,
             initial_solution_json=initial_solution_json,
             baseline=baseline,
         )
-        model_impl = MachSplineReducedImplicitModelBase(
-            baseline=baseline,
-            reference_profile_path=mach_reference_profile,
-            n_intervals=int(coarse_n_intervals),
-            maingopy_module=maingopy,
-            objective_profile=objective_profile,
-            newton_steps=int(reduced_implicit_newton_steps),
-            mach_window_radius=float(mach_window_radius),
-        )
+        if coarse_model_name == "mach_spline_rk4_soft":
+            mach_model_cls = MachSplineRK4SoftModelBase
+        elif coarse_model_name == "mach_spline_trapezoid":
+            mach_model_cls = MachSplineTrapezoidModelBase
+        else:
+            mach_model_cls = MachSplineReducedImplicitModelBase
+        mach_model_kwargs = {
+            "baseline": baseline,
+            "reference_profile_path": mach_reference_profile,
+            "n_intervals": int(coarse_n_intervals),
+            "maingopy_module": maingopy,
+            "objective_profile": objective_profile,
+            "newton_steps": int(reduced_implicit_newton_steps),
+            "mach_window_radius": float(mach_window_radius),
+        }
+        if coarse_model_name == "mach_spline_rk4_soft":
+            mach_model_kwargs.update(
+                {
+                    "det_branch_sign": str(mach_rk4_det_branch),
+                    "det_floor": float(mach_rk4_det_floor),
+                }
+            )
+        if coarse_model_name == "mach_spline_trapezoid":
+            mach_model_kwargs["fixed_inlet"] = bool(mach_fixed_inlet)
+        model_impl = mach_model_cls(**mach_model_kwargs)
     else:
         model_impl = _MAiNGOHybridReducedImplicitModelBase(
             baseline=baseline,
@@ -340,7 +374,7 @@ def run_hybrid_maingo_casadi(
         if hasattr(incumbent_solution, "decision_vector")
         else dict(incumbent_solution)
     )
-    if coarse_model_name == "mach_spline":
+    if coarse_model_name in {"mach_spline", "mach_spline_rk4_soft", "mach_spline_trapezoid"}:
         best_solution = incumbent_solution
         coarse_best = incumbent_result
         feasibility_restoration = {"used": False, "reason": None, "alpha": 1.0}
@@ -360,7 +394,8 @@ def run_hybrid_maingo_casadi(
     incumbent_result.diagnostics["formulation"] = str(getattr(model_impl, "formulation", coarse_model_name))
     coarse_best.diagnostics["formulation"] = str(getattr(model_impl, "formulation", coarse_model_name))
     coarse_best.diagnostics["coarse_model"] = coarse_model_name
-    coarse_best.diagnostics["reduced_implicit_newton_steps"] = int(reduced_implicit_newton_steps)
+    if coarse_model_name != "mach_spline_rk4_soft":
+        coarse_best.diagnostics["reduced_implicit_newton_steps"] = int(reduced_implicit_newton_steps)
     if not bool(coarse_best.diagnostics.get("acceptable", False)):
         raise RuntimeError(
             "Unable to recover a coarse feasible point from the MAiNGO incumbent: "
@@ -368,7 +403,7 @@ def run_hybrid_maingo_casadi(
             f"candidate max_eq_residual={incumbent_result.diagnostics.get('max_eq_residual')!r}."
         )
 
-    if coarse_model_name == "mach_spline":
+    if coarse_model_name in {"mach_spline", "mach_spline_rk4_soft", "mach_spline_trapezoid"}:
         handoff_best = model_impl.resample_solution_result(
             coarse_best,
             n_intervals=int(handoff_n_intervals),
@@ -383,7 +418,7 @@ def run_hybrid_maingo_casadi(
     handoff_bounds = _handoff_bounds_from_best(handoff_best)
     rk4_benchmark = None
     if bool(include_rk4_benchmark):
-        if coarse_model_name == "mach_spline":
+        if coarse_model_name in {"mach_spline", "mach_spline_rk4_soft", "mach_spline_trapezoid"}:
             rk4_benchmark = {
                 "ok": False,
                 "skipped": True,
@@ -419,6 +454,7 @@ def run_hybrid_maingo_casadi(
         "reduced_implicit_newton_steps": int(reduced_implicit_newton_steps),
         "critical_mode": bool(critical_mode),
         "critical_residual_tolerance": float(critical_residual_tolerance),
+        "mach_fixed_inlet": bool(mach_fixed_inlet),
         "working_fluid_profile": baseline.working_fluid.to_dict(),
         "skip_casadi_handoff": bool(skip_casadi_handoff),
         "search_window_json": None if search_window_path is None else str(search_window_path),

@@ -36,6 +36,10 @@ Current scope:
   replacing `a1/a2/a3` with `m1/m2/m3`.
 - expose that reduced Mach rollout through a MAiNGO-style model adapter and the
   explicit `--coarse-model mach_spline` workflow branch.
+- expose a faster `--coarse-model mach_spline_rk4_soft` candidate generator that
+  removes fixed-Newton equality residuals, uses RK4 with a finite-difference
+  chain-rule `A(n_p,T_e,M(x))` RHS, and records derived-sigma /
+  Freidberg-defect diagnostics as post-hoc physical acceptance checks.
 
 The first reduced rollout uses backward-difference derived geometry:
 
@@ -52,6 +56,15 @@ CLI smoke entrypoint:
 ```bash
 ./.venv_jit/bin/python -m v6_maingo_casadi.run_hybrid_maingo_casadi \
   --coarse-model mach_spline \
+  --mach-reference-profile path/to/maingo_best_profile.npz \
+  --skip-casadi-handoff
+```
+
+Fast candidate-generator smoke entrypoint:
+
+```bash
+./.venv_jit/bin/python -m v6_maingo_casadi.run_hybrid_maingo_casadi \
+  --coarse-model mach_spline_rk4_soft \
   --mach-reference-profile path/to/maingo_best_profile.npz \
   --skip-casadi-handoff
 ```

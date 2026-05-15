@@ -50,11 +50,16 @@ def _f_beta_z(beta, Z):
     return b2 * (b2 + d * d) / den
 
 
-def _df_dbeta(beta, Z):
+def _df_dbeta(beta, Z, *, ops=None):
     b2 = beta * beta
     d = 1.0 + Z
     num = b2 * (b2 + d * d)
     c = b2 + d
+    if ops is not None:
+        c_safe = _safe_pos(ops, c, _EPS)
+        dnum_db2 = 2.0 * b2 + d * d
+        dF_db2 = (dnum_db2 * c_safe - 2.0 * num) / (c_safe * c_safe * c_safe)
+        return dF_db2 * 2.0 * beta
     den = c * c + _EPS
     dnum_db2 = 2.0 * b2 + d * d
     dden_db2 = 2.0 * c
@@ -62,11 +67,15 @@ def _df_dbeta(beta, Z):
     return dF_db2 * 2.0 * beta
 
 
-def _df_dz(beta, Z):
+def _df_dz(beta, Z, *, ops=None):
     b2 = beta * beta
     d = 1.0 + Z
     num = b2 * (b2 + d * d)
     c = b2 + d
+    if ops is not None:
+        c_safe = _safe_pos(ops, c, _EPS)
+        dnum_dd = 2.0 * b2 * d
+        return (dnum_dd * c_safe - 2.0 * num) / (c_safe * c_safe * c_safe)
     den = c * c + _EPS
     dnum_dd = 2.0 * b2 * d
     dden_dd = 2.0 * c
@@ -174,8 +183,9 @@ def _closure_state(
     dZ_dTe = 2.0 * beta * dbeta_dTe * (q - 1.0) + b2 * dq_dTe
     dZ_dnp = 2.0 * beta * dbeta_dnp * (q - 1.0) + b2 * dq_dnp
 
-    dF_dTe = _df_dbeta(beta, Z) * dbeta_dTe + _df_dz(beta, Z) * dZ_dTe
-    dF_dnp = _df_dbeta(beta, Z) * dbeta_dnp + _df_dz(beta, Z) * dZ_dnp
+    derivative_ops = ops if is_maingo else None
+    dF_dTe = _df_dbeta(beta, Z, ops=derivative_ops) * dbeta_dTe + _df_dz(beta, Z, ops=derivative_ops) * dZ_dTe
+    dF_dnp = _df_dbeta(beta, Z, ops=derivative_ops) * dbeta_dnp + _df_dz(beta, Z, ops=derivative_ops) * dZ_dnp
 
     dTp_dTe = 1.0 - C * dF_dTe
     if is_maingo:
