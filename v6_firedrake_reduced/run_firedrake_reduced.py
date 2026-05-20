@@ -11,6 +11,7 @@ import numpy as np
 from .design import GEOMETRY_LENGTH_MODES, CaseConfig, DesignVector, load_case_config
 from .forward import EQUATION_FORMS
 from .forward import FiredrakeUnavailableError, solve_forward
+from .freidberg_branch_audit import audit_freidberg_branches
 from .reference_profile import (
     build_freidberg_reference_profile,
     build_implicit_reference_profile,
@@ -93,20 +94,88 @@ def _write_snapshot(path: Path, config: CaseConfig) -> None:
     path.write_text(text, encoding="utf-8")
 
 
+def _write_freidberg_branch_audit(
+    *,
+    out_dir: Path,
+    filename: str,
+    profile_kind: str,
+    profile: dict[str, Any],
+    config: CaseConfig,
+    branch_policy: str,
+    tolerance_K: float,
+) -> dict[str, Any]:
+    audit_path = out_dir / filename
+    try:
+        audit = audit_freidberg_branches(
+            profile=profile,
+            design=config.design,
+            config=config,
+            branch_policy=branch_policy,
+            tolerance_K=float(tolerance_K),
+        )
+        payload = {
+            **audit,
+            "profile_kind": profile_kind,
+            "case_config": config.to_dict(),
+        }
+        _write_json(audit_path, payload)
+        return {
+            "ok": bool(audit.get("summary", {}).get("ok", False)),
+            "profile_kind": profile_kind,
+            "json": str(audit_path),
+            "summary": dict(audit.get("summary", {})),
+        }
+    except Exception as exc:
+        payload = {
+            "audit": "freidberg_branch_audit",
+            "schema_version": 1,
+            "profile_kind": profile_kind,
+            "case_config": config.to_dict(),
+            "error": f"{type(exc).__name__}: {exc}",
+            "summary": {
+                "ok": False,
+                "branch_policy": str(branch_policy),
+                "tolerance_K": float(tolerance_K),
+            },
+        }
+        _write_json(audit_path, payload)
+        return {
+            "ok": False,
+            "profile_kind": profile_kind,
+            "json": str(audit_path),
+            "error": payload["error"],
+            "summary": dict(payload["summary"]),
+        }
+
+
 def _run_evaluate(
     config: CaseConfig,
     out_dir: Path,
     *,
     initial_profile: dict[str, Any] | None = None,
     initial_profile_context: dict[str, Any] | None = None,
+    freidberg_branch_audit: bool = False,
+    freidberg_branch_policy: str = "continuity",
+    freidberg_branch_tolerance: float = 1e-3,
 ) -> dict[str, Any]:
     failure_log = out_dir / "failure_log.jsonl"
     result = solve_forward(design=config.design, config=config, initial_profile=initial_profile)
     if not result.ok:
         failed_profile_npz = None
+        branch_audit_info = None
         if result.profile is not None:
             failed_profile_npz = out_dir / "failed_profile.npz"
             np.savez(failed_profile_npz, **result.profile)
+            if freidberg_branch_audit:
+                branch_audit_info = _write_freidberg_branch_audit(
+                    out_dir=out_dir,
+                    filename="freidberg_branch_audit_failed.json",
+                    profile_kind="failed_profile",
+                    profile=result.profile,
+                    config=config,
+                    branch_policy=freidberg_branch_policy,
+                    tolerance_K=float(freidberg_branch_tolerance),
+                )
         _append_failure(
             failure_log,
             design=config.design,
@@ -127,6 +196,8 @@ def _run_evaluate(
             "failed_profile_npz": None if failed_profile_npz is None else str(failed_profile_npz),
             "failed_metrics": None if result.metrics is None else result.metrics.to_dict(),
         }
+        if branch_audit_info is not None:
+            payload["freidberg_branch_audit"] = branch_audit_info
         _write_json(out_dir / "run_summary.json", payload)
         return payload
 
@@ -134,6 +205,17 @@ def _run_evaluate(
     assert result.metrics is not None
     np.savez(out_dir / "profile.npz", **result.profile)
     _write_json(out_dir / "best_design.json", config.design.to_dict())
+    branch_audit_info = None
+    if freidberg_branch_audit:
+        branch_audit_info = _write_freidberg_branch_audit(
+            out_dir=out_dir,
+            filename="freidberg_branch_audit.json",
+            profile_kind="profile",
+            profile=result.profile,
+            config=config,
+            branch_policy=freidberg_branch_policy,
+            tolerance_K=float(freidberg_branch_tolerance),
+        )
     payload = {
         "ok": True,
         "case_config": config.to_dict(),
@@ -143,6 +225,8 @@ def _run_evaluate(
         "failure_log": str(failure_log),
         "initial_profile_context": dict(initial_profile_context or {}),
     }
+    if branch_audit_info is not None:
+        payload["freidberg_branch_audit"] = branch_audit_info
     _write_json(out_dir / "run_summary.json", payload)
     _write_snapshot(out_dir / "README_snapshot.md", config)
     if not failure_log.exists():
@@ -150,7 +234,17 @@ def _run_evaluate(
     return payload
 
 
-def _run_optimize(config: CaseConfig, out_dir: Path, *, multistart: int, seed: int, max_iterations: int) -> dict[str, Any]:
+def _run_optimize(
+    config: CaseConfig,
+    out_dir: Path,
+    *,
+    multistart: int,
+    seed: int,
+    max_iterations: int,
+    freidberg_branch_audit: bool = False,
+    freidberg_branch_policy: str = "continuity",
+    freidberg_branch_tolerance: float = 1e-3,
+) -> dict[str, Any]:
     failure_log = out_dir / "failure_log.jsonl"
     try:
         opt = minimize_multistart(config=config, multistart=int(multistart), seed=int(seed), max_iterations=int(max_iterations))
@@ -213,7 +307,13 @@ def _run_optimize(config: CaseConfig, out_dir: Path, *, multistart: int, seed: i
         metadata=config.metadata,
     )
     _write_json(out_dir / "best_design.json", best_design.to_dict())
-    evaluate_payload = _run_evaluate(best_config, out_dir)
+    evaluate_payload = _run_evaluate(
+        best_config,
+        out_dir,
+        freidberg_branch_audit=freidberg_branch_audit,
+        freidberg_branch_policy=freidberg_branch_policy,
+        freidberg_branch_tolerance=float(freidberg_branch_tolerance),
+    )
     payload = {
         **evaluate_payload,
         "optimizer": {
@@ -263,6 +363,23 @@ def build_parser() -> argparse.ArgumentParser:
         default="primitive",
         choices=EQUATION_FORMS,
         help="Forward weak residual form: legacy primitive momentum/energy, or Freidberg H/L balance equations.",
+    )
+    parser.add_argument(
+        "--freidberg-branch-audit",
+        action="store_true",
+        help="Write a diagnostic H/L/T_e branch reconstruction audit for the final or failed profile.",
+    )
+    parser.add_argument(
+        "--freidberg-branch-policy",
+        default="continuity",
+        choices=("continuity", "subsonic", "supersonic", "any"),
+        help="Branch-selection policy used only by --freidberg-branch-audit.",
+    )
+    parser.add_argument(
+        "--freidberg-branch-tolerance",
+        type=float,
+        default=1e-3,
+        help="Absolute T_p closure residual tolerance in K for --freidberg-branch-audit.",
     )
     parser.add_argument(
         "--initial-profile-npz",
@@ -315,6 +432,9 @@ def main(argv: list[str] | None = None) -> int:
         "electron_transport": normalize_electron_transport(args.electron_transport),
         "residual_scaling": str(args.residual_scaling),
         "equation_form": str(args.equation_form),
+        "freidberg_branch_audit_requested": bool(args.freidberg_branch_audit),
+        "freidberg_branch_policy": str(args.freidberg_branch_policy),
+        "freidberg_branch_tolerance_K": float(args.freidberg_branch_tolerance),
         "velikhov_mode": str(args.velikhov_mode),
         "velikhov_floor": float(args.velikhov_floor),
         "velikhov_penalty_scale": float(args.velikhov_penalty_scale),
@@ -409,6 +529,9 @@ def main(argv: list[str] | None = None) -> int:
                 out_dir,
                 initial_profile=initial_profile,
                 initial_profile_context=initial_profile_context,
+                freidberg_branch_audit=bool(args.freidberg_branch_audit),
+                freidberg_branch_policy=str(args.freidberg_branch_policy),
+                freidberg_branch_tolerance=float(args.freidberg_branch_tolerance),
             )
         else:
             payload = _run_optimize(
@@ -417,6 +540,9 @@ def main(argv: list[str] | None = None) -> int:
                 multistart=int(args.multistart),
                 seed=int(args.seed),
                 max_iterations=int(args.max_iterations),
+                freidberg_branch_audit=bool(args.freidberg_branch_audit),
+                freidberg_branch_policy=str(args.freidberg_branch_policy),
+                freidberg_branch_tolerance=float(args.freidberg_branch_tolerance),
             )
     except FiredrakeUnavailableError as exc:
         failure_log = out_dir / "failure_log.jsonl"

@@ -9,6 +9,7 @@ import unittest
 import numpy as np
 
 from v6_firedrake_reduced.design import DesignVector, load_case_config
+from v6_firedrake_reduced.freidberg_branch_audit import audit_freidberg_branches
 from v6_firedrake_reduced.geometry import LogAreaSplineControl
 from v6_firedrake_reduced.objective import evaluate_profile_metrics
 from v6_firedrake_reduced.run_firedrake_reduced import _design_from_json
@@ -134,6 +135,39 @@ class FiredrakeReducedPureContractTest(unittest.TestCase):
             if isinstance(value, bool):
                 continue
             self.assertTrue(np.isfinite(float(value)))
+
+    def test_freidberg_branch_audit_returns_json_safe_summary(self):
+        config = load_case_config(case="yamasaki2004", n_intervals=2)
+        area = config.design.area_control.evaluate_profile(
+            length=config.length_m,
+            n_intervals=config.n_intervals,
+            area_scale=config.area_scale_m2,
+        )
+        x = np.asarray(area["x"], dtype=float)
+        profile = {
+            "x": x,
+            "x_norm": np.asarray(area["x_norm"], dtype=float),
+            "n_p": np.linspace(config.design.n_p_in, 0.95 * config.design.n_p_in, x.size),
+            "T_e": np.linspace(config.design.T_e_in, 1.02 * config.design.T_e_in, x.size),
+            "A": np.asarray(area["A"], dtype=float),
+            "sigma_logA": np.asarray(area["sigma_logA"], dtype=float),
+        }
+        audit = audit_freidberg_branches(
+            profile=profile,
+            design=config.design,
+            config=config,
+            branch_policy="continuity",
+        )
+        summary = audit["summary"]
+        self.assertEqual(summary["n_points"], x.size)
+        self.assertIsInstance(summary["chosen_failure_count"], int)
+        self.assertIsInstance(summary["subsonic_success_count"], int)
+        self.assertIsInstance(summary["supersonic_success_count"], int)
+        self.assertIn("closest_to_sonic", summary)
+        self.assertEqual(len(audit["rows"]), x.size)
+        self.assertIn("subsonic", audit["rows"][0]["branches"])
+        self.assertIn("supersonic", audit["rows"][0]["branches"])
+        json.dumps(audit, allow_nan=False)
 
     def test_velikhov_penalty_lowers_objective_when_floor_is_violated(self):
         config = load_case_config(case="yamasaki2004", n_intervals=8)

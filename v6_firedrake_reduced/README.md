@@ -148,6 +148,13 @@ uses the LXCat e-He elastic momentum-transfer median at 4300 K; `e-Argon`
 uses the legacy cross-section value.  Arbitrary numeric `sigma_ep` overrides
 are intentionally not part of the main interface.
 
+`--freidberg-branch-audit` is a diagnostic add-on for evaluate/optimize runs.
+It writes `freidberg_branch_audit.json` for a successful final profile, or
+`freidberg_branch_audit_failed.json` when SNES returns a partial failed
+profile.  The audit maps the primitive profile to the current H/L/T_e
+coordinates, tries both subsonic and supersonic algebraic closure branches,
+and records the selected branch residuals without changing the forward solve.
+
 The v0 optimizer is a small projected-gradient/backtracking smoke driver, not
 a global optimizer.  It optimizes normalized design coordinates internally and
 accepts a trial only after the Firedrake forward replay succeeds.  Failed
@@ -163,12 +170,14 @@ run_summary.json
 best_design.json
 objective_history.csv
 profile.npz
+freidberg_branch_audit.json
 failure_log.jsonl
 README_snapshot.md
 ```
 
 `profile.npz` is written only after a successful forward solve.  Failed starts
 are appended to `failure_log.jsonl` with the design vector and error message.
+The Freidberg branch audit file is present only when requested.
 
 ## Current Checkpoint, 2026-05-19
 
