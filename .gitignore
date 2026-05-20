@@ -5,6 +5,8 @@ __pycache__/
 .DS_Store
 _tmp_sweep*.jsonl
 .venv_jit/
+.venv_firedrake
+.venv_firedrake/
 results/
 slurm/
 v6_batch/outputs/
@@ -12,6 +14,7 @@ v6_core/non_batch/outputs/
 v6_casadi/outputs/
 v6_casadi_v2/outputs/
 v6_maingo_casadi/outputs/
+v6_firedrake_reduced/outputs/
 v6_piecewise/outputs/
 v6_global_marginal/debug/
 v6_global_marginal/diagnostics/

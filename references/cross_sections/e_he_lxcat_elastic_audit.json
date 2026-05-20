@@ -1,0 +1,149 @@
+{
+  "blocks": [
+    {
+      "collision_type": "ELASTIC",
+      "columns": "Energy (eV) | Cross section (m2)",
+      "comments": [
+        "From Biagi's elastic momentum transfer."
+      ],
+      "database": "Biagi (transcription of data from SF Biagi's Fortran code, Magboltz.)",
+      "energy_max_eV": 900.5711,
+      "energy_min_eV": 0.0,
+      "n_rows": 36,
+      "process": "E + He -> E + He, Elastic",
+      "sigma_m2_by_T_K": {
+        "2250.0": 6.118526306164618e-20,
+        "3000.0": 6.232745659778842e-20,
+        "4300.0": 6.378687034669481e-20,
+        "4900.0": 6.43247981802703e-20,
+        "6200.0": 6.530535615607936e-20
+      },
+      "species": "e / He"
+    },
+    {
+      "collision_type": "ELASTIC",
+      "columns": "Energy (eV) | Cross section (m2)",
+      "comments": [
+        "Elastic Momentum Transfer."
+      ],
+      "database": "Biagi-v7.1 (Magboltz version 7.1)",
+      "energy_max_eV": 965.0509,
+      "energy_min_eV": 0.0,
+      "n_rows": 171,
+      "process": "E + He -> E + He, Elastic",
+      "sigma_m2_by_T_K": {
+        "2250.0": 6.149540864576286e-20,
+        "3000.0": 6.280962084819169e-20,
+        "4300.0": 6.44800548556352e-20,
+        "4900.0": 6.509381034396267e-20,
+        "6200.0": 6.612157521838973e-20
+      },
+      "species": "e / He"
+    },
+    {
+      "collision_type": "ELASTIC",
+      "columns": "Energy (eV) | Cross section (m2)",
+      "comments": [
+        "[e + He(1S1) -> e + He(1S1), Elastic] Crompton et al 1970 Austr. J. Phys. 23 667 (8e-3",
+        "- 3 eV); Milloy and Crompton 1977 Phys. Rev. A 15 1847 (4 - 12 eV); Register et al 1980",
+        "Phys. Rev. A 21 1134 (12 - 100 eV); Belmonte et al 2007 J. Phys. D: Appl. Phys. 40 7343",
+        "(100 - 1000 eV)."
+      ],
+      "database": "IST-Lisbon database",
+      "energy_max_eV": 1000.0,
+      "energy_min_eV": 0.0,
+      "n_rows": 506,
+      "process": "E + He -> E + He, Elastic",
+      "sigma_m2_by_T_K": {
+        "2250.0": 6.16e-20,
+        "3000.0": 6.280187919220415e-20,
+        "4300.0": 6.45273347202537e-20,
+        "4900.0": 6.512442323246937e-20,
+        "6200.0": 6.610906516578485e-20
+      },
+      "species": "e / He"
+    },
+    {
+      "collision_type": "ELASTIC",
+      "columns": "Energy (eV) | Cross section (m2)",
+      "comments": [
+        "Elastic Momentum Transfer."
+      ],
+      "database": "Morgan (Kinema Research & Software)",
+      "energy_max_eV": 1000.0,
+      "energy_min_eV": 0.0,
+      "n_rows": 40,
+      "process": "E + He -> E + He, Elastic",
+      "sigma_m2_by_T_K": {
+        "2250.0": 6.200632216239491e-20,
+        "3000.0": 6.331321184439873e-20,
+        "4300.0": 6.498154308061578e-20,
+        "4900.0": 6.559613385691021e-20,
+        "6200.0": 6.668981521573281e-20
+      },
+      "species": "e / He"
+    }
+  ],
+  "reference_values": {
+    "classic_e_he_momentum_transfer_range_m2": [
+      5e-20,
+      6.6e-20
+    ],
+    "current_code_sigma_ep_m2": 3.942573033087758e-21,
+    "yamasaki_inferred_seed_5e-4_m2": 1.86e-19
+  },
+  "selection": {
+    "collision_type": "ELASTIC",
+    "interpretation": "LXCat ELASTIC denotes elastic momentum-transfer cross section.",
+    "process_contains": "Elastic",
+    "species": "e / He"
+  },
+  "source_file": "/Users/yiruxiao/Desktop/MHD Generator/MHD_generator_solver_v6/references/cross_sections/e_He_LXCat_all_elastic_momentum_transfer.txt",
+  "summary_by_temperature_K": {
+    "2250.0": {
+      "current_code_sigma_ratio_to_median": 0.06405719070210776,
+      "energy_eV": 0.1938899983982625,
+      "max_m2": 6.200632216239491e-20,
+      "median_m2": 6.154770432288143e-20,
+      "min_m2": 6.118526306164618e-20,
+      "relative_span_over_median": 0.013340206751521148,
+      "yamasaki_seed_5e-4_inferred_ratio_to_median": 3.022046103039643
+    },
+    "3000.0": {
+      "current_code_sigma_ratio_to_median": 0.06277407772090694,
+      "energy_eV": 0.25851999786435,
+      "max_m2": 6.331321184439873e-20,
+      "median_m2": 6.280575002019793e-20,
+      "min_m2": 6.232745659778842e-20,
+      "relative_span_over_median": 0.015695302520761196,
+      "yamasaki_seed_5e-4_inferred_ratio_to_median": 2.9615122809644596
+    },
+    "4300.0": {
+      "current_code_sigma_ratio_to_median": 0.06112166203887925,
+      "energy_eV": 0.370545330272235,
+      "max_m2": 6.498154308061578e-20,
+      "median_m2": 6.450369478794445e-20,
+      "min_m2": 6.378687034669481e-20,
+      "relative_span_over_median": 0.018520996942089123,
+      "yamasaki_seed_5e-4_inferred_ratio_to_median": 2.8835557499686493
+    },
+    "4900.0": {
+      "current_code_sigma_ratio_to_median": 0.06055331768532478,
+      "energy_eV": 0.422249329845105,
+      "max_m2": 6.559613385691021e-20,
+      "median_m2": 6.510911678821602e-20,
+      "min_m2": 6.43247981802703e-20,
+      "relative_span_over_median": 0.019526231338312567,
+      "yamasaki_seed_5e-4_inferred_ratio_to_median": 2.856742790798597
+    },
+    "6200.0": {
+      "current_code_sigma_ratio_to_median": 0.059631761921945685,
+      "energy_eV": 0.53427466225299,
+      "max_m2": 6.668981521573281e-20,
+      "median_m2": 6.61153201920873e-20,
+      "min_m2": 6.530535615607936e-20,
+      "relative_span_over_median": 0.02094006435469312,
+      "yamasaki_seed_5e-4_inferred_ratio_to_median": 2.8132662665719126
+    }
+  }
+}
