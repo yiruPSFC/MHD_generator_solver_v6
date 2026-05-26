@@ -346,7 +346,7 @@ def audit_freidberg_branches(
         Z_in=float(design.Z_in),
         I_0=float(design.I_0),
         seed_fraction=design.seed_fraction,
-        B=float(config.B_T),
+        B=float(design.B_T),
         inlet_A=float(config.area_scale_m2),
         working_fluid=fluid,
     )
@@ -356,7 +356,7 @@ def audit_freidberg_branches(
         "dot_N": float(inlet["dot_N"]),
         "I_0": float(design.I_0),
         "seed_fraction": float(design.seed_fraction),
-        "B_T": float(config.B_T),
+        "B_T": float(design.B_T),
         "area_scale_m2": float(config.area_scale_m2),
         "heavy_particle_mass_kg": float(fluid.heavy_particle_mass_kg),
     }
@@ -383,7 +383,7 @@ def audit_freidberg_branches(
                 dot_N=float(inlet["dot_N"]),
                 I_0=float(design.I_0),
                 seed_fraction=design.seed_fraction,
-                B=float(config.B_T),
+                B=float(design.B_T),
                 working_fluid=fluid,
             )
             v_p = float(closure["v_p"])

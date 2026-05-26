@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from contextlib import nullcontext
 from dataclasses import dataclass
 import sys
 from typing import Any
 
 import numpy as np
 
+from .constraints import evaluate_velikhov_node_constraints
 from .design import DESIGN_VARIABLE_NAMES, CaseConfig, DesignVector
 from .forward import FiredrakeUnavailableError, solve_forward
 
@@ -213,4 +215,194 @@ def minimize_multistart(
         "trial_failures": trial_failures,
         "method": "projected_gradient_backtracking",
         "max_iterations": int(max_iterations),
+    }
+
+
+def _stop_annotating_context():
+    try:
+        from pyadjoint import stop_annotating  # type: ignore
+    except ImportError:
+        return nullcontext()
+    return stop_annotating()
+
+
+def minimize_constrained_slsqp(
+    *,
+    config: CaseConfig,
+    multistart: int,
+    seed: int = 1,
+    max_iterations: int = 8,
+    velikhov_hard_floor: float = 0.0,
+) -> dict[str, Any]:
+    """Local SLSQP optimizer with node-only reduced constraints G_node - floor >= 0."""
+
+    try:
+        from scipy.optimize import minimize  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError("scipy.optimize is required for constrained_slsqp.") from exc
+
+    if str(config.metadata.get("velikhov_mode", "diagnostic")).lower() == "penalty":
+        raise ValueError("constrained_slsqp requires velikhov_mode='diagnostic'; do not mix hard G constraints with the soft penalty.")
+
+    lower = config.bounds.lower.as_array()
+    upper = config.bounds.upper.as_array()
+    width = np.maximum(upper - lower, 1e-30)
+    constraint_count = int(config.n_intervals) + 1
+    hard_floor = float(velikhov_hard_floor)
+
+    def to_normalized(values: np.ndarray) -> np.ndarray:
+        return (np.asarray(values, dtype=float) - lower) / width
+
+    def from_normalized(values: np.ndarray) -> np.ndarray:
+        return lower + np.asarray(values, dtype=float) * width
+
+    rng = np.random.default_rng(int(seed))
+    starts = [config.design.as_array()]
+    for _ in range(max(int(multistart) - 1, 0)):
+        starts.append(lower + rng.random(lower.shape) * width)
+
+    history: list[dict[str, Any]] = []
+    trial_failures: list[dict[str, Any]] = []
+    best = None
+    failure_keys: set[tuple[str, tuple[float, ...], str]] = set()
+
+    def record_failure(*, source: str, start_index: int, values: np.ndarray, error: str) -> None:
+        raw = np.asarray(values, dtype=float).reshape(len(DESIGN_VARIABLE_NAMES))
+        key = (str(source), tuple(np.round(raw, 12)), str(error))
+        if key in failure_keys:
+            return
+        failure_keys.add(key)
+        trial_failures.append(
+            {
+                "start_index": int(start_index),
+                "iteration": None,
+                "trial": None,
+                "source": str(source),
+                "x": [float(v) for v in raw],
+                "error": str(error),
+            }
+        )
+
+    for idx, start in enumerate(starts):
+        y0 = np.clip(to_normalized(np.asarray(start, dtype=float)), 0.0, 1.0)
+        x0 = from_normalized(y0)
+        try:
+            bundle = build_reduced_functional(design=DesignVector.from_array(x0), config=config)
+        except Exception as exc:
+            record_failure(
+                source="initial_reduced_functional",
+                start_index=idx,
+                values=x0,
+                error=f"{type(exc).__name__}: {exc}",
+            )
+            history.append(
+                {
+                    "start_index": int(idx),
+                    "success": False,
+                    "message": f"initial reduced-functional build failed: {type(exc).__name__}: {exc}",
+                    "fun": float("inf"),
+                    "x": [float(v) for v in x0],
+                    "min_constraint_margin": float("nan"),
+                }
+            )
+            continue
+
+        constraint_cache: dict[tuple[float, ...], np.ndarray] = {}
+
+        def raw_from_y(y_values: np.ndarray) -> np.ndarray:
+            return from_normalized(np.clip(np.asarray(y_values, dtype=float), 0.0, 1.0))
+
+        def objective(y_values: np.ndarray) -> float:
+            x = raw_from_y(y_values)
+            try:
+                return float(-evaluate_reduced_functional(bundle, x))
+            except Exception as exc:
+                record_failure(
+                    source="objective",
+                    start_index=idx,
+                    values=x,
+                    error=f"{type(exc).__name__}: {exc}",
+                )
+                return 1.0e100
+
+        def objective_jac(y_values: np.ndarray) -> np.ndarray:
+            x = raw_from_y(y_values)
+            try:
+                _ = evaluate_reduced_functional(bundle, x)
+                return -reduced_functional_gradient(bundle) * width
+            except Exception as exc:
+                record_failure(
+                    source="objective_jac",
+                    start_index=idx,
+                    values=x,
+                    error=f"{type(exc).__name__}: {exc}",
+                )
+                return np.zeros_like(y0)
+
+        def constraints(y_values: np.ndarray) -> np.ndarray:
+            x = raw_from_y(y_values)
+            key = tuple(np.asarray(x, dtype=float))
+            cached = constraint_cache.get(key)
+            if cached is not None:
+                return cached.copy()
+            design = DesignVector.from_array(x)
+            try:
+                with _stop_annotating_context():
+                    result = solve_forward(design=design, config=config)
+                if not result.ok or result.profile is None:
+                    raise RuntimeError(result.error or "forward solve failed")
+                summary = evaluate_velikhov_node_constraints(
+                    profile=result.profile,
+                    design=design,
+                    config=config,
+                    floor=hard_floor,
+                )
+                margins = np.asarray(summary.margins, dtype=float).reshape(constraint_count)
+            except Exception as exc:
+                record_failure(
+                    source="constraint",
+                    start_index=idx,
+                    values=x,
+                    error=f"{type(exc).__name__}: {exc}",
+                )
+                margins = np.full(constraint_count, -1.0e30, dtype=float)
+            constraint_cache[key] = margins
+            return margins.copy()
+
+        result = minimize(
+            objective,
+            y0,
+            jac=objective_jac,
+            method="SLSQP",
+            bounds=[(0.0, 1.0)] * y0.size,
+            constraints=({"type": "ineq", "fun": constraints},),
+            options={
+                "maxiter": int(max_iterations),
+                "ftol": 1e-7,
+                "disp": False,
+            },
+        )
+        x_best = raw_from_y(np.asarray(result.x, dtype=float))
+        margins_best = constraints(np.asarray(result.x, dtype=float))
+        row = {
+            "start_index": int(idx),
+            "success": bool(result.success and np.isfinite(float(result.fun))),
+            "message": str(result.message),
+            "fun": float(result.fun),
+            "x": [float(v) for v in x_best],
+            "nit": int(getattr(result, "nit", 0)),
+            "min_constraint_margin": float(np.nanmin(margins_best)),
+        }
+        history.append(row)
+        if np.isfinite(row["fun"]) and (best is None or row["fun"] < best["fun"]):
+            best = row
+
+    return {
+        "best": best,
+        "history": history,
+        "trial_failures": trial_failures,
+        "method": "constrained_slsqp_node_velikhov",
+        "max_iterations": int(max_iterations),
+        "velikhov_hard_floor": hard_floor,
+        "constraint_sampling": "nodes",
     }

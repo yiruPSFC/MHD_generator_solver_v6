@@ -10,6 +10,7 @@ from v6_firedrake_reduced.forward import FiredrakeUnavailableError, solve_forwar
 from v6_firedrake_reduced.reduced_functional import (
     build_reduced_functional,
     evaluate_reduced_functional,
+    minimize_constrained_slsqp,
     reduced_functional_gradient,
 )
 
@@ -22,10 +23,21 @@ def _require_firedrake_for_test():
         raise unittest.SkipTest(f"Firedrake/pyadjoint unavailable: {exc}") from exc
 
 
+def _stable_smoke_config(*, n_intervals: int = 4):
+    base_config = load_case_config(case="yamasaki2004", n_intervals=int(n_intervals))
+    return replace(
+        base_config,
+        metadata={
+            **base_config.metadata,
+            "electron_transport": "e-Argon",
+        },
+    )
+
+
 class FiredrakeReducedSmokeTest(unittest.TestCase):
     def test_tiny_forward_solve_baseline(self):
         _require_firedrake_for_test()
-        config = load_case_config(case="yamasaki2004", n_intervals=4)
+        config = _stable_smoke_config(n_intervals=4)
         result = solve_forward(design=config.design, config=config)
         if not result.ok:
             self.fail(result.error)
@@ -37,7 +49,7 @@ class FiredrakeReducedSmokeTest(unittest.TestCase):
 
     def test_residual_scaling_modes_report_strong_diagnostics(self):
         _require_firedrake_for_test()
-        base_config = load_case_config(case="yamasaki2004", n_intervals=4)
+        base_config = _stable_smoke_config(n_intervals=4)
         for mode in ("inlet", "characteristic", "dimensional"):
             with self.subTest(mode=mode):
                 config = replace(base_config, metadata={**base_config.metadata, "residual_scaling": mode})
@@ -51,7 +63,7 @@ class FiredrakeReducedSmokeTest(unittest.TestCase):
 
     def test_reduced_functional_evaluation_is_finite(self):
         _require_firedrake_for_test()
-        config = load_case_config(case="yamasaki2004", n_intervals=4)
+        config = _stable_smoke_config(n_intervals=4)
         try:
             bundle = build_reduced_functional(design=config.design, config=config)
         except FiredrakeUnavailableError as exc:
@@ -65,7 +77,7 @@ class FiredrakeReducedSmokeTest(unittest.TestCase):
 
     def test_taped_objective_tracks_enthalpy_extraction_diagnostic(self):
         _require_firedrake_for_test()
-        config = load_case_config(case="yamasaki2004", n_intervals=4)
+        config = _stable_smoke_config(n_intervals=4)
         result = solve_forward(design=config.design, config=config, annotate_objective=True)
         if not result.ok:
             self.fail(result.error)
@@ -79,7 +91,7 @@ class FiredrakeReducedSmokeTest(unittest.TestCase):
 
     def test_taped_objective_includes_velikhov_penalty_when_enabled(self):
         _require_firedrake_for_test()
-        base_config = load_case_config(case="yamasaki2004", n_intervals=4)
+        base_config = _stable_smoke_config(n_intervals=4)
         config = replace(
             base_config,
             metadata={
@@ -98,16 +110,40 @@ class FiredrakeReducedSmokeTest(unittest.TestCase):
         self.assertGreater(result.metrics.velikhov_penalty, 0.0)
         self.assertLess(float(result.fd_objective), result.metrics.raw_enthalpy_extraction_percent)
 
+    def test_taped_objective_includes_thermal_window_penalty_when_enabled(self):
+        _require_firedrake_for_test()
+        base_config = _stable_smoke_config(n_intervals=4)
+        config = replace(
+            base_config,
+            metadata={
+                **base_config.metadata,
+                "thermal_window_mode": "penalty",
+                "thermal_tp_in_max_K": 0.0,
+                "thermal_tp_floor_K": 1.0,
+                "thermal_tp_penalty_scale_K": 1e3,
+                "thermal_tp_in_penalty_weight": 1.0,
+                "thermal_tp_path_penalty_weight": 1.0,
+            },
+        )
+        result = solve_forward(design=config.design, config=config, annotate_objective=True)
+        if not result.ok:
+            self.fail(result.error)
+        self.assertIsNotNone(result.metrics)
+        self.assertIsNotNone(result.fd_objective)
+        self.assertTrue(result.metrics.thermal_window_active)
+        self.assertGreater(result.metrics.thermal_window_penalty, 0.0)
+        self.assertLess(float(result.fd_objective), result.metrics.raw_enthalpy_extraction_percent)
+
     def test_adjoint_gradient_matches_loose_finite_difference_direction(self):
         _require_firedrake_for_test()
-        config = load_case_config(case="yamasaki2004", n_intervals=4)
+        config = _stable_smoke_config(n_intervals=4)
         try:
             bundle = build_reduced_functional(design=config.design, config=config)
         except FiredrakeUnavailableError as exc:
             raise unittest.SkipTest(str(exc)) from exc
         x0 = config.design.as_array()
         direction = np.zeros_like(x0)
-        direction[3] = 1.0
+        direction[-1] = 1.0
         eps = 1e-2
         value0 = evaluate_reduced_functional(bundle, x0)
         value1 = evaluate_reduced_functional(bundle, x0 + eps * direction)
@@ -116,6 +152,29 @@ class FiredrakeReducedSmokeTest(unittest.TestCase):
         adjoint_directional = float(np.dot(gradient_arr, direction))
         scale = max(1.0, abs(finite_difference), abs(adjoint_directional))
         self.assertLess(abs(finite_difference - adjoint_directional) / scale, 5e-2)
+
+    def test_tiny_constrained_slsqp_runs_one_iteration(self):
+        _require_firedrake_for_test()
+        base_config = _stable_smoke_config(n_intervals=4)
+        config = replace(
+            base_config,
+            metadata={
+                **base_config.metadata,
+                "velikhov_mode": "diagnostic",
+                "velikhov_constraint_mode": "hard",
+                "velikhov_hard_floor": -1.0e30,
+            },
+        )
+        result = minimize_constrained_slsqp(
+            config=config,
+            multistart=1,
+            seed=1,
+            max_iterations=1,
+            velikhov_hard_floor=-1.0e30,
+        )
+        self.assertEqual(result["method"], "constrained_slsqp_node_velikhov")
+        self.assertIsNotNone(result["best"])
+        self.assertEqual(len(result["history"]), 1)
 
 
 if __name__ == "__main__":

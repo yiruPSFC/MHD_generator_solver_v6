@@ -3,16 +3,19 @@ from __future__ import annotations
 from dataclasses import replace
 import json
 from pathlib import Path
+from types import SimpleNamespace
 import tempfile
 import unittest
 
 import numpy as np
 
+from v6_firedrake_reduced.analyze_kkt import _recover_nonnegative_multipliers
+from v6_firedrake_reduced.constraints import evaluate_velikhov_node_constraints
 from v6_firedrake_reduced.design import DesignVector, load_case_config
 from v6_firedrake_reduced.freidberg_branch_audit import audit_freidberg_branches
 from v6_firedrake_reduced.geometry import LogAreaSplineControl
 from v6_firedrake_reduced.objective import evaluate_profile_metrics
-from v6_firedrake_reduced.run_firedrake_reduced import _design_from_json
+from v6_firedrake_reduced.run_firedrake_reduced import _design_from_json, _validate_optimizer_options
 from v6_firedrake_reduced.transport import (
     ELECTRON_TRANSPORT_E_ARGON,
     ELECTRON_TRANSPORT_E_HE,
@@ -42,6 +45,10 @@ class FiredrakeReducedPureContractTest(unittest.TestCase):
         recovered = DesignVector.from_dict(payload)
         np.testing.assert_allclose(recovered.as_array(), config.design.as_array())
         self.assertTrue(config.bounds.contains(recovered))
+        self.assertEqual(float(config.bounds.lower.B_T), 1.0)
+        self.assertEqual(float(config.bounds.upper.B_T), 20.0)
+        legacy = DesignVector.from_array(config.design.as_array()[:-1])
+        self.assertEqual(float(legacy.B_T), 3.0)
         shifted = DesignVector.from_array(config.bounds.upper.as_array() + 1.0)
         self.assertFalse(config.bounds.contains(shifted))
         violations = config.bounds.violations(shifted)
@@ -201,6 +208,104 @@ class FiredrakeReducedPureContractTest(unittest.TestCase):
         self.assertGreater(penalized.velikhov_penalty, 0.0)
         self.assertAlmostEqual(penalized.raw_enthalpy_extraction_percent, baseline.raw_enthalpy_extraction_percent)
         self.assertLess(penalized.objective_score, penalized.raw_enthalpy_extraction_percent)
+
+    def test_thermal_window_penalty_lowers_objective_when_window_is_violated(self):
+        config = load_case_config(case="yamasaki2004", n_intervals=8)
+        area = config.design.area_control.evaluate_profile(
+            length=config.length_m,
+            n_intervals=config.n_intervals,
+            area_scale=config.area_scale_m2,
+        )
+        x = np.asarray(area["x"], dtype=float)
+        profile = {
+            "x": x,
+            "x_norm": np.asarray(area["x_norm"], dtype=float),
+            "n_p": np.linspace(config.design.n_p_in, 0.9 * config.design.n_p_in, x.size),
+            "T_e": np.linspace(config.design.T_e_in, 1.05 * config.design.T_e_in, x.size),
+            "A": np.asarray(area["A"], dtype=float),
+            "sigma_logA": np.asarray(area["sigma_logA"], dtype=float),
+        }
+        baseline = evaluate_profile_metrics(profile=profile, design=config.design, config=config)
+        penalized_config = replace(
+            config,
+            metadata={
+                **config.metadata,
+                "thermal_window_mode": "penalty",
+                "thermal_tp_in_max_K": baseline.inlet_T_p_K - 10.0,
+                "thermal_tp_floor_K": baseline.min_T_p_K + 10.0,
+                "thermal_tp_penalty_scale_K": 10.0,
+                "thermal_tp_in_penalty_weight": 1.0,
+                "thermal_tp_path_penalty_weight": 1.0,
+            },
+        )
+        penalized = evaluate_profile_metrics(profile=profile, design=config.design, config=penalized_config)
+        self.assertTrue(penalized.thermal_window_active)
+        self.assertFalse(penalized.thermal_window_passes)
+        self.assertGreater(penalized.thermal_window_penalty, 0.0)
+        self.assertGreater(penalized.thermal_Tp_in_penalty_candidate, 0.0)
+        self.assertGreater(penalized.thermal_Tp_low_penalty_candidate, 0.0)
+        self.assertAlmostEqual(penalized.raw_enthalpy_extraction_percent, baseline.raw_enthalpy_extraction_percent)
+        self.assertLess(penalized.objective_score, penalized.raw_enthalpy_extraction_percent)
+
+    def test_velikhov_node_constraints_match_metric_minimum_and_sign(self):
+        config = load_case_config(case="yamasaki2004", n_intervals=8)
+        area = config.design.area_control.evaluate_profile(
+            length=config.length_m,
+            n_intervals=config.n_intervals,
+            area_scale=config.area_scale_m2,
+        )
+        x = np.asarray(area["x"], dtype=float)
+        profile = {
+            "x": x,
+            "x_norm": np.asarray(area["x_norm"], dtype=float),
+            "n_p": np.linspace(config.design.n_p_in, 0.92 * config.design.n_p_in, x.size),
+            "T_e": np.linspace(config.design.T_e_in, 1.04 * config.design.T_e_in, x.size),
+            "A": np.asarray(area["A"], dtype=float),
+            "sigma_logA": np.asarray(area["sigma_logA"], dtype=float),
+        }
+        metrics = evaluate_profile_metrics(profile=profile, design=config.design, config=config)
+        constraints = evaluate_velikhov_node_constraints(
+            profile=profile,
+            design=config.design,
+            config=config,
+            floor=metrics.min_velikhov_margin + 1.0,
+        )
+        self.assertAlmostEqual(constraints.min_G_node, metrics.min_velikhov_margin)
+        self.assertAlmostEqual(constraints.min_margin, -1.0)
+        self.assertGreaterEqual(constraints.argmin_index, 0)
+        self.assertEqual(constraints.to_dict()["sampling"], "nodes")
+
+    def test_hard_velikhov_constraint_rejects_soft_penalty_mix(self):
+        with self.assertRaisesRegex(ValueError, "cannot be combined"):
+            _validate_optimizer_options(
+                SimpleNamespace(
+                    optimizer="constrained_slsqp",
+                    velikhov_constraint_mode="hard",
+                    velikhov_mode="penalty",
+                )
+            )
+        with self.assertRaisesRegex(ValueError, "requires --optimizer constrained_slsqp"):
+            _validate_optimizer_options(
+                SimpleNamespace(
+                    optimizer="projected_gradient",
+                    velikhov_constraint_mode="hard",
+                    velikhov_mode="diagnostic",
+                )
+            )
+
+    def test_kkt_multiplier_recovery_balances_all_control_components(self):
+        gradient = np.array([2.0, 3.0], dtype=float)
+        columns = [
+            np.array([2.0, 0.0], dtype=float),
+            np.array([0.0, 3.0], dtype=float),
+        ]
+        recovered = _recover_nonnegative_multipliers(
+            gradient_minimize=gradient,
+            columns=columns,
+        )
+        np.testing.assert_allclose(recovered["support"], gradient, rtol=1e-12, atol=1e-12)
+        np.testing.assert_allclose(recovered["stationarity"], np.zeros_like(gradient), atol=1e-12)
+        np.testing.assert_allclose(recovered["multipliers"], np.ones(2), rtol=1e-12, atol=1e-12)
 
 
 if __name__ == "__main__":

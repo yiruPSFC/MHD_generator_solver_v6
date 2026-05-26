@@ -24,15 +24,16 @@ def _case_config_from_summary(payload: dict[str, Any]) -> CaseConfig:
     bounds_payload = case["bounds"]
     lower = DesignVector.from_dict({name: values["min"] for name, values in bounds_payload.items()})
     upper = DesignVector.from_dict({name: values["max"] for name, values in bounds_payload.items()})
+    design = DesignVector.from_dict(case["design"])
     return CaseConfig(
         case=str(case["case"]),
         objective_profile=str(case["objective_profile"]),
         length_m=float(case["length_m"]),
         area_scale_m2=float(case["area_scale_m2"]),
-        B_T=float(case["B_T"]),
+        B_T=float(design.B_T),
         working_fluid_profile=str(case["working_fluid_profile"]),
         n_intervals=int(case["n_intervals"]),
-        design=DesignVector.from_dict(case["design"]),
+        design=design,
         bounds=DesignBounds(lower=lower, upper=upper),
         metadata=dict(case.get("metadata", {}) or {}),
     )
@@ -48,7 +49,7 @@ def _closure_arrays(*, profile: dict[str, np.ndarray], design: DesignVector, con
         Z_in=design.Z_in,
         I_0=design.I_0,
         seed_fraction=design.seed_fraction,
-        B=float(config.B_T),
+        B=float(design.B_T),
         inlet_A=float(config.area_scale_m2),
         working_fluid=fluid,
     )
@@ -78,7 +79,7 @@ def _closure_arrays(*, profile: dict[str, np.ndarray], design: DesignVector, con
             dot_N=float(inlet["dot_N"]),
             I_0=float(design.I_0),
             seed_fraction=design.seed_fraction,
-            B=float(config.B_T),
+            B=float(design.B_T),
             working_fluid=fluid,
         )
         for name in fields:
@@ -120,12 +121,12 @@ def audit_run_directory(run_dir: str | Path, *, write_arrays: bool = True) -> di
 
     H_p = (A * n_p * v_p / A0) * (2.5 * K_B * T_p + 0.5 * mp * v_p * v_p)
     L_p = M / np.maximum((M2 + 3.0) ** 2, 1e-300) * (A / A0)
-    rhs_H = (A / A0) * (v_p * J_y * float(config.B_T) + eta * J2)
+    rhs_H = (A / A0) * (v_p * J_y * float(design.B_T) + eta * J2)
     rhs_L = (
         -(12.0 / 5.0)
         * L_p
         / np.maximum((M2 + 3.0) * p_p * v_p, 1e-300)
-        * (v_p * J_y * float(config.B_T) - ((5.0 * M2 + 3.0) / 12.0) * eta * J2)
+        * (v_p * J_y * float(design.B_T) - ((5.0 * M2 + 3.0) / 12.0) * eta * J2)
     )
 
     dx = np.diff(x)
@@ -146,7 +147,7 @@ def audit_run_directory(run_dir: str | Path, *, write_arrays: bool = True) -> di
     )
     mhd_output_MW = float(_trapz(-A * J_x * E_x, x) / 1e6)
     joule_heating_MW = float(_trapz(A * eta * J2, x) / 1e6)
-    lorentz_power_MW = float(_trapz(A * v_p * J_y * float(config.B_T), x) / 1e6)
+    lorentz_power_MW = float(_trapz(A * v_p * J_y * float(design.B_T), x) / 1e6)
     H_delta_MW = float((H_p[-1] - H_p[0]) * A0 / 1e6)
     H_rhs_integral_MW = float(_trapz(rhs_H, x) * A0 / 1e6)
     L_delta = float(L_p[-1] - L_p[0])
@@ -158,7 +159,7 @@ def audit_run_directory(run_dir: str | Path, *, write_arrays: bool = True) -> di
         "run_dir": str(run_path),
         "profile_path": str(profile_path),
         "n_points": int(x.size),
-        "B_T": float(config.B_T),
+        "B_T": float(design.B_T),
         "area_scale_m2": A0,
         "heavy_particle_mass_kg": mp,
         "mach_min": float(np.nanmin(M)),

@@ -8,6 +8,7 @@ from typing import Any
 
 import numpy as np
 
+from .constraints import evaluate_velikhov_node_constraints
 from .design import GEOMETRY_LENGTH_MODES, CaseConfig, DesignVector, load_case_config
 from .forward import EQUATION_FORMS
 from .forward import FiredrakeUnavailableError, solve_forward
@@ -17,7 +18,7 @@ from .reference_profile import (
     build_implicit_reference_profile,
     build_reference_profile,
 )
-from .reduced_functional import minimize_multistart
+from .reduced_functional import minimize_constrained_slsqp, minimize_multistart
 from .transport import ELECTRON_TRANSPORT_MODELS, normalize_electron_transport
 
 
@@ -42,7 +43,7 @@ def _with_design(config: CaseConfig, design: DesignVector, *, metadata: dict[str
         objective_profile=config.objective_profile,
         length_m=config.length_m,
         area_scale_m2=config.area_scale_m2,
-        B_T=config.B_T,
+        B_T=float(design.B_T),
         working_fluid_profile=config.working_fluid_profile,
         n_intervals=config.n_intervals,
         design=design,
@@ -92,6 +93,41 @@ def _write_snapshot(path: Path, config: CaseConfig) -> None:
         f"- design variables: `{', '.join(config.design.to_dict().keys())}`\n"
     )
     path.write_text(text, encoding="utf-8")
+
+
+def _velikhov_constraint_floor(config: CaseConfig) -> float:
+    return float(config.metadata.get("velikhov_hard_floor", 0.0))
+
+
+def _velikhov_node_constraints_payload(
+    *,
+    profile: dict[str, Any],
+    design: DesignVector,
+    config: CaseConfig,
+) -> dict[str, Any]:
+    try:
+        return evaluate_velikhov_node_constraints(
+            profile=profile,
+            design=design,
+            config=config,
+            floor=_velikhov_constraint_floor(config),
+        ).to_dict()
+    except Exception as exc:
+        return {
+            "sampling": "nodes",
+            "floor": _velikhov_constraint_floor(config),
+            "error": f"{type(exc).__name__}: {exc}",
+        }
+
+
+def _validate_optimizer_options(args: argparse.Namespace) -> None:
+    if str(args.velikhov_constraint_mode) == "hard" and str(args.velikhov_mode) == "penalty":
+        raise ValueError(
+            "--velikhov-constraint-mode hard cannot be combined with --velikhov-mode penalty. "
+            "Use diagnostic mode so the constrained optimizer sees the raw enthalpy objective."
+        )
+    if str(args.optimizer) == "projected_gradient" and str(args.velikhov_constraint_mode) == "hard":
+        raise ValueError("--velikhov-constraint-mode hard requires --optimizer constrained_slsqp.")
 
 
 def _write_freidberg_branch_audit(
@@ -163,9 +199,15 @@ def _run_evaluate(
     if not result.ok:
         failed_profile_npz = None
         branch_audit_info = None
+        velikhov_node_constraints = None
         if result.profile is not None:
             failed_profile_npz = out_dir / "failed_profile.npz"
             np.savez(failed_profile_npz, **result.profile)
+            velikhov_node_constraints = _velikhov_node_constraints_payload(
+                profile=result.profile,
+                design=config.design,
+                config=config,
+            )
             if freidberg_branch_audit:
                 branch_audit_info = _write_freidberg_branch_audit(
                     out_dir=out_dir,
@@ -195,6 +237,7 @@ def _run_evaluate(
             "initial_profile_context": dict(initial_profile_context or {}),
             "failed_profile_npz": None if failed_profile_npz is None else str(failed_profile_npz),
             "failed_metrics": None if result.metrics is None else result.metrics.to_dict(),
+            "velikhov_node_constraints": velikhov_node_constraints,
         }
         if branch_audit_info is not None:
             payload["freidberg_branch_audit"] = branch_audit_info
@@ -220,6 +263,11 @@ def _run_evaluate(
         "ok": True,
         "case_config": config.to_dict(),
         "metrics": result.metrics.to_dict(),
+        "velikhov_node_constraints": _velikhov_node_constraints_payload(
+            profile=result.profile,
+            design=config.design,
+            config=config,
+        ),
         "diagnostics": result.diagnostics,
         "profile_npz": str(out_dir / "profile.npz"),
         "failure_log": str(failure_log),
@@ -238,6 +286,8 @@ def _run_optimize(
     config: CaseConfig,
     out_dir: Path,
     *,
+    optimizer: str,
+    velikhov_constraint_mode: str,
     multistart: int,
     seed: int,
     max_iterations: int,
@@ -247,7 +297,23 @@ def _run_optimize(
 ) -> dict[str, Any]:
     failure_log = out_dir / "failure_log.jsonl"
     try:
-        opt = minimize_multistart(config=config, multistart=int(multistart), seed=int(seed), max_iterations=int(max_iterations))
+        if str(optimizer) == "constrained_slsqp":
+            if str(velikhov_constraint_mode) != "hard":
+                raise ValueError("constrained_slsqp requires velikhov_constraint_mode='hard'.")
+            opt = minimize_constrained_slsqp(
+                config=config,
+                multistart=int(multistart),
+                seed=int(seed),
+                max_iterations=int(max_iterations),
+                velikhov_hard_floor=_velikhov_constraint_floor(config),
+            )
+        else:
+            opt = minimize_multistart(
+                config=config,
+                multistart=int(multistart),
+                seed=int(seed),
+                max_iterations=int(max_iterations),
+            )
     except Exception as exc:
         _append_failure(failure_log, design=config.design, error=f"{type(exc).__name__}: {exc}", context={"mode": "optimize"})
         payload = {
@@ -261,7 +327,15 @@ def _run_optimize(
 
     history_path = out_dir / "objective_history.csv"
     with history_path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=["start_index", "success", "message", "fun", "x"])
+        extra_fields = sorted(
+            {
+                key
+                for row in opt["history"]
+                for key in row.keys()
+                if key not in {"start_index", "success", "message", "fun", "x"}
+            }
+        )
+        writer = csv.DictWriter(handle, fieldnames=["start_index", "success", "message", "fun", "x", *extra_fields])
         writer.writeheader()
         for row in opt["history"]:
             writer.writerow({**row, "x": json.dumps(row["x"])})
@@ -284,6 +358,8 @@ def _run_optimize(
             "error": "no finite optimizer start was available",
             "failure_log": str(failure_log),
             "optimizer": {
+                "optimizer": str(optimizer),
+                "velikhov_constraint_mode": str(velikhov_constraint_mode),
                 "multistart": int(multistart),
                 "seed": int(seed),
                 "history_csv": str(history_path),
@@ -299,7 +375,7 @@ def _run_optimize(
         objective_profile=config.objective_profile,
         length_m=config.length_m,
         area_scale_m2=config.area_scale_m2,
-        B_T=config.B_T,
+        B_T=float(best_design.B_T),
         working_fluid_profile=config.working_fluid_profile,
         n_intervals=config.n_intervals,
         design=best_design,
@@ -317,11 +393,15 @@ def _run_optimize(
     payload = {
         **evaluate_payload,
         "optimizer": {
+            "optimizer": str(optimizer),
+            "velikhov_constraint_mode": str(velikhov_constraint_mode),
             "multistart": int(multistart),
             "seed": int(seed),
             "history_csv": str(history_path),
             "method": opt.get("method"),
             "max_iterations": opt.get("max_iterations"),
+            "constraint_sampling": opt.get("constraint_sampling"),
+            "velikhov_hard_floor": opt.get("velikhov_hard_floor"),
             "trial_failure_count": len(opt.get("trial_failures", [])),
             "best_raw": opt["best"],
         },
@@ -346,6 +426,24 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--multistart", type=int, default=3)
     parser.add_argument("--seed", type=int, default=1)
     parser.add_argument("--max-iterations", type=int, default=8)
+    parser.add_argument(
+        "--optimizer",
+        default="projected_gradient",
+        choices=("projected_gradient", "constrained_slsqp"),
+        help="Outer optimizer for --mode optimize.",
+    )
+    parser.add_argument(
+        "--velikhov-constraint-mode",
+        default="none",
+        choices=("none", "hard"),
+        help="Treat node G as diagnostics only, or enforce G_node - hard_floor >= 0 in constrained_slsqp.",
+    )
+    parser.add_argument(
+        "--velikhov-hard-floor",
+        type=float,
+        default=0.0,
+        help="Hard node constraint floor used by --velikhov-constraint-mode hard.",
+    )
     parser.add_argument("--design-json", type=Path, default=None, help="Optional design JSON to use as the initial/evaluate design.")
     parser.add_argument(
         "--allow-out-of-bounds-design-json",
@@ -413,6 +511,47 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--velikhov-floor", type=float, default=5e-7)
     parser.add_argument("--velikhov-penalty-scale", type=float, default=1e-2)
     parser.add_argument("--velikhov-penalty-weight", type=float, default=25.0)
+    parser.add_argument(
+        "--thermal-window-mode",
+        default="diagnostic",
+        choices=("diagnostic", "penalty"),
+        help="Use reconstructed T_p / T_e/T_p only as diagnostics, or subtract a soft thermal-window penalty.",
+    )
+    parser.add_argument(
+        "--thermal-tp-in-max",
+        type=float,
+        default=2000.0,
+        help="Soft inlet T_p ceiling [K] used by --thermal-window-mode penalty.",
+    )
+    parser.add_argument(
+        "--thermal-tp-floor",
+        type=float,
+        default=300.0,
+        help="Soft path floor for reconstructed T_p nodes [K].",
+    )
+    parser.add_argument(
+        "--thermal-tp-path-max",
+        type=float,
+        default=None,
+        help="Optional soft path ceiling for reconstructed T_p nodes [K].",
+    )
+    parser.add_argument(
+        "--thermal-te-over-tp-min",
+        type=float,
+        default=None,
+        help="Optional soft lower band edge for reconstructed T_e/T_p.",
+    )
+    parser.add_argument(
+        "--thermal-te-over-tp-max",
+        type=float,
+        default=None,
+        help="Optional soft upper band edge for reconstructed T_e/T_p.",
+    )
+    parser.add_argument("--thermal-tp-penalty-scale", type=float, default=100.0)
+    parser.add_argument("--thermal-te-over-tp-penalty-scale", type=float, default=1.0)
+    parser.add_argument("--thermal-tp-in-penalty-weight", type=float, default=1.0)
+    parser.add_argument("--thermal-tp-path-penalty-weight", type=float, default=1.0)
+    parser.add_argument("--thermal-te-over-tp-penalty-weight", type=float, default=1.0)
     parser.add_argument("--out-dir", type=Path, required=True)
     return parser
 
@@ -421,6 +560,7 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if int(args.n_area_controls) != 3:
         raise ValueError("v0 only supports --n-area-controls 3.")
+    _validate_optimizer_options(args)
     config = load_case_config(
         case=args.case,
         objective_profile=args.objective,
@@ -439,6 +579,25 @@ def main(argv: list[str] | None = None) -> int:
         "velikhov_floor": float(args.velikhov_floor),
         "velikhov_penalty_scale": float(args.velikhov_penalty_scale),
         "velikhov_penalty_weight": float(args.velikhov_penalty_weight),
+        "thermal_window_mode": str(args.thermal_window_mode),
+        "thermal_tp_in_max_K": None if args.thermal_tp_in_max is None else float(args.thermal_tp_in_max),
+        "thermal_tp_floor_K": None if args.thermal_tp_floor is None else float(args.thermal_tp_floor),
+        "thermal_tp_path_max_K": None if args.thermal_tp_path_max is None else float(args.thermal_tp_path_max),
+        "thermal_te_over_tp_min": (
+            None if args.thermal_te_over_tp_min is None else float(args.thermal_te_over_tp_min)
+        ),
+        "thermal_te_over_tp_max": (
+            None if args.thermal_te_over_tp_max is None else float(args.thermal_te_over_tp_max)
+        ),
+        "thermal_tp_penalty_scale_K": float(args.thermal_tp_penalty_scale),
+        "thermal_te_over_tp_penalty_scale": float(args.thermal_te_over_tp_penalty_scale),
+        "thermal_tp_in_penalty_weight": float(args.thermal_tp_in_penalty_weight),
+        "thermal_tp_path_penalty_weight": float(args.thermal_tp_path_penalty_weight),
+        "thermal_te_over_tp_penalty_weight": float(args.thermal_te_over_tp_penalty_weight),
+        "optimizer": str(args.optimizer),
+        "velikhov_constraint_mode": str(args.velikhov_constraint_mode),
+        "velikhov_hard_floor": float(args.velikhov_hard_floor),
+        "velikhov_constraint_sampling": "nodes",
     }
     if args.snes_max_it is not None:
         metadata = {**metadata, "snes_max_it": int(args.snes_max_it)}
@@ -537,6 +696,8 @@ def main(argv: list[str] | None = None) -> int:
             payload = _run_optimize(
                 config,
                 out_dir,
+                optimizer=str(args.optimizer),
+                velikhov_constraint_mode=str(args.velikhov_constraint_mode),
                 multistart=int(args.multistart),
                 seed=int(args.seed),
                 max_iterations=int(args.max_iterations),

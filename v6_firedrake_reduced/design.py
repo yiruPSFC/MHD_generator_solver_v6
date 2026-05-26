@@ -18,10 +18,14 @@ DESIGN_VARIABLE_NAMES = (
     "a1",
     "a2",
     "a3",
+    "B_T",
 )
 
 GEOMETRY_LENGTH_MODES = ("radial", "inferred_swirl")
 OBJECTIVE_PROFILE_ENTHALPY_EXTRACTION = "enthalpy_extraction"
+DEFAULT_MAGNETIC_FIELD_T = 3.0
+MAGNETIC_FIELD_MIN_T = 1.0
+MAGNETIC_FIELD_MAX_T = 20.0
 
 
 @dataclass(frozen=True)
@@ -34,6 +38,7 @@ class DesignVector:
     a1: float
     a2: float
     a3: float
+    B_T: float = DEFAULT_MAGNETIC_FIELD_T
 
     @property
     def n_p_in(self) -> float:
@@ -52,7 +57,14 @@ class DesignVector:
 
     @classmethod
     def from_array(cls, values: np.ndarray | list[float] | tuple[float, ...]) -> "DesignVector":
-        arr = np.asarray(values, dtype=float).reshape(len(DESIGN_VARIABLE_NAMES))
+        arr = np.asarray(values, dtype=float).reshape(-1)
+        if arr.size == len(DESIGN_VARIABLE_NAMES) - 1:
+            arr = np.concatenate([arr, np.array([DEFAULT_MAGNETIC_FIELD_T], dtype=float)])
+        if arr.size != len(DESIGN_VARIABLE_NAMES):
+            raise ValueError(
+                f"DesignVector requires {len(DESIGN_VARIABLE_NAMES)} values "
+                f"({len(DESIGN_VARIABLE_NAMES) - 1} accepted for legacy 3T designs); got {arr.size}."
+            )
         return cls(**{name: float(arr[idx]) for idx, name in enumerate(DESIGN_VARIABLE_NAMES)})
 
     def to_dict(self) -> dict[str, float]:
@@ -60,7 +72,9 @@ class DesignVector:
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> "DesignVector":
-        return cls(**{name: float(payload[name]) for name in DESIGN_VARIABLE_NAMES})
+        values = dict(payload)
+        values.setdefault("B_T", DEFAULT_MAGNETIC_FIELD_T)
+        return cls(**{name: float(values[name]) for name in DESIGN_VARIABLE_NAMES})
 
 
 @dataclass(frozen=True)
@@ -195,6 +209,7 @@ def load_case_config(
         a1=float(area_guess[0]),
         a2=float(area_guess[1]),
         a3=float(area_guess[2]),
+        B_T=float(paper.magnetic_field_T),
     )
     lower = DesignVector(
         log_n_p_in=float(np.log(inlet["np_in"]["min"])),
@@ -205,6 +220,7 @@ def load_case_config(
         a1=float(area_lower[0]),
         a2=float(area_lower[1]),
         a3=float(area_lower[2]),
+        B_T=MAGNETIC_FIELD_MIN_T,
     )
     upper = DesignVector(
         log_n_p_in=float(np.log(inlet["np_in"]["max"])),
@@ -215,6 +231,7 @@ def load_case_config(
         a1=float(area_upper[0]),
         a2=float(area_upper[1]),
         a3=float(area_upper[2]),
+        B_T=MAGNETIC_FIELD_MAX_T,
     )
     length_mode = str(geometry_length_mode).strip().lower().replace("-", "_")
     length_m = geometry_length_m(length_mode)

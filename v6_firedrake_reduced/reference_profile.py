@@ -61,7 +61,7 @@ def _freidberg_terms_for_log_state(
         dot_N=float(inlet["dot_N"]),
         I_0=float(design.I_0),
         seed_fraction=design.seed_fraction,
-        B=float(config.B_T),
+        B=float(design.B_T),
         working_fluid=fluid,
     )
     J2 = float(closure["J_x"]) * float(closure["J_x"]) + float(closure["J_y"]) * float(closure["J_y"])
@@ -75,13 +75,13 @@ def _freidberg_terms_for_log_state(
         2.5 * K_B * T_p_safe + 0.5 * float(fluid.heavy_particle_mass_kg) * v_p * v_p
     )
     L_p = mach * (A / A0) / max((M2 + 3.0) * (M2 + 3.0), 1e-300)
-    rhs_H = (A / A0) * (v_p * float(closure["J_y"]) * float(config.B_T) + float(closure["eta"]) * J2)
+    rhs_H = (A / A0) * (v_p * float(closure["J_y"]) * float(design.B_T) + float(closure["eta"]) * J2)
     p_p = max(n_p * K_B * T_p_safe, 1e-300)
     rhs_L = (
         -(12.0 / 5.0)
         * L_p
         / max((M2 + 3.0) * p_p * v_p, 1e-300)
-        * (v_p * float(closure["J_y"]) * float(config.B_T) - ((5.0 * M2 + 3.0) / 12.0) * float(closure["eta"]) * J2)
+        * (v_p * float(closure["J_y"]) * float(design.B_T) - ((5.0 * M2 + 3.0) / 12.0) * float(closure["eta"]) * J2)
     )
     return {
         "x": float(x),
@@ -185,7 +185,7 @@ def build_reference_profile(
         Z_in=design.Z_in,
         I_0=design.I_0,
         seed_fraction=design.seed_fraction,
-        B=float(config.B_T),
+        B=float(design.B_T),
         inlet_A=float(config.area_scale_m2),
         working_fluid=fluid,
     )
@@ -210,7 +210,7 @@ def build_reference_profile(
             dot_N=float(inlet["dot_N"]),
             I_0=float(design.I_0),
             seed_fraction=design.seed_fraction,
-            B=float(config.B_T),
+            B=float(design.B_T),
             working_fluid=fluid,
         )
         det = float(terms["det"])
@@ -328,7 +328,7 @@ def _local_terms_for_log_state(
         dot_N=float(inlet["dot_N"]),
         I_0=float(design.I_0),
         seed_fraction=design.seed_fraction,
-        B=float(config.B_T),
+        B=float(design.B_T),
         working_fluid=fluid,
     )
     return closure, terms, n_p, T_e, A, sigma_logA
@@ -447,7 +447,7 @@ def build_implicit_reference_profile(
         Z_in=design.Z_in,
         I_0=design.I_0,
         seed_fraction=design.seed_fraction,
-        B=float(config.B_T),
+        B=float(design.B_T),
         inlet_A=float(config.area_scale_m2),
         working_fluid=fluid,
     )
@@ -659,7 +659,7 @@ def build_freidberg_reference_profile(
         Z_in=design.Z_in,
         I_0=design.I_0,
         seed_fraction=design.seed_fraction,
-        B=float(config.B_T),
+        B=float(design.B_T),
         inlet_A=float(config.area_scale_m2),
         working_fluid=fluid,
     )

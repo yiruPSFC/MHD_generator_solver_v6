@@ -133,10 +133,10 @@ def _closure_state(
     A_safe = _safe_pos(ops, A, 1e-12)
     v_te = ops.sqrt(2.0 * K_B * T_e_safe / M_E)
     if is_maingo:
-        beta = E_CHARGE * float(B) / _safe_pos(ops, M_E * n_p_safe * float(fluid.sigma_ep) * v_te, _EPS)
+        beta = E_CHARGE * B / _safe_pos(ops, M_E * n_p_safe * float(fluid.sigma_ep) * v_te, _EPS)
         eta = M_E * n_p_safe * float(fluid.sigma_ep) * v_te / _safe_pos(ops, E_CHARGE * E_CHARGE * n_e, _EPS)
     else:
-        beta = E_CHARGE * float(B) / (M_E * n_p_safe * float(fluid.sigma_ep) * v_te + _EPS)
+        beta = E_CHARGE * B / (M_E * n_p_safe * float(fluid.sigma_ep) * v_te + _EPS)
         eta = M_E * n_p_safe * float(fluid.sigma_ep) * v_te / (E_CHARGE * E_CHARGE * n_e + _EPS)
 
     if is_maingo:
@@ -267,7 +267,7 @@ def _inlet_design_generic(
         working_fluid=fluid,
     )
     v_te = ops.sqrt(2.0 * K_B * T_e_safe / M_E)
-    beta = E_CHARGE * float(B) / (
+    beta = E_CHARGE * B / (
         _safe_pos(ops, M_E * n_p_safe * float(fluid.sigma_ep) * v_te, _EPS)
         if is_maingo
         else (M_E * n_p_safe * float(fluid.sigma_ep) * v_te + _EPS)
@@ -349,7 +349,7 @@ def _dynamic_system_terms(
     E13 = 1.5 * n_p_safe * closure["dTp_dA"]
 
     dA_dx = sigma * A_safe
-    rhs_m = closure["J_y"] * float(B) - M13 * dA_dx
+    rhs_m = closure["J_y"] * B - M13 * dA_dx
     rhs_e = (
         1.5 * closure["nu_E"] * closure["n_e"] * (closure["T_e_safe"] - T_p) / v_p_safe
         - E13 * dA_dx

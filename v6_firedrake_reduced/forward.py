@@ -13,7 +13,7 @@ from .legacy_physics import (
     inlet_design_generic,
     ops_for_numeric,
 )
-from .objective import ProfileMetrics, evaluate_profile_metrics, velikhov_settings
+from .objective import ProfileMetrics, evaluate_profile_metrics, thermal_window_settings, velikhov_settings
 from .transport import working_fluid_for_config
 
 
@@ -193,7 +193,7 @@ def _freidberg_balance_terms(
     ops,
     closure: dict[str, Any],
     A: Any,
-    B_T: float,
+    B_T: Any,
     area_scale_m2: float,
     heavy_particle_mass_kg: float,
     length_m: float | None = None,
@@ -209,14 +209,14 @@ def _freidberg_balance_terms(
     M2 = mach * mach
     H_p = (A * n_p * v_p / A0) * (2.5 * K_B * T_p_safe + 0.5 * mp * v_p * v_p)
     L_p = mach * (A / A0) / ((M2 + 3.0) * (M2 + 3.0))
-    rhs_H = (A / A0) * (v_p * closure["J_y"] * float(B_T) + closure["eta"] * J2)
+    rhs_H = (A / A0) * (v_p * closure["J_y"] * B_T + closure["eta"] * J2)
     p_p = n_p * K_B * T_p_safe
     denom = ops.max((M2 + 3.0) * p_p * v_p, 1e-300)
     rhs_L = (
         -(12.0 / 5.0)
         * L_p
         / denom
-        * (v_p * closure["J_y"] * float(B_T) - ((5.0 * M2 + 3.0) / 12.0) * closure["eta"] * J2)
+        * (v_p * closure["J_y"] * B_T - ((5.0 * M2 + 3.0) / 12.0) * closure["eta"] * J2)
     )
     balances = {"H_p": H_p, "L_p": L_p, "rhs_H": rhs_H, "rhs_L": rhs_L, "M2": M2}
     if length_m is not None:
@@ -262,7 +262,7 @@ def _reference_residual_scale_arrays(*, design: DesignVector, config: CaseConfig
         Z_in=design.Z_in,
         I_0=design.I_0,
         seed_fraction=design.seed_fraction,
-        B=float(config.B_T),
+        B=float(design.B_T),
         inlet_A=float(config.area_scale_m2),
         working_fluid=fluid,
     )
@@ -278,7 +278,7 @@ def _reference_residual_scale_arrays(*, design: DesignVector, config: CaseConfig
             dot_N=float(inlet["dot_N"]),
             I_0=float(design.I_0),
             seed_fraction=design.seed_fraction,
-            B=float(config.B_T),
+            B=float(design.B_T),
             working_fluid=fluid,
         )
         momentum_scale, energy_scale = _row_scale_exprs(
@@ -308,7 +308,7 @@ def _reference_freidberg_scale_arrays(*, design: DesignVector, config: CaseConfi
         Z_in=design.Z_in,
         I_0=design.I_0,
         seed_fraction=design.seed_fraction,
-        B=float(config.B_T),
+        B=float(design.B_T),
         inlet_A=float(config.area_scale_m2),
         working_fluid=fluid,
     )
@@ -324,14 +324,14 @@ def _reference_freidberg_scale_arrays(*, design: DesignVector, config: CaseConfi
             dot_N=float(inlet["dot_N"]),
             I_0=float(design.I_0),
             seed_fraction=design.seed_fraction,
-            B=float(config.B_T),
+            B=float(design.B_T),
             working_fluid=fluid,
         )
         balances = _freidberg_balance_terms(
             ops=ops,
             closure=closure,
             A=float(A),
-            B_T=float(config.B_T),
+            B_T=float(design.B_T),
             area_scale_m2=float(config.area_scale_m2),
             heavy_particle_mass_kg=float(fluid.heavy_particle_mass_kg),
         )
@@ -360,7 +360,7 @@ def _inlet_residual_scale_values(*, design: DesignVector, config: CaseConfig) ->
         Z_in=design.Z_in,
         I_0=design.I_0,
         seed_fraction=design.seed_fraction,
-        B=float(config.B_T),
+        B=float(design.B_T),
         inlet_A=float(config.area_scale_m2),
         working_fluid=fluid,
     )
@@ -373,7 +373,7 @@ def _inlet_residual_scale_values(*, design: DesignVector, config: CaseConfig) ->
         dot_N=float(inlet["dot_N"]),
         I_0=float(design.I_0),
         seed_fraction=design.seed_fraction,
-        B=float(config.B_T),
+        B=float(design.B_T),
         working_fluid=fluid,
     )
     momentum_scale, energy_scale = _row_scale_exprs(
@@ -413,7 +413,7 @@ def _strong_residual_diagnostics(
         Z_in=design.Z_in,
         I_0=design.I_0,
         seed_fraction=design.seed_fraction,
-        B=float(config.B_T),
+        B=float(design.B_T),
         inlet_A=float(config.area_scale_m2),
         working_fluid=fluid,
     )
@@ -431,7 +431,7 @@ def _strong_residual_diagnostics(
             dot_N=float(inlet["dot_N"]),
             I_0=float(design.I_0),
             seed_fraction=design.seed_fraction,
-            B=float(config.B_T),
+            B=float(design.B_T),
             working_fluid=fluid,
         )
         m_scale, e_scale = _row_scale_exprs(
@@ -490,7 +490,7 @@ def _freidberg_strong_residual_diagnostics(
         Z_in=design.Z_in,
         I_0=design.I_0,
         seed_fraction=design.seed_fraction,
-        B=float(config.B_T),
+        B=float(design.B_T),
         inlet_A=float(config.area_scale_m2),
         working_fluid=fluid,
     )
@@ -511,14 +511,14 @@ def _freidberg_strong_residual_diagnostics(
             dot_N=float(inlet["dot_N"]),
             I_0=float(design.I_0),
             seed_fraction=design.seed_fraction,
-            B=float(config.B_T),
+            B=float(design.B_T),
             working_fluid=fluid,
         )
         balances = _freidberg_balance_terms(
             ops=ops,
             closure=closure,
             A=float(area_val),
-            B_T=float(config.B_T),
+            B_T=float(design.B_T),
             area_scale_m2=float(config.area_scale_m2),
             heavy_particle_mass_kg=float(fluid.heavy_particle_mass_kg),
         )
@@ -617,6 +617,57 @@ def _velikhov_penalty_expr(
     return weight * mean_scaled_sq
 
 
+def _thermal_window_penalty_expr(
+    *,
+    fd,
+    ops,
+    T_e: Any,
+    T_p: Any,
+    inlet_T_p: Any,
+    config: CaseConfig,
+    measure: Any,
+) -> Any:
+    settings = thermal_window_settings(config)
+    if not bool(settings["active"]):
+        return 0.0
+
+    length = max(float(config.length_m), 1e-300)
+    tp_scale = max(float(settings["tp_scale_K"]), 1e-300)
+    ratio_scale = max(float(settings["ratio_scale"]), 1e-300)
+    tp_in_weight = float(settings["tp_in_weight"])
+    tp_path_weight = float(settings["tp_path_weight"])
+    ratio_weight = float(settings["ratio_weight"])
+
+    penalty = 0.0
+    tp_in_max = settings["tp_in_max_K"]
+    if tp_in_max is not None:
+        excess = ops.max(inlet_T_p - float(tp_in_max), 0.0) / tp_scale
+        penalty = penalty + tp_in_weight * fd.assemble((excess**2) * measure) / length
+
+    tp_floor = settings["tp_floor_K"]
+    if tp_floor is not None:
+        shortfall = ops.max(float(tp_floor) - T_p, 0.0) / tp_scale
+        penalty = penalty + tp_path_weight * fd.assemble((shortfall**2) * measure) / length
+
+    tp_path_max = settings["tp_path_max_K"]
+    if tp_path_max is not None:
+        excess = ops.max(T_p - float(tp_path_max), 0.0) / tp_scale
+        penalty = penalty + tp_path_weight * fd.assemble((excess**2) * measure) / length
+
+    ratio = T_e / ops.max(T_p, 1.0)
+    ratio_violation = 0.0
+    ratio_min = settings["te_over_tp_min"]
+    if ratio_min is not None:
+        ratio_violation = ratio_violation + ops.max(float(ratio_min) - ratio, 0.0) / ratio_scale
+    ratio_max = settings["te_over_tp_max"]
+    if ratio_max is not None:
+        ratio_violation = ratio_violation + ops.max(ratio - float(ratio_max), 0.0) / ratio_scale
+    if ratio_min is not None or ratio_max is not None:
+        penalty = penalty + ratio_weight * fd.assemble((ratio_violation**2) * measure) / length
+
+    return penalty
+
+
 def solve_forward(
     *,
     design: DesignVector,
@@ -649,7 +700,7 @@ def solve_forward(
         Z_in=controls["Z_in"],
         I_0=controls["I_0"],
         seed_fraction=seed_fraction,
-        B=float(config.B_T),
+        B=controls["B_T"],
         inlet_A=float(config.area_scale_m2),
         working_fluid=fluid,
     )
@@ -683,7 +734,7 @@ def solve_forward(
         dot_N=inlet["dot_N"],
         I_0=controls["I_0"],
         seed_fraction=seed_fraction,
-        B=float(config.B_T),
+        B=controls["B_T"],
         working_fluid=fluid,
     )
     residual_scaling = _residual_scaling_mode(config)
@@ -695,7 +746,7 @@ def solve_forward(
             ops=ops,
             closure=closure,
             A=A,
-            B_T=float(config.B_T),
+            B_T=controls["B_T"],
             area_scale_m2=float(config.area_scale_m2),
             heavy_particle_mass_kg=float(fluid.heavy_particle_mass_kg),
         )
@@ -887,7 +938,7 @@ def solve_forward(
             dot_N=inlet["dot_N"],
             I_0=controls["I_0"],
             seed_fraction=seed_fraction,
-            B=float(config.B_T),
+            B=controls["B_T"],
             working_fluid=fluid,
         )
         fd_objective = _enthalpy_extraction_objective_expr(
@@ -907,8 +958,18 @@ def solve_forward(
             config=config,
             measure=measure,
         )
+        fd_objective = fd_objective - _thermal_window_penalty_expr(
+            fd=fd,
+            ops=ops,
+            T_e=T_e,
+            T_p=closure["T_p"],
+            inlet_T_p=inlet["T_p"],
+            config=config,
+            measure=measure,
+        )
         objective_kind = OBJECTIVE_PROFILE_ENTHALPY_EXTRACTION
     velikhov_config = velikhov_settings(config)
+    thermal_config = thermal_window_settings(config)
 
     return ForwardResult(
         ok=True,
@@ -926,6 +987,12 @@ def solve_forward(
             "velikhov_penalty_formula": (
                 "score = raw_enthalpy_extraction_percent - "
                 "weight * mean(max(floor - G, 0) / scale)^2"
+            ),
+            "thermal_window_mode": str(thermal_config["mode"]),
+            "thermal_window_penalty_formula": (
+                "score -= Tp_in_weight*max(Tp_in - Tp_in_max, 0)^2/Tp_scale^2 "
+                "+ Tp_path_weight*mean(path Tp shortfalls/excesses)^2 "
+                "+ ratio_weight*mean(Te/Tp band violations)^2"
             ),
             "residual_scaling": residual_scaling,
             "residual_scaling_formula": (

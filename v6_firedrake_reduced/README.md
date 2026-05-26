@@ -161,6 +161,38 @@ accepts a trial only after the Firedrake forward replay succeeds.  Failed
 trials are written to `failure_log.jsonl`; they are not reported as successful
 objective values.
 
+For a node-only hard Velikhov path-constraint experiment, use the constrained
+SLSQP wrapper and keep the Velikhov objective mode diagnostic:
+
+```bash
+python -m v6_firedrake_reduced.run_firedrake_reduced \
+  --case yamasaki2004 \
+  --mode optimize \
+  --objective enthalpy_extraction \
+  --n-area-controls 3 \
+  --optimizer constrained_slsqp \
+  --velikhov-constraint-mode hard \
+  --velikhov-hard-floor 0.0 \
+  --velikhov-mode diagnostic \
+  --out-dir v6_firedrake_reduced/outputs/yamasaki2004_hard_G_opt
+```
+
+This enforces only the forward-mesh node constraints `G_node - floor >= 0`.
+It deliberately does not add midpoint constraints; spatial resolution should
+be checked by replaying the resulting design on a finer mesh.
+
+After a successful run, the reduced-space KKT diagnostic can be generated with:
+
+```bash
+python -m v6_firedrake_reduced.analyze_kkt \
+  v6_firedrake_reduced/outputs/yamasaki2004_hard_G_opt/run_summary.json
+```
+
+The KKT report decomposes the full 8D reduced-control stationarity balance into
+objective gradient, active node `G` constraints, active box bounds, and residual
+terms.  It is a local diagnostic recovered by least squares, not a global
+optimality certificate.
+
 ## Outputs
 
 Each run directory should contain:
