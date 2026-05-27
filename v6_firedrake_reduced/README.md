@@ -168,6 +168,30 @@ compares the optimized candidate against the recovered Freidberg profile using
 the same metric evaluator.  Use `--mode reference` to regenerate only the
 baseline metrics without invoking Firedrake.
 
+Choking compatibility experiments are deliberately evaluate-only.  Use
+`--reference-initial sonic_freidberg_hl` to run the pure-Python H/L sonic
+compatibility matcher and stop before Firedrake if no smooth matched reference
+profile is found.  Use `--reference-initial front_loaded_area` to create a
+fixed area-ratio bracket curve that expands near the inlet and is then passed
+to the Firedrake forward solve as a fixed area profile.  This is an initial
+guess / bracketing tool, not an optimizer parameterization.
+
+Example e-He bracketing run:
+
+```bash
+env -u PETSC_DIR -u PETSC_ARCH OMP_NUM_THREADS=1 \
+  ./.venv_firedrake/bin/python -m v6_firedrake_reduced.run_firedrake_reduced \
+  --case yamasaki2004 \
+  --mode evaluate \
+  --n-intervals 40 \
+  --equation-form primitive \
+  --electron-transport e-He \
+  --reference-initial front_loaded_area \
+  --front-loaded-area-ratio 6 \
+  --front-loaded-area-width-fraction 0.05 \
+  --out-dir v6_firedrake_reduced/outputs/yamasaki_front_loaded_area_bracket
+```
+
 `--freidberg-branch-audit` is a diagnostic add-on for evaluate/optimize runs.
 It writes `freidberg_branch_audit.json` for a successful final profile, or
 `freidberg_branch_audit_failed.json` when SNES returns a partial failed

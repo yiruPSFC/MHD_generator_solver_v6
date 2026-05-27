@@ -14,6 +14,7 @@ from .legacy_physics import (
     ops_for_numeric,
 )
 from .objective import ProfileMetrics, evaluate_profile_metrics, thermal_window_settings, velikhov_settings
+from .reference_profile import _area_profile_arrays
 from .transport import working_fluid_for_config
 
 
@@ -674,6 +675,7 @@ def solve_forward(
     config: CaseConfig,
     annotate_objective: bool = False,
     initial_profile: dict[str, Any] | None = None,
+    initial_profile_placeholder: dict[str, Any] | None = None,
 ) -> ForwardResult:
     """Solve the quasi-1D implicit reduced forward problem with Firedrake."""
 
@@ -681,6 +683,72 @@ def solve_forward(
     ops = _ops_for_firedrake(fd)
     fluid = working_fluid_for_config(config)
     equation_form = _equation_form(config)
+    fixed_area_source = str(config.metadata.get("fixed_area_profile_source", "design_spline")).strip().lower()
+    if fixed_area_source not in {"design_spline", "initial_profile"}:
+        return ForwardResult(
+            ok=False,
+            design=design,
+            config=config,
+            profile=None,
+            metrics=None,
+            diagnostics={
+                "solver": "firedrake_snes_newtonls",
+                "equation_form": equation_form,
+                "fixed_area_profile_source": fixed_area_source,
+            },
+            error="fixed_area_profile_source metadata must be 'design_spline' or 'initial_profile'.",
+        )
+    use_fixed_area_profile = fixed_area_source == "initial_profile"
+    if use_fixed_area_profile and annotate_objective:
+        return ForwardResult(
+            ok=False,
+            design=design,
+            config=config,
+            profile=None,
+            metrics=None,
+            diagnostics={
+                "solver": "firedrake_snes_newtonls",
+                "equation_form": equation_form,
+                "fixed_area_profile_source": fixed_area_source,
+            },
+            error="fixed area profiles are evaluate-only and are not supported for taped optimizer objectives.",
+        )
+    fixed_area_values = None
+    if use_fixed_area_profile:
+        if initial_profile is None:
+            return ForwardResult(
+                ok=False,
+                design=design,
+                config=config,
+                profile=None,
+                metrics=None,
+                diagnostics={
+                    "solver": "firedrake_snes_newtonls",
+                    "equation_form": equation_form,
+                    "fixed_area_profile_source": fixed_area_source,
+                },
+                error="fixed_area_profile_source='initial_profile' requires an initial_profile with A/logA data.",
+            )
+        try:
+            fixed_area_values = _area_profile_arrays(
+                initial_profile,
+                config=config,
+                n_intervals=int(config.n_intervals),
+            )
+        except Exception as exc:
+            return ForwardResult(
+                ok=False,
+                design=design,
+                config=config,
+                profile=None,
+                metrics=None,
+                diagnostics={
+                    "solver": "firedrake_snes_newtonls",
+                    "equation_form": equation_form,
+                    "fixed_area_profile_source": fixed_area_source,
+                },
+                error=f"{type(exc).__name__}: {exc}",
+            )
     mesh = fd.IntervalMesh(int(config.n_intervals), float(config.length_m))
     measure = fd.dx(domain=mesh)
     V = fd.FunctionSpace(mesh, "CG", 1)
@@ -717,9 +785,18 @@ def solve_forward(
     log_Te_in = ops.log(ops.max(controls["T_e_in"], 1.0))
     log_n = controls["log_n_p_in"] + delta_log_n
     log_Te = log_Te_in + delta_log_Te
-    logA = controls["a1"] * b1 + controls["a2"] * b2 + controls["a3"] * b3
-    sigma = (controls["a1"] * s1 + controls["a2"] * s2 + controls["a3"] * s3) / float(config.length_m)
-    A = float(config.area_scale_m2) * ops.exp(logA)
+    if fixed_area_values is None:
+        logA = controls["a1"] * b1 + controls["a2"] * b2 + controls["a3"] * b3
+        sigma = (controls["a1"] * s1 + controls["a2"] * s2 + controls["a3"] * s3) / float(config.length_m)
+        A = float(config.area_scale_m2) * ops.exp(logA)
+    else:
+        A = _basis_function(fd, V, np.asarray(fixed_area_values["A"], dtype=float), name="fixed_area_profile_A")
+        sigma = _basis_function(
+            fd,
+            V,
+            np.asarray(fixed_area_values["sigma_logA"], dtype=float),
+            name="fixed_area_profile_sigma_logA",
+        )
     n_p = ops.exp(log_n)
     T_e = ops.exp(log_Te)
     dn_dx = n_p * delta_log_n.dx(0)
@@ -802,6 +879,12 @@ def solve_forward(
             initial_state = fd.Function(W, name="initial_profile_delta")
             initial_state.subfunctions[0].dat.data[:] = delta_log_n_values
             initial_state.subfunctions[1].dat.data[:] = delta_log_Te_values
+            if initial_profile_placeholder is not None and annotate_objective:
+                from pyadjoint.placeholder import Placeholder  # type: ignore
+
+                initial_profile_placeholder["placeholder"] = Placeholder(initial_state)
+                initial_profile_placeholder["space"] = W
+                initial_profile_placeholder["x_norm"] = x_norm.copy()
             try:
                 state.assign(initial_state, annotate=annotate_objective)
             except TypeError:
@@ -854,10 +937,14 @@ def solve_forward(
             delta_log_n_fn, delta_log_Te_fn = state.subfunctions
             log_Te_in_float = float(np.log(max(float(design.T_e_in), 1.0)))
             failure_x = x_norm * float(config.length_m)
-            failure_area = design.area_control.evaluate_profile(
-                length=float(config.length_m),
-                n_intervals=int(config.n_intervals),
-                area_scale=float(config.area_scale_m2),
+            failure_area = (
+                fixed_area_values
+                if fixed_area_values is not None
+                else design.area_control.evaluate_profile(
+                    length=float(config.length_m),
+                    n_intervals=int(config.n_intervals),
+                    area_scale=float(config.area_scale_m2),
+                )
             )
             failure_profile = {
                 "x": failure_x,
@@ -902,6 +989,7 @@ def solve_forward(
                 "equation_form": equation_form,
                 "residual_scaling": residual_scaling,
                 "initial_guess": initial_guess,
+                "fixed_area_profile_source": fixed_area_source,
                 "working_fluid": fluid.to_dict(),
                 **failure_extra,
             },
@@ -913,10 +1001,14 @@ def solve_forward(
     delta_log_n_fn, delta_log_Te_fn = state.subfunctions
     log_Te_in_float = float(np.log(max(float(design.T_e_in), 1.0)))
     x = x_norm * float(config.length_m)
-    area = design.area_control.evaluate_profile(
-        length=float(config.length_m),
-        n_intervals=int(config.n_intervals),
-        area_scale=float(config.area_scale_m2),
+    area = (
+        fixed_area_values
+        if fixed_area_values is not None
+        else design.area_control.evaluate_profile(
+            length=float(config.length_m),
+            n_intervals=int(config.n_intervals),
+            area_scale=float(config.area_scale_m2),
+        )
     )
     profile = {
         "x": x,
@@ -986,6 +1078,7 @@ def solve_forward(
             "solver": "firedrake_snes_newtonls",
             "equation_form": equation_form,
             "initial_guess": initial_guess,
+            "fixed_area_profile_source": fixed_area_source,
             "working_fluid": fluid.to_dict(),
             "taped_objective": objective_kind,
             "velikhov_mode": str(velikhov_config["mode"]),

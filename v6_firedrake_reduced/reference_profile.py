@@ -23,7 +23,86 @@ class ReferenceProfileResult:
     error: str | None = None
 
 
-def _area_at_x(*, design: DesignVector, config: CaseConfig, x: float) -> tuple[float, float]:
+def _area_profile_arrays(
+    area_profile: dict[str, Any],
+    *,
+    config: CaseConfig,
+    n_intervals: int | None = None,
+) -> dict[str, np.ndarray]:
+    if "x" in area_profile:
+        x = np.asarray(area_profile["x"], dtype=float).reshape(-1)
+    elif "x_norm" in area_profile:
+        x = np.asarray(area_profile["x_norm"], dtype=float).reshape(-1) * float(config.length_m)
+    else:
+        if "A" not in area_profile:
+            raise ValueError("area_profile must contain x/x_norm and A/logA arrays.")
+        x = np.linspace(
+            0.0,
+            float(config.length_m),
+            np.asarray(area_profile["A"], dtype=float).reshape(-1).size,
+            dtype=float,
+        )
+    order = np.argsort(x)
+    if "A" in area_profile:
+        A = np.asarray(area_profile["A"], dtype=float).reshape(-1)
+        if np.any(A <= 0.0) or not np.all(np.isfinite(A)):
+            raise ValueError("area_profile A values must be finite and positive.")
+        logA = np.log(A / max(float(config.area_scale_m2), 1e-300))
+    elif "logA" in area_profile:
+        logA = np.asarray(area_profile["logA"], dtype=float).reshape(-1)
+        A = float(config.area_scale_m2) * np.exp(np.clip(logA, -700.0, 700.0))
+    else:
+        raise ValueError("area_profile must contain A or logA.")
+    if x.size != A.size or x.size < 2:
+        raise ValueError("area_profile x and A/logA arrays must have matching length >= 2.")
+    needs_sort = bool(not np.all(np.isfinite(x)) or not np.all(np.diff(x) > 0.0))
+    if needs_sort:
+        x = x[order]
+        A = A[order]
+        logA = logA[order]
+        if not np.all(np.isfinite(x)) or not np.all(np.diff(x) > 0.0):
+            raise ValueError("area_profile x values must be finite and strictly increasing.")
+    if "sigma_logA" in area_profile:
+        sigma = np.asarray(area_profile["sigma_logA"], dtype=float).reshape(-1)
+        if sigma.size != x.size:
+            raise ValueError("area_profile sigma_logA must match x size.")
+        if needs_sort:
+            sigma = sigma[order]
+    else:
+        sigma = np.gradient(logA, x, edge_order=1)
+    if n_intervals is not None:
+        x_target = np.linspace(0.0, float(config.length_m), int(n_intervals) + 1, dtype=float)
+        logA_target = np.interp(x_target, x, logA)
+        sigma_target = np.interp(x_target, x, sigma)
+        return {
+            "x": x_target,
+            "x_norm": x_target / max(float(config.length_m), 1e-300),
+            "logA": logA_target,
+            "A": float(config.area_scale_m2) * np.exp(np.clip(logA_target, -700.0, 700.0)),
+            "sigma_logA": sigma_target,
+        }
+    return {
+        "x": x,
+        "x_norm": x / max(float(config.length_m), 1e-300),
+        "logA": logA,
+        "A": A,
+        "sigma_logA": sigma,
+    }
+
+
+def _area_at_x(
+    *,
+    design: DesignVector,
+    config: CaseConfig,
+    x: float,
+    area_profile: dict[str, Any] | None = None,
+) -> tuple[float, float]:
+    if area_profile is not None:
+        area = _area_profile_arrays(area_profile, config=config)
+        x_value = float(np.clip(float(x), 0.0, float(config.length_m)))
+        logA = float(np.interp(x_value, area["x"], area["logA"]))
+        sigma = float(np.interp(x_value, area["x"], area["sigma_logA"]))
+        return float(config.area_scale_m2) * float(np.exp(np.clip(logA, -700.0, 700.0))), sigma
     x_norm = np.array([float(x) / max(float(config.length_m), 1e-300)], dtype=float)
     x_norm = np.clip(x_norm, 0.0, 1.0)
     basis, slopes = design.area_control.basis_matrices(x_norm)
@@ -46,12 +125,13 @@ def _freidberg_terms_for_log_state(
     inlet: dict[str, Any],
     x: float,
     z: np.ndarray,
+    area_profile: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     log_n = float(design.log_n_p_in) + float(z[0])
     log_Te = float(np.log(max(float(design.T_e_in), 1.0))) + float(z[1])
     n_p = _safe_exp(log_n)
     T_e = _safe_exp(log_Te)
-    A, sigma_logA = _area_at_x(design=design, config=config, x=float(x))
+    A, sigma_logA = _area_at_x(design=design, config=config, x=float(x), area_profile=area_profile)
     closure, terms = dynamic_system_terms(
         ops=ops,
         n_p=n_p,
@@ -115,6 +195,7 @@ def _freidberg_step_residual(
     x_next: float,
     z_next: np.ndarray,
     h: float,
+    area_profile: dict[str, Any] | None = None,
 ) -> tuple[np.ndarray, dict[str, Any]]:
     prev = _freidberg_terms_for_log_state(
         ops=ops,
@@ -124,6 +205,7 @@ def _freidberg_step_residual(
         inlet=inlet,
         x=float(x_prev),
         z=z_prev,
+        area_profile=area_profile,
     )
     nxt = _freidberg_terms_for_log_state(
         ops=ops,
@@ -133,6 +215,7 @@ def _freidberg_step_residual(
         inlet=inlet,
         x=float(x_next),
         z=z_next,
+        area_profile=area_profile,
     )
     h_safe = max(float(h), 1e-300)
     H_res = (nxt["H_p"] - prev["H_p"]) / h_safe - nxt["rhs_H"]
@@ -645,6 +728,7 @@ def build_freidberg_reference_profile(
     max_log_step: float = 0.25,
     min_step_fraction: float = 1e-8,
     max_steps: int = 20000,
+    area_profile: dict[str, Any] | None = None,
 ) -> ReferenceProfileResult:
     """Generate a profile with adaptive Freidberg H/L balance steps."""
 
@@ -695,6 +779,7 @@ def build_freidberg_reference_profile(
                     x_next=x_next,
                     z_next=np.asarray(candidate, dtype=float),
                     h=h,
+                    area_profile=area_profile,
                 )
                 if not np.all(np.isfinite(values)):
                     return np.array([1e30, 1e30], dtype=float)
@@ -722,6 +807,7 @@ def build_freidberg_reference_profile(
             x_next=x_next,
             z_next=np.asarray(sol.x, dtype=float),
             h=h,
+            area_profile=area_profile,
         )
         residual_inf = float(np.max(np.abs(values)))
         if bool(sol.success) and np.isfinite(residual_inf) and residual_inf <= float(residual_tol):
@@ -759,6 +845,7 @@ def build_freidberg_reference_profile(
                 "detail": detail,
                 "working_fluid": fluid.to_dict(),
                 "inlet": {key: float(value) for key, value in inlet.items()},
+                "area_profile_source": "fixed_profile" if area_profile is not None else "design_spline",
                 "accepted_tail": step_rows[-5:],
             }
             return ReferenceProfileResult(
@@ -797,7 +884,7 @@ def build_freidberg_reference_profile(
         length=float(config.length_m),
         n_intervals=n_out - 1,
         area_scale=float(config.area_scale_m2),
-    )
+    ) if area_profile is None else _area_profile_arrays(area_profile, config=config, n_intervals=n_out - 1)
     profile = {
         "x": x_eval,
         "x_norm": x_eval / max(float(config.length_m), 1e-300),
@@ -832,6 +919,7 @@ def build_freidberg_reference_profile(
         "T_e_max": float(np.nanmax(T_e)),
         "working_fluid": fluid.to_dict(),
         "inlet": {key: float(value) for key, value in inlet.items()},
+        "area_profile_source": "fixed_profile" if area_profile is not None else "design_spline",
         "accepted_tail": step_rows[-5:],
     }
     return ReferenceProfileResult(ok=True, profile=profile, diagnostics=diagnostics)

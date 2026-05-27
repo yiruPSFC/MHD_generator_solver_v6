@@ -18,6 +18,11 @@ from v6_firedrake_reduced.freidberg_branch_audit import audit_freidberg_branches
 from v6_firedrake_reduced.geometry import LogAreaSplineControl
 from v6_firedrake_reduced.objective import evaluate_profile_metrics
 from v6_firedrake_reduced.run_firedrake_reduced import _design_from_json, _validate_optimizer_options
+from v6_firedrake_reduced.sonic_compatibility import (
+    audit_sonic_compatibility,
+    build_front_loaded_area_initial_profile,
+    make_sonic_matched_area_profile,
+)
 from v6_firedrake_reduced.transport import (
     ELECTRON_TRANSPORT_E_ARGON,
     ELECTRON_TRANSPORT_E_HE,
@@ -204,6 +209,54 @@ class FiredrakeReducedPureContractTest(unittest.TestCase):
         self.assertIn("subsonic", audit["rows"][0]["branches"])
         self.assertIn("supersonic", audit["rows"][0]["branches"])
         json.dumps(audit, allow_nan=False)
+
+    def test_sonic_compatibility_audit_returns_json_safe_summary(self):
+        config = load_case_config(case="yamasaki2004", n_intervals=4)
+        reference = build_front_loaded_area_initial_profile(
+            design=config.design,
+            config=config,
+            area_ratio=6.0,
+            width_fraction=0.05,
+        )
+        self.assertTrue(reference.ok)
+        audit = audit_sonic_compatibility(profile=reference.profile, design=config.design, config=config)
+        summary = audit["summary"]
+        self.assertEqual(summary["row_count"], config.n_intervals + 1)
+        self.assertIn("closest_to_sonic", summary)
+        self.assertEqual(summary["compatibility_formula"], "rhs_L - sigma_logA * L_p = 0")
+        json.dumps(audit, allow_nan=False)
+
+    def test_sonic_matched_area_profile_hits_requested_local_slope(self):
+        config = load_case_config(case="yamasaki2004", n_intervals=8)
+        x_sonic = 0.25 * float(config.length_m)
+        required_sigma = 123.0
+        area = make_sonic_matched_area_profile(
+            design=config.design,
+            config=config,
+            x_sonic=x_sonic,
+            required_sigma_logA=required_sigma,
+            n_intervals=config.n_intervals,
+        )
+        self.assertAlmostEqual(float(area["A"][0]), float(config.area_scale_m2), places=12)
+        idx = int(np.argmin(np.abs(np.asarray(area["x"], dtype=float) - x_sonic)))
+        self.assertAlmostEqual(float(area["sigma_logA"][idx]), required_sigma, delta=1e-9)
+        self.assertTrue(np.all(np.asarray(area["A"], dtype=float) > 0.0))
+
+    def test_front_loaded_area_initial_profile_preserves_area_ratio(self):
+        config = load_case_config(case="yamasaki2004", n_intervals=8)
+        reference = build_front_loaded_area_initial_profile(
+            design=config.design,
+            config=config,
+            area_ratio=6.0,
+            width_fraction=0.05,
+        )
+        self.assertTrue(reference.ok)
+        self.assertTrue(reference.diagnostics["initial_guess_only"])
+        profile = reference.profile
+        self.assertAlmostEqual(float(profile["A"][0]), float(config.area_scale_m2), places=12)
+        self.assertAlmostEqual(float(profile["A"][-1] / profile["A"][0]), 6.0, places=12)
+        self.assertGreater(float(profile["sigma_logA"][0]), float(profile["sigma_logA"][-1]))
+        self.assertTrue(np.all(np.asarray(profile["n_p"], dtype=float) == float(config.design.n_p_in)))
 
     def test_velikhov_penalty_lowers_objective_when_floor_is_violated(self):
         config = load_case_config(case="yamasaki2004", n_intervals=8)

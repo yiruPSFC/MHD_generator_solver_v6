@@ -49,6 +49,22 @@ def _build_parser() -> argparse.ArgumentParser:
         default=1,
         help="For constrained_slsqp, rebuild from the last converged profile this many times.",
     )
+    parser.add_argument(
+        "--slsqp-trial-continuation",
+        action="store_true",
+        help="For constrained_slsqp, warm-start each trial by design-space continuation before local adjoint evaluation.",
+    )
+    parser.add_argument(
+        "--slsqp-continuation-T-p-floor-K",
+        type=float,
+        default=1.0,
+        help="Hard T_p floor used by --slsqp-trial-continuation while accepting continuation trial states.",
+    )
+    parser.add_argument(
+        "--slsqp-rebuild-tape-per-trial",
+        action="store_true",
+        help="With --slsqp-trial-continuation, rebuild a local pyadjoint tape for every trial instead of reusing a Placeholder-backed tape.",
+    )
     parser.add_argument("--residual-scaling", default="inlet", choices=("inlet", "characteristic", "dimensional"))
     parser.add_argument("--equation-form", default="primitive", choices=("primitive", "freidberg_hl"))
     parser.add_argument("--snes-max-it", type=int, default=None)
@@ -76,6 +92,9 @@ def _with_runtime_metadata(config, args: argparse.Namespace):
         "velikhov_constraint_mode": str(args.velikhov_constraint_mode),
         "velikhov_hard_floor": float(args.velikhov_hard_floor),
         "velikhov_constraint_sampling": "nodes",
+        "slsqp_trial_continuation": bool(args.slsqp_trial_continuation),
+        "slsqp_continuation_T_p_floor_K": float(args.slsqp_continuation_T_p_floor_K),
+        "slsqp_rebuild_tape_per_trial": bool(args.slsqp_rebuild_tape_per_trial),
     }
     if args.snes_max_it is not None:
         metadata["snes_max_it"] = int(args.snes_max_it)
@@ -285,6 +304,8 @@ def _run_coordinate_search(config, out_dir: Path, *, initial_profile: dict[str, 
 
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
+    if bool(args.slsqp_trial_continuation) and int(args.slsqp_state_restarts) > 1:
+        raise ValueError("--slsqp-trial-continuation currently replaces --slsqp-state-restarts; use one or the other.")
     config = load_freidberg_area_only_config(
         n_intervals=args.n_intervals,
         area_half_width=float(args.area_window_half_width),
@@ -328,6 +349,9 @@ def main(argv: list[str] | None = None) -> int:
                 "path": str(args.reference_profile_npz or config.metadata.get("reference_profile_npz")),
             },
             slsqp_state_restarts=int(args.slsqp_state_restarts),
+            slsqp_trial_continuation=bool(args.slsqp_trial_continuation),
+            slsqp_continuation_T_p_floor_K=float(args.slsqp_continuation_T_p_floor_K),
+            slsqp_rebuild_tape_per_trial=bool(args.slsqp_rebuild_tape_per_trial),
             freidberg_branch_audit=bool(args.freidberg_branch_audit),
         )
     benchmark_payload: dict[str, Any] = {

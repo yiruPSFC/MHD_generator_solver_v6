@@ -21,7 +21,12 @@ from .reference_profile import (
 from .reduced_functional import (
     minimize_constrained_slsqp,
     minimize_constrained_slsqp_state_restarts,
+    minimize_constrained_slsqp_trial_continuation,
     minimize_multistart,
+)
+from .sonic_compatibility import (
+    build_front_loaded_area_initial_profile,
+    build_sonic_matched_freidberg_reference_profile,
 )
 from .transport import ELECTRON_TRANSPORT_MODELS, normalize_electron_transport
 
@@ -132,6 +137,8 @@ def _validate_optimizer_options(args: argparse.Namespace) -> None:
         )
     if str(args.optimizer) == "projected_gradient" and str(args.velikhov_constraint_mode) == "hard":
         raise ValueError("--velikhov-constraint-mode hard requires --optimizer constrained_slsqp.")
+    if bool(getattr(args, "slsqp_trial_continuation", False)) and int(args.slsqp_state_restarts) > 1:
+        raise ValueError("--slsqp-trial-continuation currently replaces --slsqp-state-restarts; use one or the other.")
 
 
 def _write_freidberg_branch_audit(
@@ -298,6 +305,9 @@ def _run_optimize(
     initial_profile: dict[str, Any] | None = None,
     initial_profile_context: dict[str, Any] | None = None,
     slsqp_state_restarts: int = 1,
+    slsqp_trial_continuation: bool = False,
+    slsqp_continuation_T_p_floor_K: float = 1.0,
+    slsqp_rebuild_tape_per_trial: bool = False,
     freidberg_branch_audit: bool = False,
     freidberg_branch_policy: str = "continuity",
     freidberg_branch_tolerance: float = 1e-3,
@@ -307,7 +317,18 @@ def _run_optimize(
         if str(optimizer) == "constrained_slsqp":
             if str(velikhov_constraint_mode) != "hard":
                 raise ValueError("constrained_slsqp requires velikhov_constraint_mode='hard'.")
-            if int(slsqp_state_restarts) > 1:
+            if bool(slsqp_trial_continuation):
+                opt = minimize_constrained_slsqp_trial_continuation(
+                    config=config,
+                    multistart=int(multistart),
+                    seed=int(seed),
+                    max_iterations=int(max_iterations),
+                    velikhov_hard_floor=_velikhov_constraint_floor(config),
+                    initial_profile=initial_profile,
+                    continuation_T_p_floor_K=float(slsqp_continuation_T_p_floor_K),
+                    reuse_reduced_functional_tape=not bool(slsqp_rebuild_tape_per_trial),
+                )
+            elif int(slsqp_state_restarts) > 1:
                 opt = minimize_constrained_slsqp_state_restarts(
                     config=config,
                     multistart=int(multistart),
@@ -430,10 +451,15 @@ def _run_optimize(
             "method": opt.get("method"),
             "max_iterations": opt.get("max_iterations"),
             "constraint_sampling": opt.get("constraint_sampling"),
+            "active_control_names": opt.get("active_control_names"),
             "velikhov_hard_floor": opt.get("velikhov_hard_floor"),
             "slsqp_state_restarts": int(slsqp_state_restarts),
+            "slsqp_trial_continuation": bool(slsqp_trial_continuation),
+            "slsqp_continuation_T_p_floor_K": float(slsqp_continuation_T_p_floor_K),
+            "slsqp_rebuild_tape_per_trial": bool(slsqp_rebuild_tape_per_trial),
             "state_restarts_completed": opt.get("state_restarts_completed"),
             "state_restart_summaries": opt.get("state_restart_summaries"),
+            "trial_continuation": opt.get("trial_continuation"),
             "trial_failure_count": len(opt.get("trial_failures", [])),
             "best_raw": opt["best"],
         },
@@ -463,6 +489,22 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=1,
         help="For constrained_slsqp, rebuild the reduced functional this many times using the last converged profile as the next state initial guess.",
+    )
+    parser.add_argument(
+        "--slsqp-trial-continuation",
+        action="store_true",
+        help="For constrained_slsqp, solve each trial by design-space continuation from the nearest accepted profile before building a local adjoint tape.",
+    )
+    parser.add_argument(
+        "--slsqp-continuation-T-p-floor-K",
+        type=float,
+        default=1.0,
+        help="Hard T_p floor used by --slsqp-trial-continuation while accepting continuation trial states.",
+    )
+    parser.add_argument(
+        "--slsqp-rebuild-tape-per-trial",
+        action="store_true",
+        help="With --slsqp-trial-continuation, rebuild a local pyadjoint tape for every trial instead of reusing a Placeholder-backed tape.",
     )
     parser.add_argument(
         "--optimizer",
@@ -526,12 +568,24 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--reference-initial",
         default="none",
-        choices=("none", "explicit", "implicit", "freidberg_hl"),
+        choices=("none", "explicit", "implicit", "freidberg_hl", "sonic_freidberg_hl", "front_loaded_area"),
         help="Generate an initial profile before evaluate using the selected pure-Python reference marcher.",
     )
     parser.add_argument("--reference-residual-tol", type=float, default=1e-7)
     parser.add_argument("--reference-substeps-per-interval", type=int, default=10)
     parser.add_argument("--reference-max-log-step", type=float, default=0.25)
+    parser.add_argument(
+        "--front-loaded-area-ratio",
+        type=float,
+        default=None,
+        help="Exit/inlet area ratio for --reference-initial front_loaded_area; defaults to the active design ratio.",
+    )
+    parser.add_argument(
+        "--front-loaded-area-width-fraction",
+        type=float,
+        default=0.05,
+        help="Expansion decay width divided by length for --reference-initial front_loaded_area.",
+    )
     parser.add_argument("--snes-max-it", type=int, default=None)
     parser.add_argument("--snes-dtol", type=float, default=None)
     parser.add_argument("--snes-linesearch-type", default=None)
@@ -641,6 +695,9 @@ def main(argv: list[str] | None = None) -> int:
         "velikhov_constraint_mode": str(args.velikhov_constraint_mode),
         "velikhov_hard_floor": float(args.velikhov_hard_floor),
         "velikhov_constraint_sampling": "nodes",
+        "slsqp_trial_continuation": bool(args.slsqp_trial_continuation),
+        "slsqp_continuation_T_p_floor_K": float(args.slsqp_continuation_T_p_floor_K),
+        "slsqp_rebuild_tape_per_trial": bool(args.slsqp_rebuild_tape_per_trial),
     }
     if args.snes_max_it is not None:
         metadata = {**metadata, "snes_max_it": int(args.snes_max_it)}
@@ -685,13 +742,28 @@ def main(argv: list[str] | None = None) -> int:
                 initial_substeps_per_interval=int(args.reference_substeps_per_interval),
                 max_log_step=float(args.reference_max_log_step),
             )
-        else:
+        elif reference_mode == "freidberg_hl":
             reference = build_freidberg_reference_profile(
                 design=config.design,
                 config=config,
                 residual_tol=float(args.reference_residual_tol),
                 initial_substeps_per_interval=int(args.reference_substeps_per_interval),
                 max_log_step=float(args.reference_max_log_step),
+            )
+        elif reference_mode == "sonic_freidberg_hl":
+            reference = build_sonic_matched_freidberg_reference_profile(
+                design=config.design,
+                config=config,
+                residual_tol=float(args.reference_residual_tol),
+                initial_substeps_per_interval=int(args.reference_substeps_per_interval),
+                max_log_step=float(args.reference_max_log_step),
+            )
+        else:
+            reference = build_front_loaded_area_initial_profile(
+                design=config.design,
+                config=config,
+                area_ratio=args.front_loaded_area_ratio,
+                width_fraction=float(args.front_loaded_area_width_fraction),
             )
         _write_json(
             out_dir / "reference_initial_summary.json",
@@ -724,6 +796,19 @@ def main(argv: list[str] | None = None) -> int:
         initial_profile = reference.profile
         np.savez(out_dir / "reference_initial_profile.npz", **reference.profile)
         initial_profile_context["profile_npz"] = str(out_dir / "reference_initial_profile.npz")
+        if reference_mode in {"sonic_freidberg_hl", "front_loaded_area"}:
+            if args.mode != "evaluate":
+                raise ValueError(f"--reference-initial {reference_mode} is evaluate-only.")
+            metadata = {
+                **config.metadata,
+                "fixed_area_profile_source": "initial_profile",
+                "fixed_area_profile_note": (
+                    f"Evaluate-only fixed area curve from --reference-initial {reference_mode}; "
+                    "not an optimizer control parameterization."
+                ),
+            }
+            config = _with_design(config, config.design, metadata=metadata)
+            initial_profile_context["fixed_area_profile_source"] = "initial_profile"
     try:
         if args.mode == "evaluate":
             payload = _run_evaluate(
@@ -747,6 +832,9 @@ def main(argv: list[str] | None = None) -> int:
                 initial_profile=initial_profile,
                 initial_profile_context=initial_profile_context,
                 slsqp_state_restarts=int(args.slsqp_state_restarts),
+                slsqp_trial_continuation=bool(args.slsqp_trial_continuation),
+                slsqp_continuation_T_p_floor_K=float(args.slsqp_continuation_T_p_floor_K),
+                slsqp_rebuild_tape_per_trial=bool(args.slsqp_rebuild_tape_per_trial),
                 freidberg_branch_audit=bool(args.freidberg_branch_audit),
                 freidberg_branch_policy=str(args.freidberg_branch_policy),
                 freidberg_branch_tolerance=float(args.freidberg_branch_tolerance),
