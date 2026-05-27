@@ -971,6 +971,223 @@ def build_sonic_mesh_matching_diagnostic(
     }
 
 
+def validate_asymptotic_hl_patch(
+    *,
+    design: DesignVector,
+    config: CaseConfig,
+    sonic_report: dict[str, Any] | None = None,
+    target_M_prime_1_per_m: float = 1000.0,
+    launch_mach_increment: float = 1.0e-3,
+    patch_length_factors: tuple[float, ...] = (0.1, 0.3, 1.0, 3.0),
+    steps_per_launch_length: int = 20,
+    max_log_step: float = 0.05,
+) -> dict[str, Any]:
+    """Validate a local asymptotic A/A' patch with H/L backward-Euler steps.
+
+    The Taylor data sets the local area curve and the first state predictor.
+    Each node state is then corrected by solving the H/L balance directly,
+    without dividing by the sonic denominator.
+    """
+
+    report = (
+        build_sonic_mesh_matching_diagnostic(
+            design=design,
+            config=config,
+            target_M_prime_1_per_m=target_M_prime_1_per_m,
+            launch_mach_increment=launch_mach_increment,
+        )
+        if sonic_report is None
+        else dict(sonic_report)
+    )
+    if not bool(report.get("ok", False)):
+        return {
+            "diagnostic": "asymptotic_hl_patch_validation",
+            "schema_version": 1,
+            "ok": False,
+            "sonic_report": report,
+        }
+    sonic_point = dict(report["sonic_point"])
+    launch = dict(report["right_branch_launch_condition"])
+    ops = ops_for_numeric()
+    fluid = working_fluid_for_config(config)
+    inlet = inlet_design_generic(
+        ops=ops,
+        n_p_in=design.n_p_in,
+        T_e_in=design.T_e_in,
+        Z_in=design.Z_in,
+        I_0=design.I_0,
+        seed_fraction=design.seed_fraction,
+        B=float(design.B_T),
+        inlet_A=float(config.area_scale_m2),
+        working_fluid=fluid,
+    )
+    x_star = float(sonic_point["x_m"])
+    z_star = np.array([float(sonic_point["delta_log_n"]), float(sonic_point["delta_log_Te"])], dtype=float)
+    logA_star = float(sonic_point["logA"])
+    sigma_star = float(sonic_point["sigma_required_1_per_m"])
+    state_prime = np.array(
+        [float(launch["dlogn_dx_1_per_m"]), float(launch["dlogTe_dx_1_per_m"])],
+        dtype=float,
+    )
+    tau = float(launch["required_dsigma_logA_dx_1_per_m2"])
+    launch_dx = float(launch["first_right_node"]["dx_from_sonic_m"])
+    A0 = max(float(config.area_scale_m2), _EPS)
+
+    def area_at_s(s: float) -> tuple[float, float, float]:
+        s_value = float(s)
+        logA = logA_star + sigma_star * s_value + 0.5 * tau * s_value * s_value
+        sigma = sigma_star + tau * s_value
+        return A0 * float(np.exp(np.clip(logA, -700.0, 700.0))), sigma, logA
+
+    def terms_at_s(s: float, z: np.ndarray) -> dict[str, Any]:
+        A, sigma, _ = area_at_s(float(s))
+        return _freidberg_terms_for_explicit_area(
+            ops=ops,
+            fluid=fluid,
+            design=design,
+            config=config,
+            inlet=inlet,
+            x=x_star + float(s),
+            z=np.asarray(z, dtype=float),
+            A=A,
+            sigma_logA=sigma,
+        )
+
+    def scaled_step_residual(
+        *,
+        s_prev: float,
+        z_prev: np.ndarray,
+        s_next: float,
+        z_next: np.ndarray,
+    ) -> tuple[np.ndarray, dict[str, Any]]:
+        h = max(float(s_next) - float(s_prev), _EPS)
+        prev = terms_at_s(float(s_prev), z_prev)
+        nxt = terms_at_s(float(s_next), z_next)
+        H_res = (float(nxt["H_p"]) - float(prev["H_p"])) / h - float(nxt["rhs_H"])
+        L_res = (float(nxt["L_p"]) - float(prev["L_p"])) / h - float(nxt["rhs_L"])
+        inv_l = 1.0 / max(float(config.length_m), _EPS)
+        H_scale = max(1.0, abs(float(nxt["H_p"]) * inv_l), abs(float(prev["H_p"]) * inv_l), abs(float(nxt["rhs_H"])))
+        L_scale = max(inv_l, abs(float(nxt["L_p"]) * inv_l), abs(float(prev["L_p"]) * inv_l), abs(float(nxt["rhs_L"])))
+        return (
+            np.array([H_res / H_scale, L_res / L_scale], dtype=float),
+            {
+                "H_residual": H_res,
+                "L_residual": L_res,
+                "scaled_H_residual": H_res / H_scale,
+                "scaled_L_residual": L_res / L_scale,
+                "mach": float(nxt["mach"]),
+                "T_p_K": float(nxt["T_p"]),
+                "n_p": float(nxt["n_p"]),
+                "T_e": float(nxt["T_e"]),
+                "A_over_A0": float(nxt["A"]) / A0,
+                "sigma_logA_1_per_m": float(nxt["sigma_logA"]),
+            },
+        )
+
+    def solve_patch(length: float) -> dict[str, Any]:
+        s_end = float(length)
+        n_steps = max(4, int(np.ceil(s_end / max(launch_dx / max(int(steps_per_launch_length), 1), _EPS))))
+        s_nodes = np.linspace(0.0, s_end, n_steps + 1, dtype=float)
+        z = z_star.copy()
+        rows: list[dict[str, Any]] = []
+        max_residual = 0.0
+        max_nfev = 0
+        ok = True
+        for idx, (s_prev, s_next) in enumerate(zip(s_nodes[:-1], s_nodes[1:], strict=True)):
+            h = float(s_next - s_prev)
+            guess = z + state_prime * h
+            lower = z - float(max_log_step)
+            upper = z + float(max_log_step)
+
+            def residual(candidate: np.ndarray) -> np.ndarray:
+                try:
+                    values, _ = scaled_step_residual(
+                        s_prev=float(s_prev),
+                        z_prev=z,
+                        s_next=float(s_next),
+                        z_next=np.asarray(candidate, dtype=float),
+                    )
+                    if not np.all(np.isfinite(values)):
+                        return np.full(2, 1e30, dtype=float)
+                    return values
+                except Exception:
+                    return np.full(2, 1e30, dtype=float)
+
+            sol = least_squares(
+                residual,
+                np.minimum(np.maximum(guess, lower), upper),
+                bounds=(lower, upper),
+                xtol=1e-12,
+                ftol=1e-12,
+                gtol=1e-12,
+                max_nfev=100,
+            )
+            values, detail = scaled_step_residual(
+                s_prev=float(s_prev),
+                z_prev=z,
+                s_next=float(s_next),
+                z_next=np.asarray(sol.x, dtype=float),
+            )
+            residual_inf = float(np.max(np.abs(values)))
+            max_residual = max(max_residual, residual_inf)
+            max_nfev = max(max_nfev, int(sol.nfev))
+            if not (bool(sol.success) and np.isfinite(residual_inf) and residual_inf <= 1.0e-5):
+                ok = False
+            z = np.asarray(sol.x, dtype=float)
+            taylor_z = z_star + state_prime * float(s_next)
+            rows.append(
+                _json_clean(
+                    {
+                        "step": int(idx),
+                        "s_m": float(s_next),
+                        "x_m": x_star + float(s_next),
+                        "x_fraction": (x_star + float(s_next)) / max(float(config.length_m), _EPS),
+                        "h_m": h,
+                        "least_squares_success": bool(sol.success),
+                        "least_squares_nfev": int(sol.nfev),
+                        "residual_inf": residual_inf,
+                        "delta_log_n": float(z[0]),
+                        "delta_log_Te": float(z[1]),
+                        "taylor_delta_log_n": float(taylor_z[0]),
+                        "taylor_delta_log_Te": float(taylor_z[1]),
+                        "correction_norm": float(np.linalg.norm(z - taylor_z, ord=np.inf)),
+                        **detail,
+                    }
+                )
+            )
+        end = rows[-1] if rows else {}
+        return _json_clean(
+            {
+                "ok": bool(ok),
+                "patch_length_m": s_end,
+                "patch_length_over_launch_dx": s_end / max(launch_dx, _EPS),
+                "n_steps": int(n_steps),
+                "max_step_m": float(np.max(np.diff(s_nodes))) if s_nodes.size > 1 else 0.0,
+                "max_residual_inf": max_residual,
+                "max_least_squares_nfev": int(max_nfev),
+                "end": end,
+                "rows": rows,
+            }
+        )
+
+    sweeps = [solve_patch(max(float(factor) * launch_dx, 1.0e-12)) for factor in patch_length_factors]
+    representative = max(sweeps, key=lambda item: float(item["patch_length_m"])) if sweeps else {}
+    return {
+        "diagnostic": "asymptotic_hl_patch_validation",
+        "schema_version": 1,
+        "ok": bool(sweeps and all(bool(item["ok"]) for item in sweeps)),
+        "sonic_point": sonic_point,
+        "right_branch_launch_condition": launch,
+        "patch_model": {
+            "logA": "logA_* + sigma_* s + 0.5 sigma_prime_* s^2",
+            "state_predictor": "z_* + z_prime_* s; H/L solve corrects z at each local node",
+            "s_m": "x - x_*",
+        },
+        "sweeps": sweeps,
+        "representative_patch": representative,
+    }
+
+
 def _hermite_segment(
     x: np.ndarray,
     *,

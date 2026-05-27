@@ -8,7 +8,7 @@ from typing import Any
 import numpy as np
 
 from .design import CASE_NAMES, GEOMETRY_LENGTH_MODES, CaseConfig, DesignVector, load_case_config
-from .sonic_compatibility import build_sonic_mesh_matching_diagnostic
+from .sonic_compatibility import build_sonic_mesh_matching_diagnostic, validate_asymptotic_hl_patch
 from .transport import ELECTRON_TRANSPORT_MODELS, normalize_electron_transport
 
 
@@ -82,6 +82,29 @@ def _write_npz(path: Path, report: dict[str, Any]) -> None:
     )
 
 
+def _write_asymptotic_npz(path: Path, validation: dict[str, Any]) -> None:
+    if not bool(validation.get("ok", False)):
+        return
+    rows = list(dict(validation["representative_patch"]).get("rows", []))
+    if not rows:
+        return
+    np.savez(
+        path,
+        s_m=np.asarray([float(row["s_m"]) for row in rows], dtype=float),
+        x_m=np.asarray([float(row["x_m"]) for row in rows], dtype=float),
+        mach=np.asarray([float(row["mach"]) for row in rows], dtype=float),
+        T_p_K=np.asarray([float(row["T_p_K"]) for row in rows], dtype=float),
+        delta_log_n=np.asarray([float(row["delta_log_n"]) for row in rows], dtype=float),
+        delta_log_Te=np.asarray([float(row["delta_log_Te"]) for row in rows], dtype=float),
+        taylor_delta_log_n=np.asarray([float(row["taylor_delta_log_n"]) for row in rows], dtype=float),
+        taylor_delta_log_Te=np.asarray([float(row["taylor_delta_log_Te"]) for row in rows], dtype=float),
+        correction_norm=np.asarray([float(row["correction_norm"]) for row in rows], dtype=float),
+        residual_inf=np.asarray([float(row["residual_inf"]) for row in rows], dtype=float),
+        A_over_A0=np.asarray([float(row["A_over_A0"]) for row in rows], dtype=float),
+        sigma_logA_1_per_m=np.asarray([float(row["sigma_logA_1_per_m"]) for row in rows], dtype=float),
+    )
+
+
 def _write_plot(path: Path, report: dict[str, Any]) -> None:
     if not bool(report.get("ok", False)):
         return
@@ -148,6 +171,62 @@ def _write_plot(path: Path, report: dict[str, Any]) -> None:
     plt.close(fig)
 
 
+def _write_asymptotic_plot(path: Path, validation: dict[str, Any]) -> None:
+    if not bool(validation.get("ok", False)):
+        return
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    sweeps = list(validation.get("sweeps", []))
+    rep = dict(validation.get("representative_patch", {}))
+    rows = list(rep.get("rows", []))
+    if not sweeps or not rows:
+        return
+
+    lengths = np.asarray([float(item["patch_length_m"]) for item in sweeps], dtype=float)
+    residuals = np.asarray([float(item["max_residual_inf"]) for item in sweeps], dtype=float)
+    end_mach = np.asarray([float(item["end"]["mach"]) for item in sweeps], dtype=float)
+    s_um = 1.0e6 * np.asarray([float(row["s_m"]) for row in rows], dtype=float)
+    mach = np.asarray([float(row["mach"]) for row in rows], dtype=float)
+    residual_profile = np.asarray([float(row["residual_inf"]) for row in rows], dtype=float)
+    correction = np.asarray([float(row["correction_norm"]) for row in rows], dtype=float)
+
+    fig, axes = plt.subplots(2, 2, figsize=(11.5, 8.0), constrained_layout=True)
+    axes[0, 0].loglog(lengths, residuals, "o-")
+    axes[0, 0].set_xlabel("patch length [m]")
+    axes[0, 0].set_ylabel("max scaled H/L residual")
+    axes[0, 0].grid(True, which="both", alpha=0.3)
+
+    axes[0, 1].semilogx(lengths, end_mach, "o-")
+    axes[0, 1].axhline(1.0, color="0.25", linewidth=1.0)
+    axes[0, 1].set_xlabel("patch length [m]")
+    axes[0, 1].set_ylabel("end Mach")
+    axes[0, 1].grid(True, which="both", alpha=0.3)
+
+    axes[1, 0].plot(s_um, mach)
+    axes[1, 0].axhline(1.0, color="0.25", linewidth=1.0)
+    axes[1, 0].set_xlabel("x - x* [um]")
+    axes[1, 0].set_ylabel("Mach along representative patch")
+
+    axes[1, 1].semilogy(s_um, residual_profile, label="step residual")
+    axes[1, 1].semilogy(s_um, np.maximum(correction, 1.0e-16), label="state correction")
+    axes[1, 1].set_xlabel("x - x* [um]")
+    axes[1, 1].legend(fontsize=8)
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(path, dpi=180)
+    plt.close(fig)
+
+
+def _parse_float_tuple(text: str) -> tuple[float, ...]:
+    values = tuple(float(item.strip()) for item in str(text).split(",") if item.strip())
+    if not values:
+        raise argparse.ArgumentTypeError("expected at least one comma-separated float")
+    return values
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Diagnose a smooth sonic mesh/matching point for Freidberg H/L marching.")
     parser.add_argument("--case", default="yamasaki2004", choices=CASE_NAMES)
@@ -166,6 +245,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--reference-max-log-step", type=float, default=0.25)
     parser.add_argument("--target-M-prime", type=float, default=1000.0)
     parser.add_argument("--launch-mach-increment", type=float, default=1.0e-3)
+    parser.add_argument(
+        "--patch-length-factors",
+        type=_parse_float_tuple,
+        default=(0.1, 0.3, 1.0, 3.0),
+        help="Comma-separated multiples of the launch dx used for asymptotic H/L patch validation.",
+    )
+    parser.add_argument("--skip-asymptotic-validation", action="store_true")
     parser.add_argument("--out-dir", type=Path, required=True)
     parser.add_argument("--no-plot", action="store_true")
     return parser
@@ -216,12 +302,29 @@ def main(argv: list[str] | None = None) -> int:
         **report,
         "case_config": config.to_dict(),
     }
+    if not bool(args.skip_asymptotic_validation):
+        payload["asymptotic_hl_patch_validation"] = validate_asymptotic_hl_patch(
+            design=config.design,
+            config=config,
+            sonic_report=report,
+            target_M_prime_1_per_m=float(args.target_M_prime),
+            launch_mach_increment=float(args.launch_mach_increment),
+            patch_length_factors=tuple(float(value) for value in args.patch_length_factors),
+        )
     out_dir = Path(args.out_dir).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
     _write_json(out_dir / "summary.json", payload)
     _write_npz(out_dir / "local_mesh_area_launch.npz", report)
+    if "asymptotic_hl_patch_validation" in payload:
+        _write_json(out_dir / "asymptotic_hl_patch_validation.json", payload["asymptotic_hl_patch_validation"])
+        _write_asymptotic_npz(out_dir / "asymptotic_hl_patch_profile.npz", payload["asymptotic_hl_patch_validation"])
     if not bool(args.no_plot):
         _write_plot(out_dir / "sonic_mesh_matching.png", report)
+        if "asymptotic_hl_patch_validation" in payload:
+            _write_asymptotic_plot(
+                out_dir / "asymptotic_hl_patch_validation.png",
+                payload["asymptotic_hl_patch_validation"],
+            )
     print(json.dumps(payload, indent=2, sort_keys=True, default=_json_default))
     return 0 if bool(report.get("ok", False)) else 2
 

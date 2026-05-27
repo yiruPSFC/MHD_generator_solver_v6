@@ -23,6 +23,7 @@ from v6_firedrake_reduced.sonic_compatibility import (
     build_sonic_mesh_matching_diagnostic,
     build_front_loaded_area_initial_profile,
     make_sonic_matched_area_profile,
+    validate_asymptotic_hl_patch,
 )
 from v6_firedrake_reduced.transport import (
     ELECTRON_TRANSPORT_E_ARGON,
@@ -285,7 +286,17 @@ class FiredrakeReducedPureContractTest(unittest.TestCase):
         self.assertAlmostEqual(float(report["sonic_point"]["sigma_required_1_per_m"]), 184.645, delta=1.0e-2)
         self.assertGreater(float(report["right_branch_launch_condition"]["first_right_node"]["mach"]), 1.0)
         self.assertGreater(float(report["suggested_local_mesh"]["node_count"]), 8)
+        validation = validate_asymptotic_hl_patch(
+            design=design,
+            config=config,
+            sonic_report=report,
+            patch_length_factors=(0.1, 1.0),
+        )
+        self.assertTrue(validation["ok"])
+        self.assertLess(float(validation["representative_patch"]["max_residual_inf"]), 1.0e-5)
+        self.assertGreater(float(validation["representative_patch"]["end"]["mach"]), 1.0)
         json.dumps(report, allow_nan=False)
+        json.dumps(validation, allow_nan=False)
 
     def test_velikhov_penalty_lowers_objective_when_floor_is_violated(self):
         config = load_case_config(case="yamasaki2004", n_intervals=8)
