@@ -799,8 +799,13 @@ def solve_forward(
                 design=design,
                 target_x_norm=x_norm,
             )
-            state.subfunctions[0].dat.data[:] = delta_log_n_values
-            state.subfunctions[1].dat.data[:] = delta_log_Te_values
+            initial_state = fd.Function(W, name="initial_profile_delta")
+            initial_state.subfunctions[0].dat.data[:] = delta_log_n_values
+            initial_state.subfunctions[1].dat.data[:] = delta_log_Te_values
+            try:
+                state.assign(initial_state, annotate=annotate_objective)
+            except TypeError:
+                state.assign(initial_state)
             initial_guess = "profile_interpolated_delta"
         except Exception as exc:
             return ForwardResult(
@@ -826,7 +831,7 @@ def solve_forward(
     ]
     problem = fd.NonlinearVariationalProblem(residual, state, bcs=bcs)
     solver_parameters = {
-        "snes_type": "newtonls",
+        "snes_type": str(config.metadata.get("snes_type", "newtonls")),
         "snes_rtol": 1e-8,
         "snes_atol": 1e-9,
         "snes_max_it": int(config.metadata.get("snes_max_it", 50)),

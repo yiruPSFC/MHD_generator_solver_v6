@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from contextlib import nullcontext
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import sys
 from typing import Any
 
@@ -26,7 +26,8 @@ def control_values(bundle: ReducedFunctionalBundle, values: np.ndarray | list[fl
 
 
 def evaluate_reduced_functional(bundle: ReducedFunctionalBundle, values: np.ndarray | list[float] | tuple[float, ...]) -> float:
-    return float(bundle.reduced_functional(control_values(bundle, values)))
+    arr = np.asarray(values, dtype=float).reshape(len(bundle.variable_names))
+    return float(bundle.reduced_functional(control_values(bundle, arr)))
 
 
 def _scalar_from_control_like(value: Any) -> float:
@@ -40,7 +41,33 @@ def reduced_functional_gradient(bundle: ReducedFunctionalBundle) -> np.ndarray:
     return np.array([_scalar_from_control_like(item) for item in gradient], dtype=float)
 
 
-def build_reduced_functional(*, design: DesignVector, config: CaseConfig) -> ReducedFunctionalBundle:
+def _projected_gradient_residual_minimize(
+    *,
+    gradient_y_minimize: np.ndarray,
+    y: np.ndarray,
+    bound_tol: float = 1e-8,
+) -> tuple[float, list[float]]:
+    residuals = []
+    for grad, value in zip(np.asarray(gradient_y_minimize, dtype=float), np.asarray(y, dtype=float), strict=True):
+        if float(value) <= float(bound_tol):
+            residual = max(0.0, -float(grad))
+        elif float(value) >= 1.0 - float(bound_tol):
+            residual = max(0.0, float(grad))
+        else:
+            residual = abs(float(grad))
+        residuals.append(float(residual))
+    return (
+        float(np.max(residuals)) if residuals else 0.0,
+        residuals,
+    )
+
+
+def build_reduced_functional(
+    *,
+    design: DesignVector,
+    config: CaseConfig,
+    initial_profile: dict[str, Any] | None = None,
+) -> ReducedFunctionalBundle:
     original_argv = sys.argv[:]
     try:
         sys.argv = ["v6_firedrake_reduced"]
@@ -56,7 +83,12 @@ def build_reduced_functional(*, design: DesignVector, config: CaseConfig) -> Red
 
     set_working_tape(Tape())
     continue_annotation()
-    result = solve_forward(design=design, config=config, annotate_objective=True)
+    result = solve_forward(
+        design=design,
+        config=config,
+        initial_profile=initial_profile,
+        annotate_objective=True,
+    )
     if not result.ok or result.fd_objective is None:
         raise RuntimeError(f"cannot build ReducedFunctional because forward solve failed: {result.error}")
     if result.fd_control_space is None:
@@ -83,6 +115,7 @@ def minimize_multistart(
     multistart: int,
     seed: int = 1,
     max_iterations: int = 8,
+    initial_profile: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Small local optimizer wrapper for the first Firedrake smoke experiments."""
 
@@ -108,7 +141,11 @@ def minimize_multistart(
         y = np.clip(to_normalized(np.asarray(start, dtype=float)), 0.0, 1.0)
         x = from_normalized(y)
         try:
-            bundle = build_reduced_functional(design=DesignVector.from_array(x), config=config)
+            bundle = build_reduced_functional(
+                design=DesignVector.from_array(x),
+                config=config,
+                initial_profile=initial_profile,
+            )
         except Exception as exc:
             trial_failures.append(
                 {
@@ -233,6 +270,7 @@ def minimize_constrained_slsqp(
     seed: int = 1,
     max_iterations: int = 8,
     velikhov_hard_floor: float = 0.0,
+    initial_profile: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Local SLSQP optimizer with node-only reduced constraints G_node - floor >= 0."""
 
@@ -287,7 +325,11 @@ def minimize_constrained_slsqp(
         y0 = np.clip(to_normalized(np.asarray(start, dtype=float)), 0.0, 1.0)
         x0 = from_normalized(y0)
         try:
-            bundle = build_reduced_functional(design=DesignVector.from_array(x0), config=config)
+            bundle = build_reduced_functional(
+                design=DesignVector.from_array(x0),
+                config=config,
+                initial_profile=initial_profile,
+            )
         except Exception as exc:
             record_failure(
                 source="initial_reduced_functional",
@@ -348,7 +390,7 @@ def minimize_constrained_slsqp(
             design = DesignVector.from_array(x)
             try:
                 with _stop_annotating_context():
-                    result = solve_forward(design=design, config=config)
+                    result = solve_forward(design=design, config=config, initial_profile=initial_profile)
                 if not result.ok or result.profile is None:
                     raise RuntimeError(result.error or "forward solve failed")
                 summary = evaluate_velikhov_node_constraints(
@@ -382,13 +424,40 @@ def minimize_constrained_slsqp(
                 "disp": False,
             },
         )
-        x_best = raw_from_y(np.asarray(result.x, dtype=float))
+        y_best = np.clip(np.asarray(result.x, dtype=float), 0.0, 1.0)
+        x_best = raw_from_y(y_best)
+        objective_replay_at_best = float("nan")
+        objective_gradient_inf = float("nan")
+        projected_gradient_inf = float("nan")
+        projected_gradient_by_variable: list[float] = [float("nan")] * len(DESIGN_VARIABLE_NAMES)
+        try:
+            objective_replay_at_best = evaluate_reduced_functional(bundle, x_best)
+            grad_y_minimize = -reduced_functional_gradient(bundle) * width
+            objective_gradient_inf = float(np.linalg.norm(grad_y_minimize, ord=np.inf))
+            projected_gradient_inf, projected_gradient_by_variable = _projected_gradient_residual_minimize(
+                gradient_y_minimize=grad_y_minimize,
+                y=y_best,
+            )
+        except Exception as exc:
+            record_failure(
+                source="post_slsqp_stationarity",
+                start_index=idx,
+                values=x_best,
+                error=f"{type(exc).__name__}: {exc}",
+            )
         margins_best = constraints(np.asarray(result.x, dtype=float))
         row = {
             "start_index": int(idx),
             "success": bool(result.success and np.isfinite(float(result.fun))),
             "message": str(result.message),
             "fun": float(result.fun),
+            "objective_replay_at_best": float(objective_replay_at_best),
+            "objective_replay_minus_optimizer_fun": float(objective_replay_at_best + float(result.fun)),
+            "objective_gradient_inf_normalized": float(objective_gradient_inf),
+            "projected_gradient_inf_normalized": float(projected_gradient_inf),
+            "projected_gradient_by_variable_normalized": [
+                float(value) for value in projected_gradient_by_variable
+            ],
             "x": [float(v) for v in x_best],
             "nit": int(getattr(result, "nit", 0)),
             "min_constraint_margin": float(np.nanmin(margins_best)),
@@ -405,4 +474,136 @@ def minimize_constrained_slsqp(
         "max_iterations": int(max_iterations),
         "velikhov_hard_floor": hard_floor,
         "constraint_sampling": "nodes",
+    }
+
+
+def minimize_constrained_slsqp_state_restarts(
+    *,
+    config: CaseConfig,
+    multistart: int,
+    seed: int = 1,
+    max_iterations: int = 8,
+    velikhov_hard_floor: float = 0.0,
+    initial_profile: dict[str, Any] | None = None,
+    state_restarts: int = 1,
+    improvement_tol: float = 1e-7,
+) -> dict[str, Any]:
+    """Run SLSQP in short windows, refreshing the nonlinear state initial guess between windows."""
+
+    restart_limit = max(int(state_restarts), 1)
+    current_config = config
+    current_profile = initial_profile
+    previous_score: float | None = None
+    best = None
+    best_profile = None
+    history: list[dict[str, Any]] = []
+    trial_failures: list[dict[str, Any]] = []
+    restart_summaries: list[dict[str, Any]] = []
+
+    for restart_index in range(restart_limit):
+        opt = minimize_constrained_slsqp(
+            config=current_config,
+            multistart=int(multistart) if restart_index == 0 else 1,
+            seed=int(seed) + restart_index,
+            max_iterations=int(max_iterations),
+            velikhov_hard_floor=float(velikhov_hard_floor),
+            initial_profile=current_profile,
+        )
+        for row in opt.get("history", []):
+            history.append({**row, "state_restart_index": int(restart_index)})
+        for failure in opt.get("trial_failures", []):
+            trial_failures.append({**failure, "state_restart_index": int(restart_index)})
+
+        row = opt.get("best")
+        if row is None:
+            restart_summaries.append(
+                {
+                    "state_restart_index": int(restart_index),
+                    "ok": False,
+                    "error": "inner SLSQP produced no finite best point",
+                    "trial_failure_count": int(len(opt.get("trial_failures", []))),
+                }
+            )
+            break
+
+        design = DesignVector.from_array(row["x"])
+        eval_config = replace(current_config, design=design, B_T=float(design.B_T))
+        with _stop_annotating_context():
+            result = solve_forward(
+                design=design,
+                config=eval_config,
+                initial_profile=current_profile,
+            )
+        if not result.ok or result.profile is None or result.metrics is None:
+            trial_failures.append(
+                {
+                    "start_index": int(row.get("start_index", 0)),
+                    "iteration": None,
+                    "trial": None,
+                    "source": "state_restart_final_evaluate",
+                    "state_restart_index": int(restart_index),
+                    "x": [float(v) for v in design.as_array()],
+                    "error": result.error or "forward solve failed",
+                }
+            )
+            restart_summaries.append(
+                {
+                    "state_restart_index": int(restart_index),
+                    "ok": False,
+                    "error": result.error or "forward solve failed",
+                    "trial_failure_count": int(len(opt.get("trial_failures", []))),
+                }
+            )
+            break
+
+        score = float(result.metrics.objective_score)
+        evaluated_row = {
+            **row,
+            "fun": -score,
+            "optimizer_fun": float(row["fun"]),
+            "evaluated_objective_score": score,
+            "taped_objective_minus_postprocess_objective": float(-float(row["fun"]) - score),
+            "state_restart_index": int(restart_index),
+        }
+        restart_summaries.append(
+            {
+                "state_restart_index": int(restart_index),
+                "ok": True,
+                "optimizer_fun": float(row["fun"]),
+                "evaluated_objective_score": score,
+                "taped_objective_minus_postprocess_objective": float(-float(row["fun"]) - score),
+                "mhd_output_power_W": float(result.metrics.mhd_output_power_W),
+                "raw_enthalpy_extraction_percent": float(result.metrics.raw_enthalpy_extraction_percent),
+                "min_velikhov_margin": float(result.metrics.min_velikhov_margin),
+                "trial_failure_count": int(len(opt.get("trial_failures", []))),
+                "x": [float(v) for v in design.as_array()],
+            }
+        )
+
+        if best is None or float(evaluated_row["fun"]) < float(best["fun"]):
+            best = evaluated_row
+            best_profile = result.profile
+
+        if previous_score is not None and abs(score - previous_score) <= float(improvement_tol):
+            current_profile = result.profile
+            current_config = eval_config
+            break
+        previous_score = score
+        current_profile = result.profile
+        current_config = eval_config
+
+    return {
+        "best": best,
+        "best_profile": best_profile,
+        "history": history,
+        "trial_failures": trial_failures,
+        "method": "constrained_slsqp_node_velikhov_state_restarts",
+        "inner_method": "constrained_slsqp_node_velikhov",
+        "max_iterations": int(max_iterations),
+        "velikhov_hard_floor": float(velikhov_hard_floor),
+        "constraint_sampling": "nodes",
+        "state_restarts_requested": restart_limit,
+        "state_restarts_completed": int(len(restart_summaries)),
+        "state_restart_improvement_tol": float(improvement_tol),
+        "state_restart_summaries": restart_summaries,
     }

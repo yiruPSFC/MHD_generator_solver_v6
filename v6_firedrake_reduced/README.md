@@ -148,6 +148,26 @@ uses the LXCat e-He elastic momentum-transfer median at 4300 K; `e-Argon`
 uses the legacy cross-section value.  Arbitrary numeric `sigma_ep` overrides
 are intentionally not part of the main interface.
 
+Freidberg area-only benchmark:
+
+```bash
+env -u PETSC_DIR -u PETSC_ARCH OMP_NUM_THREADS=1 \
+  ./.venv_firedrake/bin/python -m v6_firedrake_reduced.run_freidberg_area_only_benchmark \
+  --mode optimize \
+  --optimizer coordinate_search \
+  --n-intervals 8 \
+  --max-iterations 1 \
+  --coordinate-initial-step 0.02 \
+  --out-dir v6_firedrake_reduced/outputs/freidberg_area_only_smoke
+```
+
+The `freidberg_reference` case freezes all inlet/load controls at the
+slide-recovered reference values and leaves only `a1/a2/a3` movable.  The runner
+writes `reference_profile_metrics.json` and `benchmark_summary.json`; the latter
+compares the optimized candidate against the recovered Freidberg profile using
+the same metric evaluator.  Use `--mode reference` to regenerate only the
+baseline metrics without invoking Firedrake.
+
 `--freidberg-branch-audit` is a diagnostic add-on for evaluate/optimize runs.
 It writes `freidberg_branch_audit.json` for a successful final profile, or
 `freidberg_branch_audit_failed.json` when SNES returns a partial failed

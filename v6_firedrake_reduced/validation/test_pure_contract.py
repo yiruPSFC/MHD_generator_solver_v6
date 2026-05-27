@@ -11,7 +11,9 @@ import numpy as np
 
 from v6_firedrake_reduced.analyze_kkt import _recover_nonnegative_multipliers
 from v6_firedrake_reduced.constraints import evaluate_velikhov_node_constraints
+from v6_firedrake_reduced.cases.freidberg_reference import load_reference_profile
 from v6_firedrake_reduced.design import DesignVector, load_case_config
+from v6_firedrake_reduced.freidberg_area_only import AREA_CONTROL_NAMES, reference_profile_metrics
 from v6_firedrake_reduced.freidberg_branch_audit import audit_freidberg_branches
 from v6_firedrake_reduced.geometry import LogAreaSplineControl
 from v6_firedrake_reduced.objective import evaluate_profile_metrics
@@ -118,6 +120,33 @@ class FiredrakeReducedPureContractTest(unittest.TestCase):
                     },
                 )
             )
+
+    def test_freidberg_reference_case_is_area_only_argon_benchmark(self):
+        config = load_case_config(case="freidberg_reference", n_intervals=8)
+        self.assertEqual(config.working_fluid_profile, "argon_potassium")
+        self.assertEqual(config.metadata["electron_transport"], ELECTRON_TRANSPORT_E_ARGON)
+        self.assertAlmostEqual(config.area_scale_m2, 0.447)
+        self.assertAlmostEqual(config.length_m, 5.325180763867631)
+        lower = config.bounds.lower.to_dict()
+        upper = config.bounds.upper.to_dict()
+        for name, value in config.design.to_dict().items():
+            if name in AREA_CONTROL_NAMES:
+                self.assertLess(lower[name], value)
+                self.assertGreater(upper[name], value)
+            else:
+                self.assertEqual(lower[name], value)
+                self.assertEqual(upper[name], value)
+
+    def test_freidberg_reference_profile_metrics_are_finite(self):
+        config = load_case_config(case="freidberg_reference", n_intervals=8)
+        profile = load_reference_profile()
+        self.assertIn("sigma_logA", profile)
+        metrics = reference_profile_metrics(config)
+        self.assertTrue(metrics["finite_profile"])
+        self.assertAlmostEqual(metrics["inlet_T_p_K"], 429.0, places=4)
+        self.assertAlmostEqual(metrics["mhd_output_power_W"] / 1.0e6, 112.230765690579, places=5)
+        self.assertGreater(metrics["raw_enthalpy_extraction_percent"], 30.0)
+        self.assertAlmostEqual(metrics["estimated_total_plant_power_MWe"], 200.0, places=4)
 
     def test_synthetic_profile_metrics_are_finite(self):
         config = load_case_config(case="yamasaki2004", n_intervals=8)

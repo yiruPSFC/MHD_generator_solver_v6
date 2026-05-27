@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
+from dataclasses import dataclass
 from pathlib import Path
 import sys
 from types import SimpleNamespace
@@ -13,7 +15,7 @@ REPO_DIR = Path(__file__).resolve().parents[1]
 if str(REPO_DIR) not in sys.path:
     sys.path.insert(0, str(REPO_DIR))
 
-from v6_core.local_algebraic_closure import E_I, H_P, K_B, M_E, M_P, SIGMA_EP
+from v6_core.local_algebraic_closure import E_CHARGE, E_I, H_P, K_B, M_E, M_P, SIGMA_EP
 from v6_global_marginal.pde_solver_v6_batch_global import project_seed_fraction_to_marginal_inlet
 from v6_casadi_v2.optimize_area_profile_casadi_v2 import (
     WarmStartProfile,
@@ -25,6 +27,7 @@ from v6_casadi_v2.optimize_area_profile_casadi_v2 import (
     _evaluate_profile_numeric,
     _make_stage_function,
     _normalize_objective_profile,
+    _payload_from_result,
     optimize_area_profile,
 )
 from v6_global_marginal.global_postprocess_v6 import (
@@ -36,6 +39,88 @@ from v6_global_marginal.global_postprocess_v6 import (
 from v6_global_marginal.reference_recovery.global_plotting_v6 import plot_global_results_v6
 
 _THIS_DIR = Path(__file__).resolve().parent
+_AMU_KG = 1.66053906660e-27
+_WORKING_FLUID_PROFILES = ("ar_k", "he_cs", "custom")
+_INLET_WINDOW_KEYS = ("n_p_in", "T_e_in", "Z_in", "I_0", "seed_fraction")
+_INLET_WINDOW_ALIASES = {
+    "np_in": "n_p_in",
+    "n_p": "n_p_in",
+    "n_p_in": "n_p_in",
+    "n-p-in": "n_p_in",
+    "te_in": "T_e_in",
+    "T_e_in": "T_e_in",
+    "t_e_in": "T_e_in",
+    "electron_temperature": "T_e_in",
+    "z_in": "Z_in",
+    "Z_in": "Z_in",
+    "jx_in": "I_0",
+    "J_x_in": "I_0",
+    "j_x_in": "I_0",
+    "i0": "I_0",
+    "I_0": "I_0",
+    "i_0": "I_0",
+    "seed": "seed_fraction",
+    "seed_fraction": "seed_fraction",
+    "log_seed_fraction": "seed_fraction",
+}
+
+
+@dataclass(frozen=True)
+class WorkingFluidParameters:
+    key: str
+    heavy_particle_mass_kg: float
+    seed_ionization_energy_J: float
+    electron_particle_sigma_m2: float
+
+
+def _resolve_working_fluid_parameters(
+    *,
+    working_fluid_profile: str = "custom",
+    heavy_particle_mass_kg: float | None = None,
+    seed_ionization_energy_J: float | None = None,
+    sigma_ep: float | None = None,
+) -> WorkingFluidParameters:
+    profile = str(working_fluid_profile or "custom").strip().lower()
+    aliases = {
+        "default": "ar_k",
+        "ar": "ar_k",
+        "argon": "ar_k",
+        "argon_potassium": "ar_k",
+        "ar/k": "ar_k",
+        "k": "ar_k",
+        "he": "he_cs",
+        "helium": "he_cs",
+        "helium_cesium": "he_cs",
+        "he/cs": "he_cs",
+        "cs": "he_cs",
+    }
+    profile = aliases.get(profile, profile)
+    if profile not in _WORKING_FLUID_PROFILES:
+        raise ValueError(f"unknown working_fluid_profile={working_fluid_profile!r}; expected one of {_WORKING_FLUID_PROFILES!r}")
+
+    defaults = {
+        "ar_k": {
+            "heavy_particle_mass_kg": float(M_P),
+            "seed_ionization_energy_J": float(E_I),
+            "electron_particle_sigma_m2": float(SIGMA_EP),
+        },
+        "he_cs": {
+            "heavy_particle_mass_kg": float(4.002602 * _AMU_KG),
+            "seed_ionization_energy_J": float(3.89390572743 * E_CHARGE),
+            "electron_particle_sigma_m2": float(SIGMA_EP),
+        },
+        "custom": {
+            "heavy_particle_mass_kg": float(M_P),
+            "seed_ionization_energy_J": float(E_I),
+            "electron_particle_sigma_m2": float(SIGMA_EP),
+        },
+    }[profile]
+    return WorkingFluidParameters(
+        key=profile,
+        heavy_particle_mass_kg=float(defaults["heavy_particle_mass_kg"] if heavy_particle_mass_kg is None else heavy_particle_mass_kg),
+        seed_ionization_energy_J=float(defaults["seed_ionization_energy_J"] if seed_ionization_energy_J is None else seed_ionization_energy_J),
+        electron_particle_sigma_m2=float(defaults["electron_particle_sigma_m2"] if sigma_ep is None else sigma_ep),
+    )
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -110,6 +195,13 @@ def _build_parser() -> argparse.ArgumentParser:
         type=float,
         default=1.0,
         help="physical inlet area used by A[0], dot_N, current density, and enthalpy-flux semantics",
+    )
+    p.add_argument(
+        "--working-fluid-profile",
+        type=str,
+        choices=_WORKING_FLUID_PROFILES,
+        default="ar_k",
+        help="named heavy-particle / seed parameters; explicit numeric flags still override the selected profile",
     )
     p.add_argument("--heavy-particle-mass-kg", type=float, default=None)
     p.add_argument("--seed-ionization-energy-J", type=float, default=None)
@@ -218,6 +310,406 @@ def _focused_dual_summary(result) -> dict[str, object]:
         "A_upper_node",
     )
     return {name: summary.get(name, {}) for name in names if name in summary}
+
+
+def _canonical_inlet_key(key: str) -> str:
+    raw = str(key)
+    lowered = raw.strip().lower().replace("-", "_")
+    if raw in _INLET_WINDOW_ALIASES:
+        return _INLET_WINDOW_ALIASES[raw]
+    if lowered in _INLET_WINDOW_ALIASES:
+        return _INLET_WINDOW_ALIASES[lowered]
+    raise KeyError(raw)
+
+
+def _coerce_window_payload(raw_window, *, key: str, positive: bool = True) -> dict[str, float]:
+    if not isinstance(raw_window, dict):
+        raise ValueError(f"inlet window for {key} must be an object with guess/min/max.")
+    missing = [name for name in ("guess", "min", "max") if name not in raw_window]
+    if missing:
+        raise ValueError(f"inlet window for {key} is missing {', '.join(missing)}.")
+    window = {
+        "guess": float(raw_window["guess"]),
+        "min": float(raw_window["min"]),
+        "max": float(raw_window["max"]),
+    }
+    if not all(np.isfinite(value) for value in window.values()):
+        raise ValueError(f"inlet window for {key} must be finite: {window!r}")
+    if positive and any(value <= 0.0 for value in window.values()):
+        raise ValueError(f"inlet window for {key} must be positive: {window!r}")
+    if window["max"] < window["min"]:
+        raise ValueError(f"inlet window for {key} must satisfy min <= max: {window!r}")
+    if key == "seed_fraction":
+        if not (window["min"] < window["guess"] < window["max"]):
+            raise ValueError(f"seed_fraction window must satisfy min < guess < max: {window!r}")
+    elif not (window["min"] <= window["guess"] <= window["max"]):
+        raise ValueError(f"inlet window for {key} must satisfy min <= guess <= max: {window!r}")
+    return window
+
+
+def _canonicalize_inlet_windows(payload: dict[str, object] | None) -> dict[str, dict[str, float]]:
+    if not payload:
+        return {}
+    if not isinstance(payload, dict):
+        raise ValueError("inlet window payload must be an object.")
+    windows: dict[str, dict[str, float]] = {}
+    unknown: list[str] = []
+    for raw_key, raw_window in payload.items():
+        try:
+            key = _canonical_inlet_key(str(raw_key))
+        except KeyError:
+            unknown.append(str(raw_key))
+            continue
+        windows[key] = _coerce_window_payload(raw_window, key=key, positive=True)
+    if unknown:
+        raise ValueError(
+            "unknown inlet-window key(s): "
+            f"{', '.join(sorted(unknown))}; expected one of {_INLET_WINDOW_KEYS!r}."
+        )
+    return windows
+
+
+def _inlet_problem_from_values(
+    *,
+    n_p_in_guess: float,
+    n_p_in_min: float,
+    n_p_in_max: float,
+    T_e_in_guess: float,
+    T_e_in_min: float,
+    T_e_in_max: float,
+    Z_in_guess: float,
+    Z_in_min: float,
+    Z_in_max: float,
+    J_x_in_guess: float,
+    J_x_in_min: float,
+    J_x_in_max: float,
+    seed_fraction_guess: float,
+    seed_fraction_min: float,
+    seed_fraction_max: float,
+) -> dict[str, dict[str, float]]:
+    return {
+        "n_p_in": _coerce_window_payload(
+            {"guess": n_p_in_guess, "min": n_p_in_min, "max": n_p_in_max},
+            key="n_p_in",
+        ),
+        "T_e_in": _coerce_window_payload(
+            {"guess": T_e_in_guess, "min": T_e_in_min, "max": T_e_in_max},
+            key="T_e_in",
+        ),
+        "Z_in": _coerce_window_payload(
+            {"guess": Z_in_guess, "min": Z_in_min, "max": Z_in_max},
+            key="Z_in",
+        ),
+        "I_0": _coerce_window_payload(
+            {"guess": J_x_in_guess, "min": J_x_in_min, "max": J_x_in_max},
+            key="I_0",
+        ),
+        "seed_fraction": _coerce_window_payload(
+            {"guess": seed_fraction_guess, "min": seed_fraction_min, "max": seed_fraction_max},
+            key="seed_fraction",
+        ),
+    }
+
+
+def _stage_inlet_problem(stage: dict, base: dict[str, dict[str, float]]) -> dict[str, dict[str, float]]:
+    problem = {key: dict(value) for key, value in base.items()}
+    raw = (
+        stage.get("inlet_windows")
+        or stage.get("inlet_design_problem")
+        or stage.get("stage_inlet_design_problem")
+    )
+    if raw:
+        overrides = _canonicalize_inlet_windows(dict(raw))
+        for key, window in overrides.items():
+            problem[key] = window
+    raw_factors = stage.get("inlet_bound_factors", stage.get("inlet_window_factors"))
+    if raw_factors:
+        problem = _apply_inlet_bound_factors(problem, dict(raw_factors))
+    missing = [key for key in _INLET_WINDOW_KEYS if key not in problem]
+    if missing:
+        raise ValueError(f"stage {stage.get('name', '<unnamed>')} is missing inlet window(s): {', '.join(missing)}")
+    return problem
+
+
+def _apply_inlet_bound_factors(
+    windows: dict[str, dict[str, float]],
+    factors: dict[str, object] | None,
+) -> dict[str, dict[str, float]]:
+    if not factors:
+        return {key: dict(value) for key, value in windows.items()}
+    lower_payload = dict(factors.get("lower", factors.get("lower_factors", {})) or {})
+    upper_payload = dict(factors.get("upper", factors.get("upper_factors", {})) or {})
+    flat_payload = {
+        key: value
+        for key, value in factors.items()
+        if key not in {"lower", "upper", "lower_factors", "upper_factors"}
+    }
+    lower: dict[str, float] = {}
+    upper: dict[str, float] = {}
+    for raw_key, raw_value in lower_payload.items():
+        lower[_canonical_inlet_key(str(raw_key))] = float(raw_value)
+    for raw_key, raw_value in upper_payload.items():
+        upper[_canonical_inlet_key(str(raw_key))] = float(raw_value)
+    for raw_key, raw_value in flat_payload.items():
+        key = _canonical_inlet_key(str(raw_key))
+        if isinstance(raw_value, dict):
+            if "lower" in raw_value:
+                lower[key] = float(raw_value["lower"])
+            if "upper" in raw_value:
+                upper[key] = float(raw_value["upper"])
+            if "factor" in raw_value:
+                upper[key] = float(raw_value["factor"])
+        else:
+            upper[key] = float(raw_value)
+    out: dict[str, dict[str, float]] = {}
+    for key, window in windows.items():
+        lower_factor = float(lower.get(key, 1.0))
+        upper_factor = float(upper.get(key, 1.0))
+        if lower_factor <= 0.0 or upper_factor <= 0.0:
+            raise ValueError(f"inlet bound factors for {key} must be positive.")
+        new_window = dict(window)
+        new_window["min"] = float(new_window["min"]) * lower_factor
+        new_window["max"] = float(new_window["max"]) * upper_factor
+        out[key] = _coerce_window_payload(new_window, key=key, positive=True)
+    return out
+
+
+def _pin_inlet_window(
+    window: dict[str, float],
+    *,
+    key: str,
+    relative_radius: float = 1e-6,
+) -> dict[str, float]:
+    guess = float(window["guess"])
+    radius = max(abs(guess) * float(relative_radius), 1e-12)
+    if guess <= 1e-8:
+        radius = max(abs(guess) * float(relative_radius), 1e-15)
+    lower = max(1e-300, guess - radius)
+    upper = guess + radius
+    if lower >= guess:
+        lower = max(1e-300, guess * (1.0 - max(float(relative_radius), 1e-12)))
+    if upper <= guess:
+        upper = guess * (1.0 + max(float(relative_radius), 1e-12)) + 1e-300
+    return _coerce_window_payload({"guess": guess, "min": lower, "max": upper}, key=key)
+
+
+def _inlet_problem_to_legacy_payload(problem: dict[str, dict[str, float]]) -> dict[str, dict[str, float]]:
+    return {
+        "np_in": dict(problem["n_p_in"]),
+        "te_in": dict(problem["T_e_in"]),
+        "z_in": dict(problem["Z_in"]),
+        "jx_in": dict(problem["I_0"]),
+        "seed_fraction": dict(problem["seed_fraction"]),
+    }
+
+
+def _optimizer_kwargs_from_inlet_problem(problem: dict[str, dict[str, float]]) -> dict[str, float]:
+    return {
+        "n_p_in_guess": float(problem["n_p_in"]["guess"]),
+        "n_p_in_min": float(problem["n_p_in"]["min"]),
+        "n_p_in_max": float(problem["n_p_in"]["max"]),
+        "T_e_in_guess": float(problem["T_e_in"]["guess"]),
+        "T_e_in_min": float(problem["T_e_in"]["min"]),
+        "T_e_in_max": float(problem["T_e_in"]["max"]),
+        "Z_in_guess": float(problem["Z_in"]["guess"]),
+        "Z_in_min": float(problem["Z_in"]["min"]),
+        "Z_in_max": float(problem["Z_in"]["max"]),
+        "J_x_in_guess": float(problem["I_0"]["guess"]),
+        "J_x_in_min": float(problem["I_0"]["min"]),
+        "J_x_in_max": float(problem["I_0"]["max"]),
+        "seed_fraction_guess": float(problem["seed_fraction"]["guess"]),
+        "seed_fraction_min": float(problem["seed_fraction"]["min"]),
+        "seed_fraction_max": float(problem["seed_fraction"]["max"]),
+    }
+
+
+def _bound_position(value: float, window: dict[str, float]) -> dict[str, float | bool]:
+    lo = float(window["min"])
+    hi = float(window["max"])
+    val = float(value)
+    span = max(hi - lo, 1e-300)
+    dist_lo = val - lo
+    dist_hi = hi - val
+    tol = max(0.02 * span, 1e-12 * max(abs(val), abs(lo), abs(hi), 1.0))
+    return {
+        "value": val,
+        "min": lo,
+        "max": hi,
+        "fraction": float((val - lo) / span),
+        "dist_lo": float(dist_lo),
+        "dist_hi": float(dist_hi),
+        "near_lower": bool(dist_lo <= tol),
+        "near_upper": bool(dist_hi <= tol),
+    }
+
+
+def _array_bound_activity(values: np.ndarray, *, lower: float | None, upper: float | None) -> dict[str, object]:
+    arr = np.asarray(values, dtype=float).reshape(-1)
+    finite = arr[np.isfinite(arr)]
+    if finite.size == 0:
+        return {"size": int(arr.size), "finite_count": 0}
+    out: dict[str, object] = {
+        "size": int(arr.size),
+        "finite_count": int(finite.size),
+        "min": float(np.nanmin(finite)),
+        "max": float(np.nanmax(finite)),
+    }
+    if lower is not None:
+        span = max(float(np.nanmax(finite)) - float(lower), abs(float(lower)), 1.0)
+        tol = max(1e-8, 0.02 * span)
+        out["near_lower_fraction"] = float(np.mean(finite <= float(lower) + tol))
+        out["lower"] = float(lower)
+        out["dist_to_lower_min"] = float(np.nanmin(finite - float(lower)))
+    if upper is not None:
+        span = max(float(upper) - float(np.nanmin(finite)), abs(float(upper)), 1.0)
+        tol = max(1e-8, 0.02 * span)
+        out["near_upper_fraction"] = float(np.mean(finite >= float(upper) - tol))
+        out["upper"] = float(upper)
+        out["dist_to_upper_min"] = float(np.nanmin(float(upper) - finite))
+    return out
+
+
+def _top_dual_groups(result, *, limit: int = 8) -> list[dict[str, object]]:
+    summary = dict((getattr(result, "duals", {}) or {}).get("summary", {}) or {})
+    rows: list[dict[str, object]] = []
+    for name, payload in summary.items():
+        item = dict(payload or {})
+        max_abs = item.get("max_abs")
+        try:
+            score = float(max_abs)
+        except Exception:
+            continue
+        if not math.isfinite(score):
+            continue
+        rows.append(
+            {
+                "name": str(name),
+                "max_abs": score,
+                "max_abs_index": item.get("max_abs_index"),
+                "active_fraction_gt_1e_8": item.get("active_fraction_gt_1e_8"),
+                "l1": item.get("l1"),
+            }
+        )
+    rows.sort(key=lambda item: float(item["max_abs"]), reverse=True)
+    return rows[: int(limit)]
+
+
+def _active_set_summary(
+    *,
+    result,
+    stage: dict,
+    inlet_problem: dict[str, dict[str, float]],
+    area_scale: float,
+) -> dict[str, object]:
+    mach_min = stage.get("mach_min")
+    mach_max = stage.get("mach_max")
+    margin_floor = float(stage.get("min_margin", 0.0))
+    sigma_limit = float(stage.get("max_abs_dlogA_dx", np.inf))
+    A_min_ratio = float(stage.get("A_min_ratio", 0.0))
+    A_max_ratio = float(stage.get("A_max_ratio", np.inf))
+    inlet_values = {
+        "n_p_in": float(result.inlet.n_p),
+        "T_e_in": float(result.inlet.T_e),
+        "Z_in": float(result.inlet.Z),
+        "I_0": float(result.inlet.I_0),
+        "seed_fraction": float(result.inlet.seed_fraction),
+    }
+    return {
+        "inlet_box_position": {
+            key: _bound_position(inlet_values[key], inlet_problem[key])
+            for key in _INLET_WINDOW_KEYS
+        },
+        "path_bound_activity": {
+            "A": _array_bound_activity(
+                np.asarray(result.A, dtype=float),
+                lower=float(A_min_ratio) * float(area_scale),
+                upper=float(A_max_ratio) * float(area_scale),
+            ),
+            "sigma_logA": _array_bound_activity(
+                np.asarray(result.sigma_logA, dtype=float),
+                lower=None if not math.isfinite(sigma_limit) else -sigma_limit,
+                upper=None if not math.isfinite(sigma_limit) else sigma_limit,
+            ),
+            "mach": _array_bound_activity(
+                np.asarray(result.mach, dtype=float),
+                lower=None if mach_min is None else float(mach_min),
+                upper=None if mach_max is None else float(mach_max),
+            ),
+            "velikhov_margin": _array_bound_activity(
+                np.asarray(result.velikhov_margin, dtype=float),
+                lower=margin_floor,
+                upper=None,
+            ),
+            "T_p": _array_bound_activity(
+                np.asarray(result.T_p, dtype=float),
+                lower=float(stage.get("tp_min", 1.0)),
+                upper=None,
+            ),
+        },
+        "focused_dual_summary": _focused_dual_summary(result),
+        "top_dual_groups": _top_dual_groups(result),
+    }
+
+
+def _energy_budget_audit(
+    result,
+    *,
+    heavy_particle_mass_kg: float,
+) -> dict[str, object]:
+    x = np.asarray(result.x, dtype=float)
+    A = np.asarray(result.A, dtype=float)
+    v_p = np.asarray(result.v_p, dtype=float)
+    n_p = np.asarray(result.n_p, dtype=float)
+    T_p = np.asarray(result.T_p, dtype=float)
+    T_e = np.asarray(result.T_e, dtype=float)
+    n_e = np.asarray(result.n_e, dtype=float)
+    J_x = np.asarray(result.J_x, dtype=float)
+    E_x = np.asarray(result.E_x, dtype=float)
+    thermal_density = 2.5 * K_B * (n_p * T_p + n_e * T_e)
+    kinetic_density = 0.5 * float(heavy_particle_mass_kg) * n_p * v_p * v_p
+    enthalpy_flux = A * v_p * (thermal_density + kinetic_density)
+    mhd_power_density = -A * J_x * E_x
+    mhd_power_W = float(np.trapezoid(mhd_power_density, x)) if x.size > 1 else float("nan")
+    H_in = float(enthalpy_flux[0]) if enthalpy_flux.size else float("nan")
+    H_out = float(enthalpy_flux[-1]) if enthalpy_flux.size else float("nan")
+    residual = H_out - H_in + mhd_power_W
+    denom = max(abs(H_in), 1e-30)
+    return {
+        "convention": "residual_W = H_out - H_in + integrated_MHD_output_W; near zero means no unmodeled net enthalpy source under this audit convention",
+        "H_in_W": H_in,
+        "H_out_W": H_out,
+        "integrated_MHD_output_W": mhd_power_W,
+        "outlet_enthalpy_extraction_percent": float(100.0 * mhd_power_W / denom),
+        "enthalpy_residual_W": float(residual),
+        "enthalpy_residual_fraction_of_H_in": float(residual / denom),
+    }
+
+
+def _objective_semantics(
+    *,
+    objective_profile: str,
+    area_scale: float,
+    working_fluid_profile: str,
+) -> dict[str, object]:
+    profile = _normalize_objective_profile(objective_profile)
+    warning = ""
+    if profile == OBJECTIVE_PROFILE_ENTHALPY_EXTRACTION and np.isclose(float(area_scale), 1.0, rtol=1e-12, atol=1e-15):
+        warning = (
+            "enthalpy_extraction is using normalized A_in=1.0; this is not a physical-area Yamasaki claim "
+            "unless the experiment explicitly intends normalized area semantics."
+        )
+    return {
+        "objective_profile": profile,
+        "optimized_quantity": (
+            "outlet electron-temperature gain proxy"
+            if profile == OBJECTIVE_PROFILE_LAB_POC_V2
+            else "percent of inlet stagnation enthalpy flux extracted as MHD output"
+        ),
+        "area_convention": f"A_in = area_scale_m2 = {float(area_scale):.12g}",
+        "current_convention": "I_0 is total current; local current density is J_x(x) = I_0 / A(x)",
+        "working_fluid_profile": str(working_fluid_profile),
+        "warning": warning,
+    }
 
 
 def _save_dual_plot(*, out_dir: Path, stage_name: str, result) -> Path | None:
@@ -791,6 +1283,24 @@ def _build_adaptive_bridge_stage(
         if value is not None:
             bridge[field] = value
 
+    source_windows = source_stage.get("inlet_windows")
+    target_windows = target_stage.get("inlet_windows")
+    if source_windows and target_windows:
+        source_canonical = _canonicalize_inlet_windows(dict(source_windows))
+        target_canonical = _canonicalize_inlet_windows(dict(target_windows))
+        blended: dict[str, dict[str, float]] = {}
+        for key in _INLET_WINDOW_KEYS:
+            lhs = source_canonical.get(key, target_canonical[key])
+            rhs = target_canonical[key]
+            blended[key] = {
+                "guess": _blend_optional_float(lhs["guess"], rhs["guess"], alpha=float(alpha)),
+                "min": _blend_optional_float(lhs["min"], rhs["min"], alpha=float(alpha)),
+                "max": _blend_optional_float(lhs["max"], rhs["max"], alpha=float(alpha)),
+            }
+        bridge["inlet_windows"] = blended
+    elif target_windows:
+        bridge["inlet_windows"] = _canonicalize_inlet_windows(dict(target_windows))
+
     source_iter = int(source_stage.get("ipopt_max_iter", target_stage.get("ipopt_max_iter", 0)))
     target_iter = int(target_stage.get("ipopt_max_iter", source_iter))
     bridge["ipopt_max_iter"] = int(round((1.0 - float(alpha)) * source_iter + float(alpha) * target_iter))
@@ -840,6 +1350,7 @@ def _save_stage_record(
     *,
     stages_out: list[dict],
     stage: dict,
+    stage_inlet_problem: dict[str, dict[str, float]],
     stage_input_warm_source: str,
     result,
     out_dir_path: Path | None,
@@ -851,6 +1362,35 @@ def _save_stage_record(
     sigma_ep: float = SIGMA_EP,
 ) -> dict[str, object]:
     objective_profile = _normalize_objective_profile(objective_profile)
+    try:
+        payload = _payload_from_result(
+            result,
+            float(B),
+            objective_profile=objective_profile,
+            area_scale=float(area_scale),
+            heavy_particle_mass_kg=float(heavy_particle_mass_kg),
+            seed_ionization_energy_J=float(seed_ionization_energy_J),
+            sigma_ep=float(sigma_ep),
+        )
+        objective_score = payload["objective_score"]
+        objective_breakdown = {
+            "objective_profile": objective_profile,
+            "value_profiles": payload["value_profiles"],
+            "value_terms": payload["value_terms"],
+        }
+    except Exception as exc:
+        objective_score = None
+        objective_breakdown = {
+            "objective_profile": objective_profile,
+            "error": str(exc),
+        }
+    try:
+        energy_budget = _energy_budget_audit(
+            result,
+            heavy_particle_mass_kg=float(heavy_particle_mass_kg),
+        )
+    except Exception as exc:
+        energy_budget = {"error": str(exc)}
     record = {
         "name": stage["name"],
         "success": bool(result.success),
@@ -874,7 +1414,18 @@ def _save_stage_record(
         "sigma_bound_hit_fraction": float(result.diagnostics.get("sigma_bound_hit_fraction", 0.0)),
         "warm_start_input_source": stage_input_warm_source,
         "stage_kind": "adaptive_bridge" if bool(stage.get("adaptive_bridge", False)) else "scheduled",
+        "release_group": str(stage.get("release_group", "")),
+        "stage_inlet_design_problem": _inlet_problem_to_legacy_payload(stage_inlet_problem),
         "focused_dual_summary": _focused_dual_summary(result),
+        "active_set_summary": _active_set_summary(
+            result=result,
+            stage=stage,
+            inlet_problem=stage_inlet_problem,
+            area_scale=float(area_scale),
+        ),
+        "objective_score": objective_score,
+        "objective_breakdown": objective_breakdown,
+        "energy_budget": energy_budget,
         "inlet_design": {
             "n_p_in": float(result.inlet.n_p),
             "T_e_in": float(result.inlet.T_e),
@@ -913,22 +1464,8 @@ def _save_stage_record(
 def _run_stage(
     *,
     stage: dict,
+    stage_inlet_problem: dict[str, dict[str, float]],
     warm_profile: WarmStartProfile | None,
-    n_p_in_guess: float,
-    n_p_in_min: float,
-    n_p_in_max: float,
-    T_e_in_guess: float,
-    T_e_in_min: float,
-    T_e_in_max: float,
-    Z_in_guess: float,
-    Z_in_min: float,
-    Z_in_max: float,
-    J_x_in_guess: float,
-    J_x_in_min: float,
-    J_x_in_max: float,
-    seed_fraction_guess: float,
-    seed_fraction_min: float,
-    seed_fraction_max: float,
     inlet_margin_mode: str,
     B: float,
     L: float,
@@ -939,21 +1476,7 @@ def _run_stage(
     sigma_ep: float = SIGMA_EP,
 ):
     return optimize_area_profile(
-        n_p_in_guess=float(n_p_in_guess),
-        n_p_in_min=float(n_p_in_min),
-        n_p_in_max=float(n_p_in_max),
-        T_e_in_guess=float(T_e_in_guess),
-        T_e_in_min=float(T_e_in_min),
-        T_e_in_max=float(T_e_in_max),
-        Z_in_guess=float(Z_in_guess),
-        Z_in_min=float(Z_in_min),
-        Z_in_max=float(Z_in_max),
-        J_x_in_guess=float(J_x_in_guess),
-        J_x_in_min=float(J_x_in_min),
-        J_x_in_max=float(J_x_in_max),
-        seed_fraction_guess=float(seed_fraction_guess),
-        seed_fraction_min=float(seed_fraction_min),
-        seed_fraction_max=float(seed_fraction_max),
+        **_optimizer_kwargs_from_inlet_problem(stage_inlet_problem),
         inlet_margin_mode=str(stage.get("inlet_margin_mode", inlet_margin_mode)),
         B=float(B),
         length=float(L),
@@ -966,7 +1489,18 @@ def _run_stage(
         **{
             k: v
             for k, v in stage.items()
-            if k not in ("name", "inlet_margin_mode") and not str(k).startswith("adaptive_bridge")
+            if k not in (
+                "name",
+                "inlet_margin_mode",
+                "inlet_windows",
+                "inlet_design_problem",
+                "stage_inlet_design_problem",
+                "inlet_bound_factors",
+                "inlet_window_factors",
+                "release_group",
+                "release_variables",
+            )
+            and not str(k).startswith("adaptive_bridge")
         },
     )
 
@@ -1064,6 +1598,7 @@ def run_continuation(
     warm_profile: WarmStartProfile | None = None,
     objective_profile: str = OBJECTIVE_PROFILE_LAB_POC_V2,
     area_scale: float = 1.0,
+    working_fluid_profile: str = "custom",
     heavy_particle_mass_kg: float = M_P,
     seed_ionization_energy_J: float = E_I,
     sigma_ep: float = SIGMA_EP,
@@ -1071,6 +1606,23 @@ def run_continuation(
     objective_profile = _normalize_objective_profile(objective_profile)
     out_dir_path = None if out_dir in (None, "") else Path(out_dir)
     schedule = _stage_schedule() if stage_schedule is None else list(stage_schedule)
+    base_inlet_problem = _inlet_problem_from_values(
+        n_p_in_guess=float(n_p_in_guess),
+        n_p_in_min=float(n_p_in_min),
+        n_p_in_max=float(n_p_in_max),
+        T_e_in_guess=float(T_e_in_guess),
+        T_e_in_min=float(T_e_in_min),
+        T_e_in_max=float(T_e_in_max),
+        Z_in_guess=float(Z_in_guess),
+        Z_in_min=float(Z_in_min),
+        Z_in_max=float(Z_in_max),
+        J_x_in_guess=float(J_x_in_guess),
+        J_x_in_min=float(J_x_in_min),
+        J_x_in_max=float(J_x_in_max),
+        seed_fraction_guess=float(seed_fraction_guess),
+        seed_fraction_min=float(seed_fraction_min),
+        seed_fraction_max=float(seed_fraction_max),
+    )
     initial_warm_profile_source = "" if warm_profile is None else str(warm_profile.source)
     stages_out: list[dict] = []
     baseline_result = (
@@ -1125,25 +1677,12 @@ def run_continuation(
                 round_source_stage = dict(backup_source_stage)
                 sequence_completed = True
                 for bridge_stage in bridge_sequence:
+                    bridge_inlet_problem = _stage_inlet_problem(bridge_stage, base_inlet_problem)
                     bridge_input_warm_source = str(round_warm_profile.source)
                     bridge_result = _run_stage(
                         stage=bridge_stage,
+                        stage_inlet_problem=bridge_inlet_problem,
                         warm_profile=round_warm_profile,
-                        n_p_in_guess=float(n_p_in_guess),
-                        n_p_in_min=float(n_p_in_min),
-                        n_p_in_max=float(n_p_in_max),
-                        T_e_in_guess=float(T_e_in_guess),
-                        T_e_in_min=float(T_e_in_min),
-                        T_e_in_max=float(T_e_in_max),
-                        Z_in_guess=float(Z_in_guess),
-                        Z_in_min=float(Z_in_min),
-                        Z_in_max=float(Z_in_max),
-                        J_x_in_guess=float(J_x_in_guess),
-                        J_x_in_min=float(J_x_in_min),
-                        J_x_in_max=float(J_x_in_max),
-                        seed_fraction_guess=float(seed_fraction_guess),
-                        seed_fraction_min=float(seed_fraction_min),
-                        seed_fraction_max=float(seed_fraction_max),
                         inlet_margin_mode=str(inlet_margin_mode),
                         B=float(B),
                         L=float(L),
@@ -1156,6 +1695,7 @@ def run_continuation(
                     bridge_record = _save_stage_record(
                         stages_out=stages_out,
                         stage=bridge_stage,
+                        stage_inlet_problem=bridge_inlet_problem,
                         stage_input_warm_source=bridge_input_warm_source,
                         result=bridge_result,
                         out_dir_path=out_dir_path,
@@ -1226,25 +1766,12 @@ def run_continuation(
                     bridge_stop["next_failed_alpha"] = float(last_failed_bridge_record["adaptive_bridge_alpha"])
                 break
 
+        stage_inlet_problem = _stage_inlet_problem(stage, base_inlet_problem)
         stage_input_warm_source = "constant_auto" if warm_profile is None else str(warm_profile.source)
         result = _run_stage(
             stage=stage,
+            stage_inlet_problem=stage_inlet_problem,
             warm_profile=warm_profile,
-            n_p_in_guess=float(n_p_in_guess),
-            n_p_in_min=float(n_p_in_min),
-            n_p_in_max=float(n_p_in_max),
-            T_e_in_guess=float(T_e_in_guess),
-            T_e_in_min=float(T_e_in_min),
-            T_e_in_max=float(T_e_in_max),
-            Z_in_guess=float(Z_in_guess),
-            Z_in_min=float(Z_in_min),
-            Z_in_max=float(Z_in_max),
-            J_x_in_guess=float(J_x_in_guess),
-            J_x_in_min=float(J_x_in_min),
-            J_x_in_max=float(J_x_in_max),
-            seed_fraction_guess=float(seed_fraction_guess),
-            seed_fraction_min=float(seed_fraction_min),
-            seed_fraction_max=float(seed_fraction_max),
             inlet_margin_mode=str(inlet_margin_mode),
             B=float(B),
             L=float(L),
@@ -1257,6 +1784,7 @@ def run_continuation(
         stage_record = _save_stage_record(
             stages_out=stages_out,
             stage=stage,
+            stage_inlet_problem=stage_inlet_problem,
             stage_input_warm_source=stage_input_warm_source,
             result=result,
             out_dir_path=out_dir_path,
@@ -1293,6 +1821,11 @@ def run_continuation(
             continued_unacceptable_stages += 1
 
     record_partitions = _partition_stage_records(stages_out)
+    final_trusted_record = next(
+        (stage for stage in reversed(stages_out) if bool(stage.get("warm_start_adopted", False))),
+        None,
+    )
+    final_attempt_record = stages_out[-1] if stages_out else None
     payload = {
         "ok": bool(completed_schedule and final_attempt is not None and final_attempt.acceptable),
         "solver_success": bool(final_attempt.success) if final_attempt is not None else False,
@@ -1304,22 +1837,21 @@ def run_continuation(
         "adaptive_bridge_count": int(adaptive_bridge_count),
         "adaptive_bridge_max_count": int(effective_bridge_max_count),
         "objective_profile": objective_profile,
+        "objective_semantics": _objective_semantics(
+            objective_profile=objective_profile,
+            area_scale=float(area_scale),
+            working_fluid_profile=str(working_fluid_profile),
+        ),
         "area_scale_m2": float(area_scale),
+        "working_fluid_profile": str(working_fluid_profile),
         "working_fluid_parameters": {
             "heavy_particle_mass_kg": float(heavy_particle_mass_kg),
             "seed_ionization_energy_J": float(seed_ionization_energy_J),
             "electron_particle_sigma_m2": float(sigma_ep),
         },
         "inlet_design_problem": {
-            "np_in": {"guess": float(n_p_in_guess), "min": float(n_p_in_min), "max": float(n_p_in_max)},
-            "te_in": {"guess": float(T_e_in_guess), "min": float(T_e_in_min), "max": float(T_e_in_max)},
-            "z_in": {"guess": float(Z_in_guess), "min": float(Z_in_min), "max": float(Z_in_max)},
-            "jx_in": {"guess": float(J_x_in_guess), "min": float(J_x_in_min), "max": float(J_x_in_max)},
-            "seed_fraction": {
-                "guess": float(seed_fraction_guess),
-                "min": float(seed_fraction_min),
-                "max": float(seed_fraction_max),
-            },
+            **_inlet_problem_to_legacy_payload(base_inlet_problem),
+            "canonical_inlet_windows": base_inlet_problem,
             "inlet_margin_mode": str(inlet_margin_mode),
             "A_in": float(area_scale),
         },
@@ -1341,6 +1873,18 @@ def run_continuation(
         "final_trusted_diagnostics": None if final_trusted is None else final_trusted.diagnostics,
         "final_focused_dual_summary": None if final_attempt is None else _focused_dual_summary(final_attempt),
         "final_trusted_focused_dual_summary": None if final_trusted is None else _focused_dual_summary(final_trusted),
+        "final_active_set_summary": None if final_attempt_record is None else final_attempt_record.get("active_set_summary"),
+        "final_trusted_active_set_summary": None
+        if final_trusted_record is None
+        else final_trusted_record.get("active_set_summary"),
+        "final_objective_breakdown": None if final_attempt_record is None else final_attempt_record.get("objective_breakdown"),
+        "final_trusted_objective_breakdown": None
+        if final_trusted_record is None
+        else final_trusted_record.get("objective_breakdown"),
+        "final_energy_budget": None if final_attempt_record is None else final_attempt_record.get("energy_budget"),
+        "final_trusted_energy_budget": None
+        if final_trusted_record is None
+        else final_trusted_record.get("energy_budget"),
         "final_return_status": "" if final_attempt is None else final_attempt.return_status,
         "final_objective_delta_Te_K": None if final_attempt is None else float(final_attempt.objective_delta_Te),
         "final_diagnostics": None if final_attempt is None else final_attempt.diagnostics,
@@ -1407,9 +1951,15 @@ def run_continuation(
 
 def main() -> int:
     args = _build_parser().parse_args()
-    heavy_particle_mass_kg = float(M_P if args.heavy_particle_mass_kg is None else args.heavy_particle_mass_kg)
-    seed_ionization_energy_J = float(E_I if args.seed_ionization_energy_J is None else args.seed_ionization_energy_J)
-    sigma_ep = float(SIGMA_EP if args.electron_particle_sigma_m2 is None else args.electron_particle_sigma_m2)
+    fluid = _resolve_working_fluid_parameters(
+        working_fluid_profile=str(args.working_fluid_profile),
+        heavy_particle_mass_kg=args.heavy_particle_mass_kg,
+        seed_ionization_energy_J=args.seed_ionization_energy_J,
+        sigma_ep=args.electron_particle_sigma_m2,
+    )
+    heavy_particle_mass_kg = float(fluid.heavy_particle_mass_kg)
+    seed_ionization_energy_J = float(fluid.seed_ionization_energy_J)
+    sigma_ep = float(fluid.electron_particle_sigma_m2)
     area_scale = float(args.area_scale_m2)
     warm_profile = None
     if args.warm_profile_npz:
@@ -1469,6 +2019,7 @@ def main() -> int:
         warm_profile=warm_profile,
         objective_profile=str(args.objective_profile),
         area_scale=area_scale,
+        working_fluid_profile=str(fluid.key),
         heavy_particle_mass_kg=heavy_particle_mass_kg,
         seed_ionization_energy_J=seed_ionization_energy_J,
         sigma_ep=sigma_ep,

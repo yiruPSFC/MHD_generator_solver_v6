@@ -9,7 +9,7 @@ from typing import Any
 import numpy as np
 
 from .constraints import evaluate_velikhov_node_constraints
-from .design import GEOMETRY_LENGTH_MODES, CaseConfig, DesignVector, load_case_config
+from .design import CASE_NAMES, GEOMETRY_LENGTH_MODES, CaseConfig, DesignVector, load_case_config
 from .forward import EQUATION_FORMS
 from .forward import FiredrakeUnavailableError, solve_forward
 from .freidberg_branch_audit import audit_freidberg_branches
@@ -18,7 +18,11 @@ from .reference_profile import (
     build_implicit_reference_profile,
     build_reference_profile,
 )
-from .reduced_functional import minimize_constrained_slsqp, minimize_multistart
+from .reduced_functional import (
+    minimize_constrained_slsqp,
+    minimize_constrained_slsqp_state_restarts,
+    minimize_multistart,
+)
 from .transport import ELECTRON_TRANSPORT_MODELS, normalize_electron_transport
 
 
@@ -291,6 +295,9 @@ def _run_optimize(
     multistart: int,
     seed: int,
     max_iterations: int,
+    initial_profile: dict[str, Any] | None = None,
+    initial_profile_context: dict[str, Any] | None = None,
+    slsqp_state_restarts: int = 1,
     freidberg_branch_audit: bool = False,
     freidberg_branch_policy: str = "continuity",
     freidberg_branch_tolerance: float = 1e-3,
@@ -300,19 +307,32 @@ def _run_optimize(
         if str(optimizer) == "constrained_slsqp":
             if str(velikhov_constraint_mode) != "hard":
                 raise ValueError("constrained_slsqp requires velikhov_constraint_mode='hard'.")
-            opt = minimize_constrained_slsqp(
-                config=config,
-                multistart=int(multistart),
-                seed=int(seed),
-                max_iterations=int(max_iterations),
-                velikhov_hard_floor=_velikhov_constraint_floor(config),
-            )
+            if int(slsqp_state_restarts) > 1:
+                opt = minimize_constrained_slsqp_state_restarts(
+                    config=config,
+                    multistart=int(multistart),
+                    seed=int(seed),
+                    max_iterations=int(max_iterations),
+                    velikhov_hard_floor=_velikhov_constraint_floor(config),
+                    initial_profile=initial_profile,
+                    state_restarts=int(slsqp_state_restarts),
+                )
+            else:
+                opt = minimize_constrained_slsqp(
+                    config=config,
+                    multistart=int(multistart),
+                    seed=int(seed),
+                    max_iterations=int(max_iterations),
+                    velikhov_hard_floor=_velikhov_constraint_floor(config),
+                    initial_profile=initial_profile,
+                )
         else:
             opt = minimize_multistart(
                 config=config,
                 multistart=int(multistart),
                 seed=int(seed),
                 max_iterations=int(max_iterations),
+                initial_profile=initial_profile,
             )
     except Exception as exc:
         _append_failure(failure_log, design=config.design, error=f"{type(exc).__name__}: {exc}", context={"mode": "optimize"})
@@ -383,9 +403,18 @@ def _run_optimize(
         metadata=config.metadata,
     )
     _write_json(out_dir / "best_design.json", best_design.to_dict())
+    best_initial_profile = opt.get("best_profile", initial_profile)
+    best_initial_profile_context = dict(initial_profile_context or {})
+    if opt.get("best_profile") is not None:
+        best_initial_profile_context = {
+            **best_initial_profile_context,
+            "state_restart_profile": "optimizer_refreshed_best_profile",
+        }
     evaluate_payload = _run_evaluate(
         best_config,
         out_dir,
+        initial_profile=best_initial_profile,
+        initial_profile_context=best_initial_profile_context,
         freidberg_branch_audit=freidberg_branch_audit,
         freidberg_branch_policy=freidberg_branch_policy,
         freidberg_branch_tolerance=float(freidberg_branch_tolerance),
@@ -402,6 +431,9 @@ def _run_optimize(
             "max_iterations": opt.get("max_iterations"),
             "constraint_sampling": opt.get("constraint_sampling"),
             "velikhov_hard_floor": opt.get("velikhov_hard_floor"),
+            "slsqp_state_restarts": int(slsqp_state_restarts),
+            "state_restarts_completed": opt.get("state_restarts_completed"),
+            "state_restart_summaries": opt.get("state_restart_summaries"),
             "trial_failure_count": len(opt.get("trial_failures", [])),
             "best_raw": opt["best"],
         },
@@ -412,7 +444,7 @@ def _run_optimize(
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run the Firedrake/pyadjoint reduced-functional MHD prototype.")
-    parser.add_argument("--case", default="yamasaki2004", choices=("yamasaki2004",))
+    parser.add_argument("--case", default="yamasaki2004", choices=CASE_NAMES)
     parser.add_argument("--mode", default="evaluate", choices=("evaluate", "optimize"))
     parser.add_argument("--objective", default="enthalpy_extraction")
     parser.add_argument("--n-area-controls", type=int, default=3, help="v0 only supports 3 direct logA controls.")
@@ -426,6 +458,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--multistart", type=int, default=3)
     parser.add_argument("--seed", type=int, default=1)
     parser.add_argument("--max-iterations", type=int, default=8)
+    parser.add_argument(
+        "--slsqp-state-restarts",
+        type=int,
+        default=1,
+        help="For constrained_slsqp, rebuild the reduced functional this many times using the last converged profile as the next state initial guess.",
+    )
     parser.add_argument(
         "--optimizer",
         default="projected_gradient",
@@ -499,8 +537,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--snes-linesearch-type", default=None)
     parser.add_argument(
         "--electron-transport",
-        default="e-He",
-        help=f"Electron-heavy collision model, one of {ELECTRON_TRANSPORT_MODELS}.",
+        default=None,
+        help=f"Electron-heavy collision model, one of {ELECTRON_TRANSPORT_MODELS}; defaults to the active case metadata.",
     )
     parser.add_argument(
         "--velikhov-mode",
@@ -567,9 +605,14 @@ def main(argv: list[str] | None = None) -> int:
         n_intervals=args.n_intervals,
         geometry_length_mode=str(args.geometry_length_mode),
     )
+    electron_transport = normalize_electron_transport(
+        args.electron_transport
+        if args.electron_transport is not None
+        else config.metadata.get("electron_transport", "e-He")
+    )
     metadata = {
         **config.metadata,
-        "electron_transport": normalize_electron_transport(args.electron_transport),
+        "electron_transport": electron_transport,
         "residual_scaling": str(args.residual_scaling),
         "equation_form": str(args.equation_form),
         "freidberg_branch_audit_requested": bool(args.freidberg_branch_audit),
@@ -701,6 +744,9 @@ def main(argv: list[str] | None = None) -> int:
                 multistart=int(args.multistart),
                 seed=int(args.seed),
                 max_iterations=int(args.max_iterations),
+                initial_profile=initial_profile,
+                initial_profile_context=initial_profile_context,
+                slsqp_state_restarts=int(args.slsqp_state_restarts),
                 freidberg_branch_audit=bool(args.freidberg_branch_audit),
                 freidberg_branch_policy=str(args.freidberg_branch_policy),
                 freidberg_branch_tolerance=float(args.freidberg_branch_tolerance),

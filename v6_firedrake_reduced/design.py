@@ -5,6 +5,7 @@ from typing import Any
 
 import numpy as np
 
+from .cases.freidberg_reference import FREIDBERG_REFERENCE, FREIDBERG_REFERENCE_MODEL_SEED
 from .cases.yamasaki2004 import YAMASAKI2004, YAMASAKI2004_MODEL_SEED
 from .geometry import LogAreaSplineControl
 
@@ -21,6 +22,7 @@ DESIGN_VARIABLE_NAMES = (
     "B_T",
 )
 
+CASE_NAMES = ("yamasaki2004", "freidberg_reference")
 GEOMETRY_LENGTH_MODES = ("radial", "inferred_swirl")
 OBJECTIVE_PROFILE_ENTHALPY_EXTRACTION = "enthalpy_extraction"
 DEFAULT_MAGNETIC_FIELD_T = 3.0
@@ -187,8 +189,22 @@ def load_case_config(
     n_intervals: int | None = None,
     geometry_length_mode: str = "radial",
 ) -> CaseConfig:
-    if str(case).lower() != "yamasaki2004":
-        raise ValueError("v0 only supports case='yamasaki2004'.")
+    case_key = str(case).strip().lower().replace("-", "_")
+    aliases = {
+        "yamasaki": "yamasaki2004",
+        "freidberg": "freidberg_reference",
+        "freiberg": "freidberg_reference",
+        "jeffrey": "freidberg_reference",
+        "jeffrey_reference": "freidberg_reference",
+    }
+    case_key = aliases.get(case_key, case_key)
+    if case_key == "freidberg_reference":
+        return _load_freidberg_reference_config(
+            objective_profile=objective_profile,
+            n_intervals=n_intervals,
+        )
+    if case_key != "yamasaki2004":
+        raise ValueError(f"v0 only supports case in {CASE_NAMES!r}.")
 
     paper = YAMASAKI2004
     seed = YAMASAKI2004_MODEL_SEED
@@ -253,4 +269,47 @@ def load_case_config(
             "radial_length_m": float(paper.geometry.length_m),
             "effective_length_m": float(length_m),
         },
+    )
+
+
+def _load_freidberg_reference_config(
+    *,
+    objective_profile: str = OBJECTIVE_PROFILE_ENTHALPY_EXTRACTION,
+    n_intervals: int | None = None,
+) -> CaseConfig:
+    reference = FREIDBERG_REFERENCE
+    seed = FREIDBERG_REFERENCE_MODEL_SEED
+    area = reference.area_control
+    design = DesignVector(
+        log_n_p_in=float(np.log(reference.n_p_in_m3)),
+        T_e_in=float(reference.T_e_in_K),
+        Z_in=float(reference.Z_in),
+        I_0=float(reference.I_0_A),
+        log_seed_fraction=float(np.log(reference.seed_fraction)),
+        a1=float(area.a1),
+        a2=float(area.a2),
+        a3=float(area.a3),
+        B_T=float(reference.B_T),
+    )
+    lower_values = design.as_array()
+    upper_values = design.as_array()
+    half_width = float(seed.area_log_window_half_width)
+    for name in ("a1", "a2", "a3"):
+        idx = DESIGN_VARIABLE_NAMES.index(name)
+        lower_values[idx] = max(float(lower_values[idx] - half_width), LogAreaSplineControl.lower_bound())
+        upper_values[idx] = min(float(upper_values[idx] + half_width), LogAreaSplineControl.upper_bound())
+    return CaseConfig(
+        case="freidberg_reference",
+        objective_profile=str(objective_profile),
+        length_m=float(reference.length_m),
+        area_scale_m2=float(reference.area_scale_m2),
+        B_T=float(reference.B_T),
+        working_fluid_profile="argon_potassium",
+        n_intervals=int(seed.schedule_n_intervals if n_intervals is None else n_intervals),
+        design=design,
+        bounds=DesignBounds(
+            lower=DesignVector.from_array(lower_values),
+            upper=DesignVector.from_array(upper_values),
+        ),
+        metadata=reference.metadata(),
     )

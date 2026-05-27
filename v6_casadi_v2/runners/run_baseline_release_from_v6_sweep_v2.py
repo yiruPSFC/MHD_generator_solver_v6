@@ -14,7 +14,21 @@ REPO_DIR = Path(__file__).resolve().parents[2]
 if str(REPO_DIR) not in sys.path:
     sys.path.insert(0, str(REPO_DIR))
 
-from v6_casadi_v2.run_casadi_continuation_v2 import load_warm_profile_npz, run_continuation
+from v6_casadi_v2.optimize_area_profile_casadi_v2 import (
+    OBJECTIVE_PROFILE_ENTHALPY_EXTRACTION,
+    OBJECTIVE_PROFILE_LAB_POC_V2,
+)
+from v6_casadi_v2.run_casadi_continuation_v2 import (
+    _WORKING_FLUID_PROFILES,
+    _apply_inlet_bound_factors,
+    _canonicalize_inlet_windows,
+    _inlet_problem_from_values,
+    _inlet_problem_to_legacy_payload,
+    _pin_inlet_window,
+    _resolve_working_fluid_parameters,
+    load_warm_profile_npz,
+    run_continuation,
+)
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -62,6 +76,49 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--jx-relative-window", type=float, default=0.10)
     p.add_argument("--seed-lower-factor", type=float, default=0.5)
     p.add_argument("--seed-upper-factor", type=float, default=2.0)
+    p.add_argument(
+        "--search-window-json",
+        type=str,
+        default="",
+        help=(
+            "optional experiment JSON with inlet_windows, inlet_bound_factors, "
+            "schedule_overrides, or stage_schedule overrides"
+        ),
+    )
+    p.add_argument(
+        "--schedule-mode",
+        type=str,
+        choices=("staged-release", "legacy-3-stage"),
+        default="staged-release",
+        help="staged-release opens n_p/T_e, then Z, then I0/seed, then geometry/objective",
+    )
+    p.add_argument("--pin-relative-radius", type=float, default=1e-6)
+    p.add_argument("--n-p-in-lower-factor", type=float, default=1.0)
+    p.add_argument("--n-p-in-upper-factor", type=float, default=1.0)
+    p.add_argument("--t-e-in-lower-factor", type=float, default=1.0)
+    p.add_argument("--t-e-in-upper-factor", type=float, default=1.0)
+    p.add_argument("--z-in-lower-factor", type=float, default=1.0)
+    p.add_argument("--z-in-upper-factor", type=float, default=1.0)
+    p.add_argument("--i0-lower-factor", type=float, default=1.0)
+    p.add_argument("--i0-upper-factor", type=float, default=1.0)
+    p.add_argument("--seed-fraction-lower-factor", type=float, default=1.0)
+    p.add_argument("--seed-fraction-upper-factor", type=float, default=1.0)
+    p.add_argument(
+        "--objective-profile",
+        type=str,
+        choices=(OBJECTIVE_PROFILE_LAB_POC_V2, OBJECTIVE_PROFILE_ENTHALPY_EXTRACTION),
+        default=OBJECTIVE_PROFILE_LAB_POC_V2,
+    )
+    p.add_argument("--area-scale-m2", type=float, default=1.0)
+    p.add_argument(
+        "--working-fluid-profile",
+        type=str,
+        choices=_WORKING_FLUID_PROFILES,
+        default="ar_k",
+    )
+    p.add_argument("--heavy-particle-mass-kg", type=float, default=None)
+    p.add_argument("--seed-ionization-energy-J", type=float, default=None)
+    p.add_argument("--electron-particle-sigma-m2", type=float, default=None)
     p.add_argument(
         "--anchor-sigma-extra",
         type=float,
@@ -113,6 +170,103 @@ def _seed_bounds(seed: float, *, lower_factor: float, upper_factor: float) -> tu
     upper = min(5e-2, float(seed) * upper_factor)
     upper = max(lower * (1.0 + 1e-6), upper)
     return float(lower), float(upper)
+
+
+def _extract_search_window_sections(payload: dict) -> tuple[dict, dict, list[dict] | None, dict]:
+    search_window = dict(payload.get("search_window", {}) or {})
+    inlet_windows = (
+        payload.get("inlet_windows")
+        or payload.get("aligned_inlet_window")
+        or search_window.get("inlet_windows")
+        or search_window.get("aligned_inlet_window")
+        or {}
+    )
+    bound_factors = (
+        payload.get("inlet_bound_factors")
+        or payload.get("inlet_window_factors")
+        or search_window.get("inlet_bound_factors")
+        or search_window.get("inlet_window_factors")
+        or {}
+    )
+    stage_schedule = (
+        payload.get("stage_schedule")
+        or payload.get("schedule")
+        or search_window.get("stage_schedule")
+        or search_window.get("schedule")
+    )
+    schedule_overrides = (
+        payload.get("schedule_overrides")
+        or payload.get("schedule_override")
+        or search_window.get("schedule_overrides")
+        or search_window.get("schedule_override")
+        or {}
+    )
+    if stage_schedule is not None:
+        if not isinstance(stage_schedule, list) or not all(isinstance(item, dict) for item in stage_schedule):
+            raise ValueError("stage_schedule/search schedule must be a list of objects.")
+        stage_schedule = [dict(item) for item in stage_schedule]
+    if schedule_overrides and not isinstance(schedule_overrides, dict):
+        raise ValueError("schedule_overrides must be an object.")
+    return dict(inlet_windows), dict(bound_factors), stage_schedule, dict(schedule_overrides)
+
+
+def _cli_bound_factors(args: argparse.Namespace) -> dict[str, dict[str, float]]:
+    return {
+        "lower": {
+            "n_p_in": float(args.n_p_in_lower_factor),
+            "T_e_in": float(args.t_e_in_lower_factor),
+            "Z_in": float(args.z_in_lower_factor),
+            "I_0": float(args.i0_lower_factor),
+            "seed_fraction": float(args.seed_fraction_lower_factor),
+        },
+        "upper": {
+            "n_p_in": float(args.n_p_in_upper_factor),
+            "T_e_in": float(args.t_e_in_upper_factor),
+            "Z_in": float(args.z_in_upper_factor),
+            "I_0": float(args.i0_upper_factor),
+            "seed_fraction": float(args.seed_fraction_upper_factor),
+        },
+    }
+
+
+def _merge_inlet_windows(
+    base: dict[str, dict[str, float]],
+    overrides: dict,
+) -> dict[str, dict[str, float]]:
+    merged = {key: dict(value) for key, value in base.items()}
+    for key, value in _canonicalize_inlet_windows(overrides).items():
+        merged[key] = value
+    return merged
+
+
+def _freeze_except(
+    windows: dict[str, dict[str, float]],
+    released: set[str],
+    *,
+    pin_relative_radius: float,
+) -> dict[str, dict[str, float]]:
+    out: dict[str, dict[str, float]] = {}
+    for key, window in windows.items():
+        if key in released:
+            out[key] = dict(window)
+        else:
+            out[key] = _pin_inlet_window(
+                window,
+                key=key,
+                relative_radius=float(pin_relative_radius),
+            )
+    return out
+
+
+def _apply_schedule_overrides(schedule: list[dict], overrides: dict) -> list[dict]:
+    if not overrides:
+        return [dict(stage) for stage in schedule]
+    out = []
+    for stage in schedule:
+        stage_copy = dict(stage)
+        stage_copy.update(overrides)
+        out.append(stage_copy)
+    return out
 
 
 def _select_case_for_sigma(sweep_summary: dict, *, sigma_value: float) -> dict:
@@ -171,6 +325,9 @@ def _build_stage_schedule(
     source_schedule: list[dict],
     selected_sigma: float,
     warm_A: np.ndarray,
+    inlet_windows: dict[str, dict[str, float]],
+    schedule_mode: str,
+    pin_relative_radius: float,
     anchor_sigma_extra: float,
     anchor_warm_profile_track_weight: float,
     anchor_warm_control_track_weight: float,
@@ -193,6 +350,7 @@ def _build_stage_schedule(
 
     anchor = dict(source_anchor)
     anchor["name"] = "stage_1_hs_v6_baseline_anchor"
+    anchor["release_group"] = "baseline_anchor"
     anchor["A_max_ratio"] = max(float(anchor.get("A_max_ratio", 0.0)), warm_A_max * 1.10, 2.2)
     anchor["max_abs_dlogA_dx"] = max(
         float(anchor.get("max_abs_dlogA_dx", 0.0)),
@@ -212,9 +370,15 @@ def _build_stage_schedule(
     )
     anchor["objective_weight"] = 0.0
     anchor["ipopt_max_iter"] = max(int(anchor.get("ipopt_max_iter", 0)), int(anchor_ipopt_max_iter))
+    anchor["inlet_windows"] = _freeze_except(
+        inlet_windows,
+        set(),
+        pin_relative_radius=float(pin_relative_radius),
+    )
 
     release = dict(source_release)
     release["name"] = "stage_2_hs_objective_release"
+    release["release_group"] = "legacy_objective_release"
     release["max_abs_dlogA_dx"] = max(float(release.get("max_abs_dlogA_dx", 0.0)), float(selected_sigma))
     release["warm_profile_track_weight"] = max(
         float(release.get("warm_profile_track_weight", 0.0)),
@@ -225,9 +389,11 @@ def _build_stage_schedule(
         float(release_warm_control_track_weight),
     )
     release["ipopt_max_iter"] = max(int(release.get("ipopt_max_iter", 0)), int(release_ipopt_max_iter))
+    release["inlet_windows"] = {key: dict(value) for key, value in inlet_windows.items()}
 
     final = dict(source_final)
     final["name"] = "stage_3_hs_objective_final"
+    final["release_group"] = "legacy_geometry_objective"
     final["max_abs_dlogA_dx"] = float(selected_sigma)
     final["warm_profile_track_weight"] = max(
         float(final.get("warm_profile_track_weight", 0.0)),
@@ -238,8 +404,71 @@ def _build_stage_schedule(
         float(final_warm_control_track_weight),
     )
     final["ipopt_max_iter"] = max(int(final.get("ipopt_max_iter", 0)), int(final_ipopt_max_iter))
+    final["inlet_windows"] = {key: dict(value) for key, value in inlet_windows.items()}
 
-    return [anchor, release, final]
+    if schedule_mode == "legacy-3-stage":
+        return [anchor, release, final]
+
+    release_np_te = dict(release)
+    release_np_te["name"] = "stage_2_release_np_te"
+    release_np_te["release_group"] = "release_n_p_T_e"
+    release_np_te["objective_weight"] = min(float(release.get("objective_weight", 0.01)), 0.02)
+    release_np_te["warm_profile_track_weight"] = max(
+        float(release_np_te.get("warm_profile_track_weight", 0.0)),
+        float(release_warm_profile_track_weight),
+        64.0,
+    )
+    release_np_te["warm_control_track_weight"] = max(
+        float(release_np_te.get("warm_control_track_weight", 0.0)),
+        float(release_warm_control_track_weight),
+        16.0,
+    )
+    release_np_te["inlet_windows"] = _freeze_except(
+        inlet_windows,
+        {"n_p_in", "T_e_in"},
+        pin_relative_radius=float(pin_relative_radius),
+    )
+
+    release_z = dict(release)
+    release_z["name"] = "stage_3_release_z"
+    release_z["release_group"] = "release_Z"
+    release_z["objective_weight"] = min(float(release.get("objective_weight", 0.01)), 0.03)
+    release_z["warm_profile_track_weight"] = max(
+        float(release_z.get("warm_profile_track_weight", 0.0)),
+        float(release_warm_profile_track_weight),
+        32.0,
+    )
+    release_z["warm_control_track_weight"] = max(
+        float(release_z.get("warm_control_track_weight", 0.0)),
+        float(release_warm_control_track_weight),
+        8.0,
+    )
+    release_z["inlet_windows"] = _freeze_except(
+        inlet_windows,
+        {"n_p_in", "T_e_in", "Z_in"},
+        pin_relative_radius=float(pin_relative_radius),
+    )
+
+    release_current_seed = dict(release)
+    release_current_seed["name"] = "stage_4_release_i0_seed"
+    release_current_seed["release_group"] = "release_I0_seed_fraction"
+    release_current_seed["objective_weight"] = min(float(release.get("objective_weight", 0.01)), 0.05)
+    release_current_seed["warm_profile_track_weight"] = max(
+        float(release_current_seed.get("warm_profile_track_weight", 0.0)),
+        float(release_warm_profile_track_weight),
+        16.0,
+    )
+    release_current_seed["warm_control_track_weight"] = max(
+        float(release_current_seed.get("warm_control_track_weight", 0.0)),
+        float(release_warm_control_track_weight),
+        4.0,
+    )
+    release_current_seed["inlet_windows"] = {key: dict(value) for key, value in inlet_windows.items()}
+
+    final["name"] = "stage_5_release_geometry_objective"
+    final["release_group"] = "release_geometry_objective"
+    final["inlet_windows"] = {key: dict(value) for key, value in inlet_windows.items()}
+    return [anchor, release_np_te, release_z, release_current_seed, final]
 
 
 def main() -> int:
@@ -301,6 +530,58 @@ def main() -> int:
         lower_factor=float(args.seed_lower_factor),
         upper_factor=float(args.seed_upper_factor),
     )
+    inlet_windows = _inlet_problem_from_values(
+        n_p_in_guess=n_p_in_guess,
+        n_p_in_min=np_in_min,
+        n_p_in_max=np_in_max,
+        T_e_in_guess=T_e_in_guess,
+        T_e_in_min=te_in_min,
+        T_e_in_max=te_in_max,
+        Z_in_guess=Z_in_guess,
+        Z_in_min=z_in_min,
+        Z_in_max=z_in_max,
+        J_x_in_guess=J_x_in_guess,
+        J_x_in_min=jx_in_min,
+        J_x_in_max=jx_in_max,
+        seed_fraction_guess=seed_fraction_guess,
+        seed_fraction_min=seed_fraction_min,
+        seed_fraction_max=seed_fraction_max,
+    )
+    search_window_payload = {}
+    search_window_path = None
+    json_stage_schedule = None
+    schedule_overrides = {}
+    json_bound_factors = {}
+    if str(args.search_window_json).strip():
+        search_window_path = Path(args.search_window_json).resolve()
+        search_window_payload = _load_json(search_window_path)
+        inlet_overrides, json_bound_factors, json_stage_schedule, schedule_overrides = _extract_search_window_sections(
+            search_window_payload
+        )
+        inlet_windows = _merge_inlet_windows(inlet_windows, inlet_overrides)
+    inlet_windows = _apply_inlet_bound_factors(inlet_windows, json_bound_factors)
+    inlet_windows = _apply_inlet_bound_factors(inlet_windows, _cli_bound_factors(args))
+    np_in_min = float(inlet_windows["n_p_in"]["min"])
+    np_in_max = float(inlet_windows["n_p_in"]["max"])
+    n_p_in_guess = float(inlet_windows["n_p_in"]["guess"])
+    te_in_min = float(inlet_windows["T_e_in"]["min"])
+    te_in_max = float(inlet_windows["T_e_in"]["max"])
+    T_e_in_guess = float(inlet_windows["T_e_in"]["guess"])
+    z_in_min = float(inlet_windows["Z_in"]["min"])
+    z_in_max = float(inlet_windows["Z_in"]["max"])
+    Z_in_guess = float(inlet_windows["Z_in"]["guess"])
+    jx_in_min = float(inlet_windows["I_0"]["min"])
+    jx_in_max = float(inlet_windows["I_0"]["max"])
+    J_x_in_guess = float(inlet_windows["I_0"]["guess"])
+    seed_fraction_min = float(inlet_windows["seed_fraction"]["min"])
+    seed_fraction_max = float(inlet_windows["seed_fraction"]["max"])
+    seed_fraction_guess = float(inlet_windows["seed_fraction"]["guess"])
+    fluid = _resolve_working_fluid_parameters(
+        working_fluid_profile=str(args.working_fluid_profile),
+        heavy_particle_mass_kg=args.heavy_particle_mass_kg,
+        seed_ionization_energy_J=args.seed_ionization_energy_J,
+        sigma_ep=args.electron_particle_sigma_m2,
+    )
 
     warm_profile_path = _preferred_warm_npz(selected_case)
     warm_profile = load_warm_profile_npz(
@@ -321,22 +602,31 @@ def main() -> int:
         seed_fraction_min=seed_fraction_min,
         seed_fraction_max=seed_fraction_max,
         B=float(sweep_summary["B_T"]),
+        area_scale=float(args.area_scale_m2),
+        normalize_inlet_area=bool(np.isclose(float(args.area_scale_m2), 1.0, rtol=1e-12, atol=1e-15)),
     )
-    stage_schedule = _build_stage_schedule(
-        source_schedule=list(selected_case.get("schedule", []) or []),
-        selected_sigma=selected_sigma,
-        warm_A=np.asarray(warm_profile.A, dtype=float),
-        anchor_sigma_extra=float(args.anchor_sigma_extra),
-        anchor_warm_profile_track_weight=float(args.anchor_warm_profile_track_weight),
-        anchor_warm_control_track_weight=float(args.anchor_warm_control_track_weight),
-        anchor_ipopt_max_iter=int(args.anchor_ipopt_max_iter),
-        release_warm_profile_track_weight=float(args.release_warm_profile_track_weight),
-        release_warm_control_track_weight=float(args.release_warm_control_track_weight),
-        release_ipopt_max_iter=int(args.release_ipopt_max_iter),
-        final_warm_profile_track_weight=float(args.final_warm_profile_track_weight),
-        final_warm_control_track_weight=float(args.final_warm_control_track_weight),
-        final_ipopt_max_iter=int(args.final_ipopt_max_iter),
-    )
+    if json_stage_schedule is not None:
+        stage_schedule = [dict(stage) for stage in json_stage_schedule]
+    else:
+        stage_schedule = _build_stage_schedule(
+            source_schedule=list(selected_case.get("schedule", []) or []),
+            selected_sigma=selected_sigma,
+            warm_A=np.asarray(warm_profile.A, dtype=float),
+            inlet_windows=inlet_windows,
+            schedule_mode=str(args.schedule_mode),
+            pin_relative_radius=float(args.pin_relative_radius),
+            anchor_sigma_extra=float(args.anchor_sigma_extra),
+            anchor_warm_profile_track_weight=float(args.anchor_warm_profile_track_weight),
+            anchor_warm_control_track_weight=float(args.anchor_warm_control_track_weight),
+            anchor_ipopt_max_iter=int(args.anchor_ipopt_max_iter),
+            release_warm_profile_track_weight=float(args.release_warm_profile_track_weight),
+            release_warm_control_track_weight=float(args.release_warm_control_track_weight),
+            release_ipopt_max_iter=int(args.release_ipopt_max_iter),
+            final_warm_profile_track_weight=float(args.final_warm_profile_track_weight),
+            final_warm_control_track_weight=float(args.final_warm_control_track_weight),
+            final_ipopt_max_iter=int(args.final_ipopt_max_iter),
+        )
+    stage_schedule = _apply_schedule_overrides(stage_schedule, schedule_overrides)
 
     out_dir = (
         Path(args.out_dir)
@@ -349,6 +639,35 @@ def main() -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
     schedule_path = out_dir / "aligned_release_schedule.json"
     schedule_path.write_text(json.dumps(stage_schedule, ensure_ascii=False, indent=2), encoding="utf-8")
+    experiment_definition_path = out_dir / "experiment_definition.json"
+    experiment_definition = {
+        "runner": "run_baseline_release_from_v6_sweep_v2",
+        "schedule_mode": str(args.schedule_mode),
+        "search_window_json": None if search_window_path is None else str(search_window_path),
+        "source_sweep_json": str(sweep_summary_path),
+        "source_summary_json": str(source_summary_path),
+        "candidate_index": int(candidate_index),
+        "selected_sigma": float(selected_sigma),
+        "warm_profile_npz": str(warm_profile_path),
+        "objective_profile": str(args.objective_profile),
+        "area_scale_m2": float(args.area_scale_m2),
+        "working_fluid_profile": str(fluid.key),
+        "working_fluid_parameters": {
+            "heavy_particle_mass_kg": float(fluid.heavy_particle_mass_kg),
+            "seed_ionization_energy_J": float(fluid.seed_ionization_energy_J),
+            "electron_particle_sigma_m2": float(fluid.electron_particle_sigma_m2),
+        },
+        "inlet_windows": inlet_windows,
+        "inlet_windows_legacy": _inlet_problem_to_legacy_payload(inlet_windows),
+        "cli_bound_factors": _cli_bound_factors(args),
+        "json_bound_factors": json_bound_factors,
+        "schedule_overrides": schedule_overrides,
+        "stage_schedule": stage_schedule,
+    }
+    experiment_definition_path.write_text(
+        json.dumps(experiment_definition, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
 
     payload = run_continuation(
         n_p_in_guess=n_p_in_guess,
@@ -377,11 +696,19 @@ def main() -> int:
         adaptive_bridge_count=int(args.adaptive_bridge_count),
         adaptive_bridge_max_count=int(args.adaptive_bridge_max_count),
         warm_profile=warm_profile,
+        objective_profile=str(args.objective_profile),
+        area_scale=float(args.area_scale_m2),
+        working_fluid_profile=str(fluid.key),
+        heavy_particle_mass_kg=float(fluid.heavy_particle_mass_kg),
+        seed_ionization_energy_J=float(fluid.seed_ionization_energy_J),
+        sigma_ep=float(fluid.electron_particle_sigma_m2),
     )
 
     payload["schedule"] = stage_schedule
     payload["schedule_source"] = f"derived_from_v6_sigma_sweep:{sweep_summary_path}"
     payload["schedule_path"] = str(schedule_path)
+    payload["experiment_definition_path"] = str(experiment_definition_path)
+    payload["experiment_definition"] = experiment_definition
     payload["source_alignment"] = {
         "source_sweep_json": str(sweep_summary_path),
         "source_summary_json": str(source_summary_path),
@@ -391,17 +718,8 @@ def main() -> int:
         "source_inlet_metrics": inlet_metrics,
         "selected_sigma": float(selected_sigma),
         "warm_profile_npz": str(warm_profile_path),
-        "aligned_inlet_window": {
-            "np_in": {"guess": n_p_in_guess, "min": np_in_min, "max": np_in_max},
-            "te_in": {"guess": T_e_in_guess, "min": te_in_min, "max": te_in_max},
-            "z_in": {"guess": Z_in_guess, "min": z_in_min, "max": z_in_max},
-            "jx_in": {"guess": J_x_in_guess, "min": jx_in_min, "max": jx_in_max},
-            "seed_fraction": {
-                "guess": seed_fraction_guess,
-                "min": seed_fraction_min,
-                "max": seed_fraction_max,
-            },
-        },
+        "aligned_inlet_window": _inlet_problem_to_legacy_payload(inlet_windows),
+        "canonical_inlet_windows": inlet_windows,
     }
 
     if args.out_json:

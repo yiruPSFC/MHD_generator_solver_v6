@@ -126,10 +126,15 @@ def _g_margins_for_design(
     values: np.ndarray,
     config: CaseConfig,
     floor: float,
+    initial_profile: dict[str, np.ndarray] | None = None,
 ) -> np.ndarray:
     design = DesignVector.from_array(values)
     with _stop_annotating_context():
-        result = solve_forward(design=design, config=replace(config, design=design, B_T=float(design.B_T)))
+        result = solve_forward(
+            design=design,
+            config=replace(config, design=design, B_T=float(design.B_T)),
+            initial_profile=initial_profile,
+        )
     if not result.ok or result.profile is None:
         raise RuntimeError(result.error or "forward solve failed")
     summary = evaluate_velikhov_node_constraints(
@@ -149,6 +154,7 @@ def _finite_difference_active_g_jacobian(
     config: CaseConfig,
     floor: float,
     rel_step: float,
+    initial_profile: dict[str, np.ndarray] | None = None,
 ) -> tuple[np.ndarray, list[dict[str, Any]]]:
     lower = config.bounds.lower.as_array()
     upper = config.bounds.upper.as_array()
@@ -179,7 +185,12 @@ def _finite_difference_active_g_jacobian(
             )
             continue
         try:
-            trial_margins = _g_margins_for_design(values=trial, config=config, floor=floor)[active_indices]
+            trial_margins = _g_margins_for_design(
+                values=trial,
+                config=config,
+                floor=floor,
+                initial_profile=initial_profile,
+            )[active_indices]
         except Exception as exc:
             failures.append(
                 {
@@ -277,10 +288,22 @@ def analyze_reduced_kkt(
     base_margins = np.asarray(node_constraints.margins, dtype=float)
     active_g_indices = node_constraints.active_indices()
 
-    bundle = build_reduced_functional(design=design, config=config)
+    bundle = build_reduced_functional(design=design, config=config, initial_profile=profile)
     objective_to_maximize = evaluate_reduced_functional(bundle, x0)
     grad_maximize = reduced_functional_gradient(bundle)
     grad_minimize = -np.asarray(grad_maximize, dtype=float)
+    with _stop_annotating_context():
+        direct_result = solve_forward(
+            design=design,
+            config=replace(config, design=design, B_T=float(design.B_T)),
+            initial_profile=profile,
+        )
+    if not direct_result.ok or direct_result.metrics is None:
+        direct_objective = float("nan")
+        direct_error = direct_result.error or "forward solve failed"
+    else:
+        direct_objective = float(direct_result.metrics.objective_score)
+        direct_error = None
 
     g_jac, fd_failures = _finite_difference_active_g_jacobian(
         x0=x0,
@@ -289,6 +312,7 @@ def analyze_reduced_kkt(
         config=config,
         floor=floor,
         rel_step=float(fd_rel_step),
+        initial_profile=profile,
     )
     active_bounds = _active_bounds(
         x=x0,
@@ -395,7 +419,14 @@ def analyze_reduced_kkt(
         "objective": {
             "objective_to_maximize": float(objective_to_maximize),
             "objective_to_minimize": float(-objective_to_maximize),
+            "postprocess_objective_to_maximize": float(direct_objective),
+            "taped_objective_minus_postprocess_objective": float(objective_to_maximize - direct_objective),
+            "postprocess_forward_error": direct_error,
             "gradient_source": "pyadjoint reduced functional",
+            "objective_semantics_note": (
+                "objective_to_maximize is the taped Firedrake objective used for gradients; "
+                "postprocess_objective_to_maximize is recomputed from the saved nodal profile."
+            ),
             "velikhov_mode_for_gradient": "diagnostic",
         },
         "node_constraints": node_constraints.to_dict(),

@@ -16,8 +16,8 @@ class LogAreaSplineControl:
     a3: float
 
     KNOTS = np.array([0.0, 1.0 / 3.0, 2.0 / 3.0, 1.0], dtype=float)
-    _LOWER = math.log(0.25)
-    _UPPER = math.log(8.0)
+    _LOWER = math.log(0.1)
+    _UPPER = math.log(10.0)
 
     @classmethod
     def from_sequence(cls, values: list[float] | tuple[float, float, float] | np.ndarray) -> "LogAreaSplineControl":
