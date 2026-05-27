@@ -190,10 +190,6 @@ def _area_arrays_for_match(
     )
 
 
-def _interp_area_field(area: dict[str, Any], field: str, x: float) -> float:
-    return float(np.interp(float(x), np.asarray(area["x"], dtype=float), np.asarray(area[field], dtype=float)))
-
-
 def audit_sonic_compatibility(
     *,
     profile: dict[str, Any],
@@ -793,9 +789,13 @@ def _suggest_sonic_mesh_nodes(
     right_nodes = [float(x_star)]
     left_dx = (float(x_star) - float(x_left)) / max(int(left_intervals), 1)
     dx = max(min(float(first_right_dx) / 8.0, max(left_dx, float(length_m) * 1.0e-9)), float(length_m) * 1.0e-10)
-    for _ in range(int(right_intervals)):
-        right_nodes.append(min(float(length_m), right_nodes[-1] + dx))
-        dx = min(dx * float(growth), max(float(first_right_dx), dx))
+    target_right = min(float(length_m), float(x_star) + max(float(first_right_dx), dx))
+    max_right_nodes = max(int(right_intervals), 1) + 40
+    for _ in range(max_right_nodes):
+        if right_nodes[-1] >= target_right - 1.0e-15:
+            break
+        right_nodes.append(min(target_right, right_nodes[-1] + dx))
+        dx = min(dx * float(growth), max(float(first_right_dx) / 4.0, dx))
     nodes = np.unique(np.concatenate([left, np.asarray(right_nodes, dtype=float)]))
     return nodes[(nodes >= 0.0) & (nodes <= float(length_m))]
 
@@ -816,10 +816,7 @@ def _local_launch_area_on_nodes(
         area_profile=area_profile,
         n_intervals=config.n_intervals,
     )
-    x_left = float(left_anchor["x_m"])
     x_star = float(sonic_point["x_m"])
-    logA_left = _interp_area_field(base, "logA", x_left)
-    sigma_left = _interp_area_field(base, "sigma_logA", x_left)
     logA_star = float(sonic_point["logA"])
     sigma_star = float(sonic_point["sigma_required_1_per_m"])
     tau = float(right_launch["required_dsigma_logA_dx_1_per_m2"])
@@ -828,15 +825,21 @@ def _local_launch_area_on_nodes(
     sigma = np.empty_like(nodes)
     left_mask = nodes <= x_star
     if np.any(left_mask):
-        logA[left_mask], sigma[left_mask] = _hermite_segment(
+        logA[left_mask] = np.interp(
             nodes[left_mask],
-            x0=x_left,
-            x1=x_star,
-            y0=logA_left,
-            y1=logA_star,
-            m0=sigma_left,
-            m1=sigma_star,
+            np.asarray(base["x"], dtype=float),
+            np.asarray(base["logA"], dtype=float),
         )
+        sigma[left_mask] = np.interp(
+            nodes[left_mask],
+            np.asarray(base["x"], dtype=float),
+            np.asarray(base["sigma_logA"], dtype=float),
+        )
+        sonic_local = int(np.argmax(nodes[left_mask]))
+        left_indices = np.flatnonzero(left_mask)
+        if left_indices.size:
+            logA[left_indices[sonic_local]] = logA_star
+            sigma[left_indices[sonic_local]] = sigma_star
     if np.any(~left_mask):
         s = nodes[~left_mask] - x_star
         logA[~left_mask] = logA_star + sigma_star * s + 0.5 * tau * s * s
@@ -854,7 +857,10 @@ def _local_launch_area_on_nodes(
             "logA_original": base_logA,
             "A_over_A0_original": np.exp(np.clip(base_logA, -700.0, 700.0)),
             "sigma_logA_original_1_per_m": base_sigma,
-            "note": "Left side is a Hermite bridge into x_*; right side is only the local quadratic launch buffer.",
+            "note": (
+                "Left side keeps the original A_rest values and marks the required point slope at x_*. "
+                "Right side is only the local quadratic launch buffer."
+            ),
         }
     )
 

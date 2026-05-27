@@ -20,6 +20,7 @@ from v6_firedrake_reduced.objective import evaluate_profile_metrics
 from v6_firedrake_reduced.run_firedrake_reduced import _design_from_json, _validate_optimizer_options
 from v6_firedrake_reduced.sonic_compatibility import (
     audit_sonic_compatibility,
+    build_sonic_mesh_matching_diagnostic,
     build_front_loaded_area_initial_profile,
     make_sonic_matched_area_profile,
 )
@@ -257,6 +258,34 @@ class FiredrakeReducedPureContractTest(unittest.TestCase):
         self.assertAlmostEqual(float(profile["A"][-1] / profile["A"][0]), 6.0, places=12)
         self.assertGreater(float(profile["sigma_logA"][0]), float(profile["sigma_logA"][-1]))
         self.assertTrue(np.all(np.asarray(profile["n_p"], dtype=float) == float(config.design.n_p_in)))
+
+    def test_sonic_mesh_matching_diagnostic_replays_failed_ehe_design(self):
+        base = load_case_config(case="yamasaki2004")
+        design = DesignVector(
+            log_n_p_in=56.71609331454165,
+            T_e_in=5212.19942452061,
+            Z_in=92.70786866213989,
+            I_0=1109.4396367192721,
+            log_seed_fraction=-8.245724243369647,
+            a1=0.6557332902728183,
+            a2=1.3277569377499117,
+            a3=1.917275590409448,
+            B_T=11.134650152872922,
+        )
+        config = replace(
+            base,
+            design=design,
+            B_T=float(design.B_T),
+            metadata={**base.metadata, "electron_transport": ELECTRON_TRANSPORT_E_HE},
+        )
+        report = build_sonic_mesh_matching_diagnostic(design=design, config=config)
+        self.assertTrue(report["local_sonic_match"]["ok"])
+        self.assertTrue(report["right_branch_launch_condition"]["ok"])
+        self.assertAlmostEqual(float(report["sonic_point"]["mach"]), 1.0, places=6)
+        self.assertAlmostEqual(float(report["sonic_point"]["sigma_required_1_per_m"]), 184.645, delta=1.0e-2)
+        self.assertGreater(float(report["right_branch_launch_condition"]["first_right_node"]["mach"]), 1.0)
+        self.assertGreater(float(report["suggested_local_mesh"]["node_count"]), 8)
+        json.dumps(report, allow_nan=False)
 
     def test_velikhov_penalty_lowers_objective_when_floor_is_violated(self):
         config = load_case_config(case="yamasaki2004", n_intervals=8)
