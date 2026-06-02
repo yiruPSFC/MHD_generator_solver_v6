@@ -150,3 +150,45 @@ Early-stage SciPy optimization:
   --popsize 6 \
   --out-dir outputs/anchor_optimize_example
 ```
+
+## Outer L-BFGS-B reduced-model optimizer
+
+The outer reduced-model optimizer lives under `outer_solver/`.  It optimizes
+the five primary inlet/anchor controls
+
+```text
+log_n_p_in, T_e_in, Z_in, I_0, log_seed_fraction
+```
+
+where `log_n_p_in` is the internal representation of physical `np_in`.  The
+CLI accepts `--bound np_in ...` or `--bound n_p_in ...` and log-transforms the
+range.  `B_T` is fixed by default and can be set with `--fixed B_T VALUE`.
+
+The prescreening stage samples candidates and keeps states with non-negative
+`G`, low anchor `T_e/T_p`, and positive local `d(T_e/T_p)/dx` near the anchor.
+The selected seeds are then improved with SciPy `L-BFGS-B` in normalized
+`[0, 1]^5` space.
+
+Example:
+
+```bash
+./.venv_jit/bin/python -m v6_active_boundary_reduced.outer_solver.lbfgsb \
+  --case yamasaki2004 \
+  --dx 0.01 \
+  --n-steps 60 \
+  --bound np_in 2.0e25 5.0e25 \
+  --bound T_e_in 5000 7000 \
+  --bound Z_in 70 110 \
+  --bound I_0 1000 1800 \
+  --bound log_seed_fraction -13.8 -9.2 \
+  --fixed B_T 12.0 \
+  --prescreen-candidates 128 \
+  --prescreen-top-k 8 \
+  --maxiter 24 \
+  --out-dir outputs/active_boundary_outer_lbfgsb_example
+```
+
+The reward is a soft-penalty objective built from the active-boundary rollout:
+`Delta` improvement, magnetic-field range, `Amax/Amin` range, too-low minimum
+`T_p`, too-high maximum `T_e`, `G` shortfall, choking/Mach excess, and incomplete
+rollout penalties.

@@ -241,6 +241,8 @@ def rollout_policy(
             )
         )
         segments.append({**{key: value for key, value in step.items() if key != "next_state"}, "k": int(k)})
+        if not bool(step.get("ok", False)):
+            break
     active_summary = _active_summary(nodes=nodes, segments=segments, settings=settings)
     return {
         "ok": bool(all(bool(item["ok"]) for item in segments)),
@@ -323,6 +325,8 @@ def recover_preparation_profile(
             )
         )
         segments.append({**{key: value for key, value in step.items() if key != "next_state"}, "k": int(k)})
+        if not bool(step.get("ok", False)):
+            break
     active_summary = _active_summary(nodes=nodes, segments=segments, settings=settings)  # type: ignore[arg-type]
     return {
         "ok": bool(all(bool(item["ok"]) for item in segments)),
@@ -407,6 +411,8 @@ def rollout_policy_from_anchor(
             )
         )
         segments.append({**{key: value for key, value in step.items() if key != "next_state"}, "k": int(k)})
+        if not bool(step.get("ok", False)):
+            break
     active_summary = _active_summary(nodes=nodes, segments=segments, settings=settings)
     return {
         "ok": bool(all(bool(item["ok"]) for item in segments)),
@@ -490,6 +496,7 @@ def _policy_step(
             "sigma_interval_lower": float(lo),
             "sigma_interval_upper": float(hi),
             "bound_sources": bound_sources,
+            "termination_reason": "empty_sigma_interval",
         }
 
     base_sigma = float(np.clip(sigma_prev, lo, hi))
@@ -565,6 +572,8 @@ def _policy_step(
             "sigma_interval_upper": float(hi),
             "pedal_direction": pedal,
             "bound_sources": bound_sources,
+            "termination_reason": "no_feasible_sigma",
+            "scan_diagnostics": _scan_diagnostics(scan),
             **_eval_public(best_failed),
         }
 
@@ -601,6 +610,7 @@ def _policy_step(
         "sigma_interval_upper": float(hi),
         "pedal_direction": float(pedal),
         "bound_sources": bound_sources,
+        "scan_diagnostics": _scan_diagnostics(scan),
         **_eval_public(chosen),
     }
 
@@ -1135,6 +1145,45 @@ def _eval_public(item: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _scan_diagnostics(scan: list[dict[str, Any]]) -> dict[str, Any]:
+    if not scan:
+        return {"n_scan": 0, "feasible_count": 0}
+    feasible = [item for item in scan if bool(item.get("feasible", False))]
+    by_violation = min(scan, key=lambda item: float(item.get("constraint_violation", 1e300)))
+    by_residual = min(scan, key=lambda item: float(item.get("max_abs_scaled_residual", 1e300)))
+    payload: dict[str, Any] = {
+        "n_scan": int(len(scan)),
+        "feasible_count": int(len(feasible)),
+        "sigma_min": float(min(float(item["sigma"]) for item in scan)),
+        "sigma_max": float(max(float(item["sigma"]) for item in scan)),
+        "best_violation": _scan_item_summary(by_violation),
+        "best_residual": _scan_item_summary(by_residual),
+        "left_endpoint": _scan_item_summary(scan[0]),
+        "right_endpoint": _scan_item_summary(scan[-1]),
+    }
+    if feasible:
+        payload["feasible_sigma_min"] = float(min(float(item["sigma"]) for item in feasible))
+        payload["feasible_sigma_max"] = float(max(float(item["sigma"]) for item in feasible))
+        payload["best_objective_feasible"] = _scan_item_summary(
+            max(feasible, key=lambda item: float(item.get("objective_value", -1e300)))
+        )
+    return payload
+
+
+def _scan_item_summary(item: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "sigma": float(item.get("sigma", float("nan"))),
+        "ok": bool(item.get("ok", False)),
+        "feasible": bool(item.get("feasible", False)),
+        "objective_value": float(item.get("objective_value", float("nan"))),
+        "delta_gain": float(item.get("delta_gain", float("nan"))),
+        "constraint_violation": float(item.get("constraint_violation", float("nan"))),
+        "constraint_margins": dict(item.get("constraint_margins", {}) or {}),
+        "max_abs_scaled_residual": float(item.get("max_abs_scaled_residual", float("nan"))),
+        "least_squares_nfev": int(item.get("least_squares_nfev", -1)),
+    }
+
+
 def _window_from_profile(profile: dict[str, Any], *, settings: PolicySettings) -> dict[str, Any]:
     x = np.asarray(profile["x"], dtype=float).reshape(-1)
     n_p = np.asarray(profile["n_p"], dtype=float).reshape(-1)
@@ -1186,16 +1235,68 @@ def _active_summary(*, nodes: list[dict[str, Any]], segments: list[dict[str, Any
     tp_margin_near_count = int(
         sum(1 for node in nodes[1:] if float(node["T_p"]) - float(settings.tp_floor_K) <= float(settings.active_tol))
     )
+    sigmas = [float(node["sigma_logA"]) for node in nodes if np.isfinite(float(node["sigma_logA"]))]
     return {
         "support_counts": support_counts,
+        "termination": _termination_summary(segments),
+        "n_steps_requested": int(settings.n_steps),
+        "n_steps_completed": int(len(segments)),
         "Delta_start": float(nodes[0]["Delta"]),
         "Delta_end": float(nodes[-1]["Delta"]),
         "Delta_gain": float(nodes[-1]["Delta"] - nodes[0]["Delta"]),
         "G_min_excluding_anchor": float(min(float(node["G"]) for node in nodes[1:])) if len(nodes) > 1 else None,
         "Tp_min_excluding_anchor_K": float(min(float(node["T_p"]) for node in nodes[1:])) if len(nodes) > 1 else None,
-        "max_abs_scaled_residual": float(max(float(seg["max_abs_scaled_residual"]) for seg in segments)) if segments else 0.0,
+        "logA_min": float(min(float(node["logA"]) for node in nodes)),
+        "logA_max": float(max(float(node["logA"]) for node in nodes)),
+        "A_min": float(min(float(node["A"]) for node in nodes)),
+        "A_max": float(max(float(node["A"]) for node in nodes)),
+        "Te_min_K": float(min(float(node["T_e"]) for node in nodes)),
+        "Te_max_K": float(max(float(node["T_e"]) for node in nodes)),
+        "Tp_min_K": float(min(float(node["T_p"]) for node in nodes)),
+        "Tp_max_K": float(max(float(node["T_p"]) for node in nodes)),
+        "mach_min": float(min(float(node["mach"]) for node in nodes)),
+        "mach_max": float(max(float(node["mach"]) for node in nodes)),
+        "sigma_min": float(min(sigmas)) if sigmas else None,
+        "sigma_max": float(max(sigmas)) if sigmas else None,
+        "max_abs_scaled_residual": (
+            float(max(float(seg.get("max_abs_scaled_residual", 0.0)) for seg in segments))
+            if segments
+            else 0.0
+        ),
         "G_active_count_excluding_anchor": int(support_counts.get("G_supported", 0)),
         "G_margin_near_count_excluding_anchor": g_margin_near_count,
         "Tp_floor_active_count_excluding_anchor": int(support_counts.get("Tp_floor_supported", 0)),
         "Tp_floor_margin_near_count_excluding_anchor": tp_margin_near_count,
+    }
+
+
+def _termination_summary(segments: list[dict[str, Any]]) -> dict[str, Any]:
+    if not segments:
+        return {
+            "ok": True,
+            "reason": "no_segments",
+            "step": None,
+        }
+    last = dict(segments[-1])
+    ok = bool(all(bool(item.get("ok", False)) for item in segments))
+    if ok:
+        reason = "completed_requested_steps"
+    else:
+        reason = str(last.get("termination_reason") or last.get("support_type") or last.get("error") or "failed_step")
+    return {
+        "ok": bool(ok),
+        "reason": reason,
+        "step": int(last.get("k", len(segments) - 1)),
+        "support_type": str(last.get("support_type", "unknown")),
+        "solver_method": str(last.get("solver_method", "unknown")),
+        "sigma": float(last.get("sigma", float("nan"))),
+        "sigma_interval_lower": float(last.get("sigma_interval_lower", float("nan"))),
+        "sigma_interval_upper": float(last.get("sigma_interval_upper", float("nan"))),
+        "bound_sources": dict(last.get("bound_sources", {}) or {}),
+        "constraint_margins": dict(last.get("constraint_margins", {}) or {}),
+        "boundary_blockers": list(last.get("boundary_blockers", []) or []),
+        "max_abs_scaled_residual": float(last.get("max_abs_scaled_residual", float("nan"))),
+        "least_squares_nfev": int(last.get("least_squares_nfev", -1)),
+        "error": None if last.get("error") is None else str(last.get("error")),
+        "scan_diagnostics": dict(last.get("scan_diagnostics", {}) or {}),
     }

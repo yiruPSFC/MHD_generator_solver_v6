@@ -297,6 +297,11 @@ def _node_summary(node: dict[str, Any]) -> dict[str, float]:
 
 
 def flatten_result_for_csv(result: dict[str, Any]) -> dict[str, Any]:
+    active_summary = dict(result.get("active_summary", {}) or {})
+    termination = dict(active_summary.get("termination", {}) or {})
+    bound_sources = dict(termination.get("bound_sources", {}) or {})
+    constraint_margins = dict(termination.get("constraint_margins", {}) or {})
+    scan_diagnostics = dict(termination.get("scan_diagnostics", {}) or {})
     row: dict[str, Any] = {
         "case_id": result.get("case_id"),
         "ok": bool(result.get("ok", False)),
@@ -306,6 +311,83 @@ def flatten_result_for_csv(result: dict[str, Any]) -> dict[str, Any]:
         "max_abs_scaled_residual": float(result.get("max_abs_scaled_residual", np.nan)),
         "n_steps_completed": int(result.get("n_steps_completed", 0)),
     }
+    for name in (
+        "n_steps_requested",
+        "n_steps_completed",
+        "logA_min",
+        "logA_max",
+        "A_min",
+        "A_max",
+        "Te_min_K",
+        "Te_max_K",
+        "Tp_min_K",
+        "Tp_max_K",
+        "mach_min",
+        "mach_max",
+        "sigma_min",
+        "sigma_max",
+        "G_min_excluding_anchor",
+        "G_active_count_excluding_anchor",
+        "G_margin_near_count_excluding_anchor",
+        "Tp_min_excluding_anchor_K",
+        "Tp_floor_active_count_excluding_anchor",
+        "Tp_floor_margin_near_count_excluding_anchor",
+    ):
+        if name in active_summary:
+            row[f"active_{name}"] = active_summary[name]
+    for name in (
+        "ok",
+        "reason",
+        "step",
+        "support_type",
+        "solver_method",
+        "sigma",
+        "sigma_interval_lower",
+        "sigma_interval_upper",
+        "max_abs_scaled_residual",
+        "least_squares_nfev",
+        "error",
+    ):
+        if name in termination:
+            row[f"termination_{name}"] = termination[name]
+    for side, source in bound_sources.items():
+        row[f"termination_bound_source_{side}"] = source
+    for name, value in constraint_margins.items():
+        row[f"termination_margin_{name}"] = value
+    for name in (
+        "n_scan",
+        "feasible_count",
+        "sigma_min",
+        "sigma_max",
+        "feasible_sigma_min",
+        "feasible_sigma_max",
+    ):
+        if name in scan_diagnostics:
+            row[f"scan_{name}"] = scan_diagnostics[name]
+    for label in (
+        "best_violation",
+        "best_residual",
+        "left_endpoint",
+        "right_endpoint",
+        "best_objective_feasible",
+    ):
+        item = dict(scan_diagnostics.get(label, {}) or {})
+        if not item:
+            continue
+        for name in (
+            "sigma",
+            "ok",
+            "feasible",
+            "objective_value",
+            "delta_gain",
+            "constraint_violation",
+            "max_abs_scaled_residual",
+            "least_squares_nfev",
+        ):
+            if name in item:
+                row[f"scan_{label}_{name}"] = item[name]
+        for name, value in dict(item.get("constraint_margins", {}) or {}).items():
+            row[f"scan_{label}_margin_{name}"] = value
     for name, value in dict(result.get("design", {}) or {}).items():
         row[f"design_{name}"] = float(value)
     for name, value in dict(result.get("objective_terms", {}) or {}).items():

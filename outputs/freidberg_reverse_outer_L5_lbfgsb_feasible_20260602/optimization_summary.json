@@ -1,0 +1,360 @@
+{
+  "anchor_options": {
+    "logA": 0.0,
+    "sigma_logA": 0.0,
+    "source": "outer_lbfgsb_anchor",
+    "x": 0.0
+  },
+  "best": {
+    "active_summary": {
+      "A_max": 4.338755301067451,
+      "A_min": 0.447,
+      "Delta_end": 0.0006665077985095191,
+      "Delta_gain": -0.42959821858849145,
+      "Delta_start": 0.430264726387001,
+      "G_active_count_excluding_anchor": 0,
+      "G_margin_near_count_excluding_anchor": 0,
+      "G_min_excluding_anchor": 405.8523512150332,
+      "Te_max_K": 5005.431092129335,
+      "Te_min_K": 3750.95511986569,
+      "Tp_floor_active_count_excluding_anchor": 0,
+      "Tp_floor_margin_near_count_excluding_anchor": 0,
+      "Tp_max_K": 3748.4567442132966,
+      "Tp_min_K": 3499.6535954386436,
+      "Tp_min_excluding_anchor_K": 3508.737613214325,
+      "logA_max": 2.2727841943576936,
+      "logA_min": 0.0,
+      "mach_max": 0.3823011959532709,
+      "mach_min": 0.034617055351275634,
+      "max_abs_scaled_residual": 1.0099928635126444e-06,
+      "n_steps_completed": 50,
+      "n_steps_requested": 50,
+      "sigma_max": 0.0,
+      "sigma_min": -0.5,
+      "support_counts": {
+        "curvature_lower_supported": 9,
+        "residual_supported": 1,
+        "sigma_box,curvature_lower_supported": 1,
+        "sigma_box_lower_supported": 39
+      },
+      "termination": {
+        "bound_sources": {
+          "lower": "sigma_box",
+          "upper": "curvature"
+        },
+        "boundary_blockers": [],
+        "constraint_margins": {
+          "G": 4443559.080655155,
+          "Tp": 3448.4567442132966,
+          "residual": 9.999995239734369e-09
+        },
+        "error": null,
+        "least_squares_nfev": 3,
+        "max_abs_scaled_residual": 4.760265631906434e-15,
+        "ok": true,
+        "reason": "completed_requested_steps",
+        "scan_diagnostics": {},
+        "sigma": -0.5,
+        "sigma_interval_lower": -0.5,
+        "sigma_interval_upper": -0.45,
+        "solver_method": "direct_preferred_endpoint",
+        "step": 49,
+        "support_type": "sigma_box_lower_supported"
+      }
+    },
+    "case_id": 113,
+    "design": {
+      "B_T": 10.2,
+      "I_0": 1327.772641277913,
+      "T_e_in": 5005.431092129336,
+      "Z_in": 81.73048928772357,
+      "a1": 0.1734697727255258,
+      "a2": 0.37530533787502696,
+      "a3": 0.6163516395254951,
+      "log_n_p_in": 58.709595896293315,
+      "log_seed_fraction": -13.419131309225447
+    },
+    "elapsed_s": 0.5644311159994686,
+    "failure": null,
+    "fixed_area_variables": {
+      "a1": 0.1734697727255258,
+      "a2": 0.37530533787502696,
+      "a3": 0.6163516395254951
+    },
+    "max_abs_scaled_residual": 1.0099928635126444e-06,
+    "n_steps_completed": 50,
+    "objective_terms": {
+      "delta_improvement": 0.42959821858849145,
+      "delta_improvement_reward": 0.42959821858849145,
+      "failure_penalty": 0.0,
+      "inlet_delta_penalty": 3.332538992547596e-05,
+      "inlet_te_shortfall_penalty": 5.058202872858352,
+      "inlet_tp_shortfall_penalty": 0.0,
+      "raw_score_before_failure_gate": -4.6286379796597865,
+      "target_g_margin": 86326.9275416247,
+      "target_ok": 1.0,
+      "target_tp_margin": 3199.6535954386436
+    },
+    "ok": true,
+    "optimizer_normalized": [
+      0.6373630123216945,
+      0.8503316093302586,
+      0.6208711225063875,
+      0.2962877354631883,
+      0.7267729951445018
+    ],
+    "optimizer_source": "lbfgsb_seed_0",
+    "outer_reward_terms": {
+      "B_T": 10.2,
+      "B_T_missing": 0.0,
+      "G_shortfall_penalty": 0.0,
+      "area_ratio": 9.706387698137474,
+      "area_ratio_missing": 0.0,
+      "area_ratio_penalty": 0.0,
+      "delta_improvement": 0.42959821858849145,
+      "delta_improvement_reward": 0.42959821858849145,
+      "failure_penalty": 0.0,
+      "incomplete_rollout_penalty": 0.0,
+      "mach_excess_penalty": 0.0,
+      "mach_max": 0.3823011959532709,
+      "magnetic_field_penalty": 0.0,
+      "max_te_K": 5005.431092129335,
+      "max_te_excess_penalty": 0.0,
+      "min_G": 405.8523512150332,
+      "min_tp_K": 3499.6535954386436,
+      "min_tp_shortfall_penalty": 0.0,
+      "score_before_failure": 0.42959821858849145
+    },
+    "outer_score": 0.42959821858849145,
+    "outlet": {
+      "A": 0.447,
+      "Delta": 0.430264726387001,
+      "G": 86326.9275316247,
+      "T_e": 5005.431092129335,
+      "T_p": 3499.6535954386436,
+      "Z": 81.73048928772342,
+      "beta": 37.17537934234362,
+      "logA": 0.0,
+      "mach": 0.3823011959532709,
+      "n_p": 3.1423425959912296e+25,
+      "sigma_logA": 0.0,
+      "x": 0.0
+    },
+    "preparation_inlet": {
+      "A": 4.338755301067451,
+      "Delta": 0.0006665077985095191,
+      "G": 4443559.080645155,
+      "T_e": 3750.95511986569,
+      "T_p": 3748.4567442132966,
+      "Z": 1.661231452427288,
+      "beta": 39.0625904912155,
+      "logA": 2.2727841943576936,
+      "mach": 0.034617055351275634,
+      "n_p": 3.454599534340289e+25,
+      "sigma_logA": -0.5,
+      "x": -5.0
+    },
+    "score": -4.6286379796597865,
+    "search_variables": {
+      "B_T": 10.2,
+      "I_0": 1327.772641277913,
+      "T_e_in": 5005.431092129336,
+      "Z_in": 81.73048928772357,
+      "log_n_p_in": 58.709595896293315,
+      "log_seed_fraction": -13.419131309225447
+    },
+    "support_counts": {
+      "curvature_lower_supported": 9,
+      "residual_supported": 1,
+      "sigma_box,curvature_lower_supported": 1,
+      "sigma_box_lower_supported": 39
+    }
+  },
+  "bounds": {
+    "I_0": {
+      "max": 1750.0,
+      "min": 1150.0
+    },
+    "T_e_in": {
+      "max": 5200.0,
+      "min": 3900.0
+    },
+    "Z_in": {
+      "max": 95.0,
+      "min": 60.0
+    },
+    "log_n_p_in": {
+      "max": 58.81739029334651,
+      "min": 58.52013876987858
+    },
+    "log_seed_fraction": {
+      "max": -12.9,
+      "min": -14.8
+    }
+  },
+  "elapsed_s": 131.81440417400154,
+  "fixed_overrides": {
+    "B_T": 10.2
+  },
+  "method": "scipy.optimize.minimize:L-BFGS-B",
+  "ok": true,
+  "outputs": {
+    "best_nodes_csv": "outputs/freidberg_reverse_outer_L5_lbfgsb_feasible_20260602/best_nodes.csv",
+    "best_profile_npz": "outputs/freidberg_reverse_outer_L5_lbfgsb_feasible_20260602/best_profile.npz",
+    "best_result_json": "outputs/freidberg_reverse_outer_L5_lbfgsb_feasible_20260602/best_result.json",
+    "best_segments_csv": "outputs/freidberg_reverse_outer_L5_lbfgsb_feasible_20260602/best_segments.csv",
+    "evaluations_csv": "outputs/freidberg_reverse_outer_L5_lbfgsb_feasible_20260602/evaluations.csv",
+    "evaluations_jsonl": "outputs/freidberg_reverse_outer_L5_lbfgsb_feasible_20260602/evaluations.jsonl",
+    "prescreen_jsonl": "outputs/freidberg_reverse_outer_L5_lbfgsb_feasible_20260602/prescreen.jsonl",
+    "summary_json": "outputs/freidberg_reverse_outer_L5_lbfgsb_feasible_20260602/optimization_summary.json"
+  },
+  "prescreen_settings": {
+    "allow_fallback": true,
+    "candidates": 10,
+    "g_floor": -1e-05,
+    "min_te_over_tp_gradient": -1000000000.0,
+    "require_rollout_ok": true,
+    "seed": 1,
+    "te_over_tp_ceiling": 20.0,
+    "top_k": 2
+  },
+  "reward_weights": {
+    "area_ratio_max": 25.0,
+    "area_ratio_min": 1.0,
+    "area_ratio_penalty": 0.25,
+    "delta_improvement": 1.0,
+    "failure_penalty": 1000000.0,
+    "g_floor": -1e-05,
+    "g_scale": 100000.0,
+    "g_shortfall": 1.0,
+    "incomplete_rollout": 1000.0,
+    "mach_ceiling": 5.0,
+    "mach_excess": 10.0,
+    "magnetic_field_max_T": 20.0,
+    "magnetic_field_min_T": 1.0,
+    "magnetic_field_penalty": 1.0,
+    "max_te_ceiling_K": 6500.0,
+    "max_te_excess": 1.0,
+    "min_tp_floor_K": 300.0,
+    "min_tp_shortfall": 1.0,
+    "temperature_scale_K": 1000.0
+  },
+  "rollout_settings": {
+    "active_tol": 1e-06,
+    "curvature_max": 0.05,
+    "dx": 0.1,
+    "g_floor": -1e-05,
+    "n_steps": 50,
+    "refine_iterations": 24,
+    "residual_tol": 1e-08,
+    "scan_points": 41,
+    "sigma_max": 0.5,
+    "sigma_min": -0.5,
+    "tp_floor_K": 300.0
+  },
+  "rollout_weights": {
+    "delta_improvement": 1.0,
+    "failure_penalty": 1000000.0,
+    "inlet_delta": 0.05,
+    "inlet_te_floor_K": 6000.0,
+    "inlet_te_shortfall": 1.0,
+    "inlet_tp_floor_K": 3000.0,
+    "inlet_tp_shortfall": 1.0,
+    "temperature_scale_K": 1000.0
+  },
+  "scipy_runs": [
+    {
+      "final_normalized": [
+        0.6413281691393652,
+        0.852632838480657,
+        0.592941018104284,
+        0.2600974477372233,
+        0.8398815210314093
+      ],
+      "final_overrides": {
+        "B_T": 10.2,
+        "I_0": 1306.058468642334,
+        "T_e_in": 5008.422690024854,
+        "Z_in": 80.75293563364994,
+        "log_n_p_in": 58.710774545198156,
+        "log_seed_fraction": -13.204225110040323
+      },
+      "final_values": [
+        58.710774545198156,
+        5008.422690024854,
+        80.75293563364994,
+        1306.058468642334,
+        -13.204225110040323
+      ],
+      "fun": -0.4076102586196366,
+      "initial_normalized": [
+        0.6413281691393652,
+        0.852632838480657,
+        0.592941018104284,
+        0.2600974477372233,
+        0.8398815210314093
+      ],
+      "message": "ABNORMAL: ",
+      "nfev": 126,
+      "nit": 0,
+      "seed_index": 0,
+      "success": false
+    },
+    {
+      "final_normalized": [
+        0.716841962053413,
+        0.534669367477145,
+        0.3245330889189038,
+        0.2202241582319977,
+        0.7392863513712855
+      ],
+      "final_overrides": {
+        "B_T": 10.2,
+        "I_0": 1282.1344949391987,
+        "T_e_in": 4595.0701777202885,
+        "Z_in": 71.35865811216163,
+        "log_n_p_in": 58.7332211351847,
+        "log_seed_fraction": -13.395355932394558
+      },
+      "final_values": [
+        58.7332211351847,
+        4595.0701777202885,
+        71.35865811216163,
+        1282.1344949391987,
+        -13.395355932394558
+      ],
+      "fun": -0.27818356403786204,
+      "initial_normalized": [
+        0.7247899407735382,
+        0.5412268555474342,
+        0.27689120404537076,
+        0.16065200877512703,
+        0.969925413216133
+      ],
+      "message": "ABNORMAL: ",
+      "nfev": 198,
+      "nit": 1,
+      "seed_index": 1,
+      "success": false
+    }
+  ],
+  "solver_config": {
+    "finite_diff_eps": 0.005,
+    "maxfun": 80,
+    "maxiter": 4,
+    "variable_names": [
+      "log_n_p_in",
+      "T_e_in",
+      "Z_in",
+      "I_0",
+      "log_seed_fraction"
+    ]
+  },
+  "variable_names": [
+    "log_n_p_in",
+    "T_e_in",
+    "Z_in",
+    "I_0",
+    "log_seed_fraction"
+  ]
+}
