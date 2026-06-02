@@ -11,7 +11,15 @@ from v6_firedrake_reduced.geometry import LogAreaSplineControl
 from v6_firedrake_reduced.legacy_physics import inlet_design_generic, ops_for_numeric
 from v6_firedrake_reduced.transport import working_fluid_for_config
 
+from .local_affine import ForwardAffineCoefficients, compute_forward_affine_coefficients
 from .numba_physics import closure_state_numba, dynamic_terms_numba, g_boundary_residual_numba
+from .reverse_sign_policy import (
+    build_reverse_sigma_interval,
+    choose_objective_endpoint,
+    classify_endpoint_support,
+    interval_diagnostics,
+    reverse_coefficients_from_forward,
+)
 
 
 @dataclass(frozen=True)
@@ -23,7 +31,7 @@ class PolicySettings:
     start_index: int | None = None
     sigma_min: float = -0.5
     sigma_max: float = 0.5
-    curvature_max: float | None = 0.05
+    curvature_max: float | None = 8.0
     g_floor: float = 0.0
     tp_floor_K: float = 300.0
     scan_points: int = 41
@@ -38,7 +46,7 @@ class PreparationSettings:
     dx: float = 0.01
     sigma_min: float = -0.5
     sigma_max: float = 0.5
-    curvature_max: float | None = 0.05
+    curvature_max: float | None = 8.0
     g_floor: float = 0.0
     tp_floor_K: float = 300.0
     scan_points: int = 41
@@ -473,6 +481,42 @@ def _policy_step(
     config: CaseConfig,
     settings: PolicySettings,
 ) -> dict[str, Any]:
+    if int(direction) == -1 and str(settings.objective) == "delta_drop":
+        return _reverse_sign_policy_step(
+            current=current,
+            seed_next=seed_next,
+            sigma_prev=sigma_prev,
+            warm_start=warm_start,
+            sigma_warm_start=sigma_warm_start,
+            dx=dx,
+            config=config,
+            settings=settings,
+        )
+    return _legacy_policy_step(
+        current=current,
+        seed_next=seed_next,
+        sigma_prev=sigma_prev,
+        warm_start=warm_start,
+        sigma_warm_start=sigma_warm_start,
+        dx=dx,
+        direction=direction,
+        config=config,
+        settings=settings,
+    )
+
+
+def _legacy_policy_step(
+    *,
+    current: State,
+    seed_next: State,
+    sigma_prev: float,
+    warm_start: State | None = None,
+    sigma_warm_start: float | None = None,
+    dx: float,
+    direction: int,
+    config: CaseConfig,
+    settings: PolicySettings,
+) -> dict[str, Any]:
     lo, hi, bound_sources = _sigma_interval(
         current=current,
         sigma_prev=sigma_prev,
@@ -603,6 +647,358 @@ def _policy_step(
         "bound_sources": bound_sources,
         **_eval_public(chosen),
     }
+
+
+def _reverse_sign_policy_step(
+    *,
+    current: State,
+    seed_next: State,
+    sigma_prev: float,
+    warm_start: State | None,
+    sigma_warm_start: float | None,
+    dx: float,
+    config: CaseConfig,
+    settings: PolicySettings,
+) -> dict[str, Any]:
+    step = float(dx)
+    if step <= 0.0:
+        return _invalid_step_payload(
+            current=current,
+            support_type="invalid_reverse_step",
+            error="dx must be positive for reverse sign-aware policy",
+        )
+
+    current_metrics = _closure_metrics(current, config=config)
+    A_current = float(current.area(config))
+    g_margin_current = float(current_metrics["G"] - float(settings.g_floor))
+    tp_margin_current = float(current_metrics["T_p"] - float(settings.tp_floor_K))
+    if not all(np.isfinite(value) for value in [A_current, g_margin_current, tp_margin_current]):
+        return _invalid_step_payload(
+            current=current,
+            support_type="invalid_current_state",
+            error="current closure is not finite",
+        )
+    if A_current <= 0.0:
+        return _invalid_step_payload(
+            current=current,
+            support_type="invalid_current_state",
+            error="current area is not positive",
+        )
+    if g_margin_current < -float(settings.active_tol) or tp_margin_current < -float(settings.active_tol):
+        return {
+            **_invalid_step_payload(
+                current=current,
+                support_type="invalid_current_state",
+                error="current state violates reverse admissibility",
+            ),
+            "G_current": float(current_metrics["G"]),
+            "G_floor": float(settings.g_floor),
+            "G_margin_current": g_margin_current,
+            "T_p_current": float(current_metrics["T_p"]),
+            "T_p_floor": float(settings.tp_floor_K),
+            "T_p_margin_current": tp_margin_current,
+        }
+
+    params = _physics_params(config)
+    try:
+        affine = compute_forward_affine_coefficients(
+            n_p=current.n_p,
+            T_e=current.T_e,
+            A=A_current,
+            logA=current.logA,
+            params=params,
+        )
+    except Exception as exc:
+        return {
+            **_invalid_step_payload(
+                current=current,
+                support_type="local_affine_failed",
+                error=f"local affine coefficient calculation failed: {exc}",
+            ),
+            "G_current": float(current_metrics["G"]),
+            "T_p_current": float(current_metrics["T_p"]),
+        }
+
+    reverse = reverse_coefficients_from_forward(
+        dx=step,
+        G_current=affine.G_current,
+        G_floor=float(settings.g_floor),
+        a0=affine.a0,
+        a1=affine.a1,
+        b0=affine.b0,
+        b1=affine.b1,
+    )
+    interval = build_reverse_sigma_interval(
+        A_current=A_current,
+        logA_current=current.logA,
+        dx=step,
+        sigma_prev=float(sigma_prev),
+        sigma_min=float(settings.sigma_min),
+        sigma_max=float(settings.sigma_max),
+        curvature_max=settings.curvature_max,
+        logA_min=LogAreaSplineControl.lower_bound(),
+        logA_max=LogAreaSplineControl.upper_bound(),
+        q0=reverse.q0,
+        q1=reverse.q1,
+        g_margin_tol=float(settings.active_tol),
+    )
+    base_diagnostics = _sign_aware_base_diagnostics(
+        affine=affine,
+        reverse=reverse,
+        interval=interval,
+        dx=step,
+        settings=settings,
+    )
+    if not interval.ok:
+        return {
+            **_invalid_step_payload(
+                current=current,
+                support_type="empty_reverse_sigma_interval",
+                error=interval.error,
+            ),
+            **base_diagnostics,
+        }
+
+    decision = choose_objective_endpoint(
+        interval=interval,
+        p1=reverse.p1,
+        regularizer_sigma=float(sigma_warm_start if sigma_warm_start is not None else sigma_prev),
+    )
+    initial = warm_start if warm_start is not None else seed_next
+    chosen = _evaluate_sigma(
+        current=current,
+        sigma=float(decision.sigma),
+        dx=step,
+        direction=-1,
+        config=config,
+        settings=settings,
+        initial=initial,
+    )
+    chosen = {**chosen, "solver_method": "sign_aware_reverse_endpoint"}
+    validation_failure = _validation_failure_reason(chosen, settings=settings)
+
+    if validation_failure:
+        g_step = None
+        if str(decision.endpoint_source) in {"G_lower", "G_upper"} or "G" in _constraint_blockers(chosen, settings=settings):
+            g_step = _solve_g_boundary_step(
+                current=current,
+                initial=initial,
+                sigma_initial=float(decision.sigma),
+                lo=float(interval.sigma_lo),
+                hi=float(interval.sigma_hi),
+                dx=step,
+                direction=-1,
+                config=config,
+                settings=settings,
+                preferred=chosen,
+            )
+        if g_step is not None:
+            chosen = {**g_step, "solver_method": "sign_aware_finite_G_boundary"}
+            validation_failure = _validation_failure_reason(chosen, settings=settings)
+        else:
+            fallback = _sign_aware_scan_fallback(
+                current=current,
+                interval=interval,
+                p1=reverse.p1,
+                dx=step,
+                config=config,
+                settings=settings,
+                initial=initial,
+            )
+            if fallback is not None:
+                chosen = fallback
+                validation_failure = _validation_failure_reason(chosen, settings=settings)
+
+    affine_support = classify_endpoint_support(
+        endpoint_source=str(decision.endpoint_source),
+        objective_bound_kind=str(decision.objective_bound_kind),
+        p1=reverse.p1,
+        q1=reverse.q1,
+    )
+    support = affine_support if not validation_failure else "finite_step_validation_failed"
+    finite_diagnostics = _sign_aware_finite_diagnostics(
+        affine=affine,
+        reverse=reverse,
+        chosen=chosen,
+        decision=decision,
+        validation_failure=validation_failure,
+        affine_support=affine_support,
+        settings=settings,
+    )
+    return {
+        "ok": bool(chosen["ok"] and chosen["feasible"] and not validation_failure),
+        "sigma": float(chosen["sigma"]),
+        "next_state": chosen["next_state"],
+        "support_type": support,
+        "affine_support_type": affine_support,
+        "bound_sources": {
+            "lower": str(interval.lower_source),
+            "upper": str(interval.upper_source),
+        },
+        **base_diagnostics,
+        **finite_diagnostics,
+        **_eval_public(chosen),
+    }
+
+
+def _invalid_step_payload(*, current: State, support_type: str, error: str) -> dict[str, Any]:
+    return {
+        "ok": False,
+        "sigma": float("nan"),
+        "next_state": current,
+        "support_type": str(support_type),
+        "error": str(error),
+        "objective_value": float("nan"),
+        "delta_gain": float("nan"),
+        "constraint_margins": {},
+        "boundary_blockers": [],
+        "boundary_bracket_width": float("nan"),
+        "boundary_infeasible_sigma": float("nan"),
+        "boundary_infeasible_margins": {},
+        "solver_method": str(support_type),
+        "max_abs_scaled_residual": float("nan"),
+        "least_squares_nfev": -1,
+    }
+
+
+def _sign_aware_base_diagnostics(
+    *,
+    affine: ForwardAffineCoefficients,
+    reverse,
+    interval,
+    dx: float,
+    settings: PolicySettings,
+) -> dict[str, Any]:
+    return {
+        "a0": float(affine.a0),
+        "a1": float(affine.a1),
+        "b0": float(affine.b0),
+        "b1": float(affine.b1),
+        "p0": float(reverse.p0),
+        "p1": float(reverse.p1),
+        "q0": float(reverse.q0),
+        "q1": float(reverse.q1),
+        "p1q1_reverse": float(reverse.p1q1),
+        "det_D": float(affine.det_D),
+        "A_current": float(affine.A_current),
+        "logA_current": float(affine.logA_current),
+        "dx": float(dx),
+        "sigma_min": float(settings.sigma_min),
+        "sigma_max": float(settings.sigma_max),
+        "G_current": float(affine.G_current),
+        "G_floor": float(settings.g_floor),
+        "G_margin_current": float(affine.G_current - float(settings.g_floor)),
+        "Phi_current": float(affine.phi_current),
+        "T_p_current": float(affine.T_p_current),
+        "T_p_floor": float(settings.tp_floor_K),
+        "T_p_margin_current": float(affine.T_p_current - float(settings.tp_floor_K)),
+        "sonic_branch_used": False,
+        "ellTf0": float("nan"),
+        "ellTf1": float("nan"),
+        "A_prime_sonic": float("nan"),
+        "sigma_sonic": float("nan"),
+        **interval_diagnostics(interval),
+    }
+
+
+def _sign_aware_finite_diagnostics(
+    *,
+    affine: ForwardAffineCoefficients,
+    reverse,
+    chosen: dict[str, Any],
+    decision,
+    validation_failure: str,
+    affine_support: str,
+    settings: PolicySettings,
+) -> dict[str, Any]:
+    sigma_selected = float(chosen.get("sigma", decision.sigma))
+    A_prime = float(affine.A_current * sigma_selected)
+    objective_drop_predicted = float(reverse.p0 + reverse.p1 * A_prime)
+    g_margin_predicted = float(reverse.q0 + reverse.q1 * A_prime)
+    phi_upstream_predicted = float(affine.phi_current - objective_drop_predicted)
+    g_margin_upstream = float(dict(chosen.get("constraint_margins", {})).get("G", float("nan")))
+    tp_margin_upstream = float(dict(chosen.get("constraint_margins", {})).get("Tp", float("nan")))
+    residual_margin = float(dict(chosen.get("constraint_margins", {})).get("residual", float("nan")))
+    return {
+        "sigma_selected": sigma_selected,
+        "A_prime_selected": A_prime,
+        "objective_bound_kind": str(decision.objective_bound_kind),
+        "selected_endpoint_source": str(decision.endpoint_source),
+        "objective_drop_predicted": objective_drop_predicted,
+        "Phi_upstream_predicted": phi_upstream_predicted,
+        "G_margin_upstream_predicted": g_margin_predicted,
+        "G_margin_upstream": g_margin_upstream,
+        "T_p_upstream": float(chosen.get("T_p", float("nan"))),
+        "T_p_margin_upstream": tp_margin_upstream,
+        "residual": float(chosen.get("max_abs_scaled_residual", float("nan"))),
+        "residual_margin": residual_margin,
+        "validation_status": "ok" if not validation_failure else "failed",
+        "validation_failure_reason": str(validation_failure),
+        "affine_support_type": str(affine_support),
+        "finite_step_solver_method": str(chosen.get("solver_method", "")),
+        "G_limiter_sign_opposes_objective": bool(float(reverse.p1q1) < 0.0),
+    }
+
+
+def _validation_failure_reason(item: dict[str, Any], *, settings: PolicySettings) -> str:
+    blockers = _constraint_blockers(item, settings=settings)
+    if blockers:
+        return ",".join(blockers)
+    if not bool(item.get("feasible", False)):
+        return "infeasible"
+    return ""
+
+
+def _sign_aware_scan_fallback(
+    *,
+    current: State,
+    interval,
+    p1: float,
+    dx: float,
+    config: CaseConfig,
+    settings: PolicySettings,
+    initial: State,
+) -> dict[str, Any] | None:
+    scan = []
+    lo = float(interval.sigma_lo)
+    hi = float(interval.sigma_hi)
+    for sigma in np.linspace(lo, hi, max(int(settings.scan_points), 3)):
+        scan.append(
+            _evaluate_sigma(
+                current=current,
+                sigma=float(sigma),
+                dx=dx,
+                direction=-1,
+                config=config,
+                settings=settings,
+                initial=initial,
+            )
+        )
+    feasible = [item for item in scan if bool(item.get("feasible", False))]
+    if not feasible:
+        if not scan:
+            return None
+        best_failed = min(scan, key=lambda item: float(item.get("constraint_violation", 1e300)))
+        return {**best_failed, "solver_method": "sign_aware_scan_no_feasible_sigma"}
+
+    if float(p1) >= 0.0:
+        chosen = max(feasible, key=lambda item: float(item["sigma"]))
+        neighbor = _first_infeasible_neighbor(scan, chosen_sigma=float(chosen["sigma"]), side="upper")
+    else:
+        chosen = min(feasible, key=lambda item: float(item["sigma"]))
+        neighbor = _first_infeasible_neighbor(scan, chosen_sigma=float(chosen["sigma"]), side="lower")
+    if neighbor is not None:
+        chosen = _refine_boundary(
+            feasible_eval=chosen,
+            infeasible_eval=neighbor,
+            current=current,
+            dx=dx,
+            direction=-1,
+            config=config,
+            settings=settings,
+            initial=chosen["next_state"],
+        )
+    return {**chosen, "solver_method": "sign_aware_scan_backtrack"}
 
 
 def _direct_boundary_choice(
@@ -753,6 +1149,7 @@ def _solve_g_boundary_step(
     )
     lower = np.array([-np.inf, np.log(1.0), float(lo)], dtype=float)
     upper = np.array([np.inf, np.inf, float(hi)], dtype=float)
+
     sol = least_squares(
         residual,
         guess,
@@ -763,50 +1160,54 @@ def _solve_g_boundary_step(
         max_nfev=max(20, int(settings.refine_iterations) + 8),
         x_scale=np.array([1.0, 1.0, max(abs(float(hi) - float(lo)), 1e-3)], dtype=float),
     )
-    r = residual(sol.x)
-    if not bool(sol.success):
-        return None
-    if float(np.max(np.abs(r))) > 1e-5:
-        return None
-    sigma = float(sol.x[2])
-    if sigma < float(lo) - float(settings.active_tol) or sigma > float(hi) + float(settings.active_tol):
-        return None
 
-    logA_next = float(current.logA + dx_signed * sigma)
-    next_state = State(log_n=float(sol.x[0]), log_Te=float(sol.x[1]), logA=logA_next)
-    metrics = _closure_metrics(next_state, config=config)
-    current_delta = _closure_metrics(current, config=config)["Delta"]
-    delta_gain = float(metrics["Delta"] - current_delta)
-    objective_value = -delta_gain if settings.objective == "delta_drop" else delta_gain
-    max_abs_scaled_residual = float(max(abs(float(r[0])), abs(float(r[1]))))
-    margins = {
-        "G": float(metrics["G"] - float(settings.g_floor)),
-        "Tp": float(metrics["T_p"] - float(settings.tp_floor_K)),
-        "residual": float(settings.residual_tol - max_abs_scaled_residual),
-    }
-    feasible = bool(all(value >= -float(settings.active_tol) for value in margins.values()))
-    if not feasible:
-        return None
-    return {
-        "ok": True,
-        "residual_ok": bool(max_abs_scaled_residual <= 1e-7),
-        "feasible": True,
-        "sigma": sigma,
-        "next_state": next_state,
-        "objective_value": float(objective_value),
-        "delta_gain": delta_gain,
-        "constraint_margins": margins,
-        "constraint_violation": 0.0,
-        "max_abs_scaled_residual": max_abs_scaled_residual,
-        "least_squares_cost": float(sol.cost),
-        "least_squares_nfev": int(sol.nfev),
-        "boundary_blockers": ["G"],
-        "boundary_bracket_width": abs(float(preferred["sigma"]) - sigma),
-        "boundary_infeasible_sigma": float(preferred["sigma"]),
-        "boundary_infeasible_margins": dict(preferred.get("constraint_margins", {})),
-        "solver_method": "least_squares_G_boundary",
-        **metrics,
-    }
+    def result_from_solution(sol) -> dict[str, Any] | None:
+        r = residual(sol.x)
+        if not bool(sol.success):
+            return None
+        if float(np.max(np.abs(r))) > 1e-5:
+            return None
+        sigma = float(sol.x[2])
+        if sigma < float(lo) - float(settings.active_tol) or sigma > float(hi) + float(settings.active_tol):
+            return None
+
+        logA_next = float(current.logA + dx_signed * sigma)
+        next_state = State(log_n=float(sol.x[0]), log_Te=float(sol.x[1]), logA=logA_next)
+        metrics = _closure_metrics(next_state, config=config)
+        current_delta = _closure_metrics(current, config=config)["Delta"]
+        delta_gain = float(metrics["Delta"] - current_delta)
+        objective_value = -delta_gain if settings.objective == "delta_drop" else delta_gain
+        max_abs_scaled_residual = float(max(abs(float(r[0])), abs(float(r[1]))))
+        margins = {
+            "G": float(metrics["G"] - float(settings.g_floor)),
+            "Tp": float(metrics["T_p"] - float(settings.tp_floor_K)),
+            "residual": float(settings.residual_tol - max_abs_scaled_residual),
+        }
+        feasible = bool(all(value >= -float(settings.active_tol) for value in margins.values()))
+        if not feasible:
+            return None
+        return {
+            "ok": True,
+            "residual_ok": bool(max_abs_scaled_residual <= 1e-7),
+            "feasible": True,
+            "sigma": sigma,
+            "next_state": next_state,
+            "objective_value": float(objective_value),
+            "delta_gain": delta_gain,
+            "constraint_margins": margins,
+            "constraint_violation": 0.0,
+            "max_abs_scaled_residual": max_abs_scaled_residual,
+            "least_squares_cost": float(sol.cost),
+            "least_squares_nfev": int(sol.nfev),
+            "boundary_blockers": ["G"],
+            "boundary_bracket_width": abs(float(preferred["sigma"]) - sigma),
+            "boundary_infeasible_sigma": float(preferred["sigma"]),
+            "boundary_infeasible_margins": dict(preferred.get("constraint_margins", {})),
+            "solver_method": "least_squares_G_boundary",
+            **metrics,
+        }
+
+    return result_from_solution(sol)
 
 
 def _evaluate_sigma(
@@ -1194,7 +1595,11 @@ def _active_summary(*, nodes: list[dict[str, Any]], segments: list[dict[str, Any
         "G_min_excluding_anchor": float(min(float(node["G"]) for node in nodes[1:])) if len(nodes) > 1 else None,
         "Tp_min_excluding_anchor_K": float(min(float(node["T_p"]) for node in nodes[1:])) if len(nodes) > 1 else None,
         "max_abs_scaled_residual": float(max(float(seg["max_abs_scaled_residual"]) for seg in segments)) if segments else 0.0,
-        "G_active_count_excluding_anchor": int(support_counts.get("G_supported", 0)),
+        "G_active_count_excluding_anchor": int(
+            support_counts.get("G_supported", 0)
+            + support_counts.get("G_limited_reverse", 0)
+            + support_counts.get("G_flat_reverse", 0)
+        ),
         "G_margin_near_count_excluding_anchor": g_margin_near_count,
         "Tp_floor_active_count_excluding_anchor": int(support_counts.get("Tp_floor_supported", 0)),
         "Tp_floor_margin_near_count_excluding_anchor": tp_margin_near_count,

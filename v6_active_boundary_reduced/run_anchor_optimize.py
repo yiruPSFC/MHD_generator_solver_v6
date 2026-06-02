@@ -209,7 +209,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--n-steps", type=int, default=60)
     parser.add_argument("--sigma-min", type=float, default=-0.5)
     parser.add_argument("--sigma-max", type=float, default=0.5)
-    parser.add_argument("--curvature-max", type=float, default=0.05)
+    parser.add_argument("--curvature-max", type=float, default=8.0)
     parser.add_argument("--no-curvature-bound", action="store_true")
     parser.add_argument("--g-floor", type=float, default=0.0)
     parser.add_argument("--tp-floor", type=float, default=300.0)

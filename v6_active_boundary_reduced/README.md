@@ -68,6 +68,34 @@ Example Freidberg-inlet preparation recovery:
   --out-dir outputs/preparation_recovery_freidberg_inlet
 ```
 
+## Sonic-compatible local profile
+
+Near `M=1`, the primitive momentum/energy matrix becomes singular.  The
+sonic-aware local profile therefore does not divide through that matrix.  At
+the sonic node it computes the left-null compatibility condition
+
+```text
+ell^T (f0 + A * sigma_* * f1) = 0
+```
+
+and locks `sigma_* = dlogA/dx` there.  It then takes trapezoidal `sigma` steps
+away from the sonic node, solves the same primitive finite-step residuals, and
+selects the admissible root with the steepest requested `Delta = Te/Tp - 1`
+change while preserving `G >= G_floor`.
+
+Example:
+
+```bash
+./.venv_jit/bin/python -m v6_active_boundary_reduced.run_sonic_delta_profile \
+  --case freidberg_reference \
+  --dx 1e-5 \
+  --n-steps-each-side 60 \
+  --scan-points 15 \
+  --objective pedal \
+  --selection-mode steepest \
+  --out-dir outputs/active_boundary_sonic_delta_profile
+```
+
 ## Anchor-design scan and optimization
 
 The optimization layer uses the same design vocabulary as
