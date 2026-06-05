@@ -64,7 +64,90 @@ def test_primitive_sonic_compatibility_uses_primitive_left_null_condition() -> N
     assert abs(float(check["compatibility_scaled_residual"])) <= 1.0e-10
 
 
+def test_main_policy_uses_explicit_sonic_branch_near_choking() -> None:
+    config = load_case_config(case="freidberg_reference")
+    payload = build_sonic_delta_profile(
+        config=config,
+        settings=SonicDeltaSettings(
+            dx=1.0e-4,
+            n_steps_each_side=0,
+            scan_points=5,
+        ),
+    )
+    node = dict(payload["nodes"][0])
+    sonic = dict(payload["sonic_primitive_compatibility"])
+
+    from v6_active_boundary_reduced.policy import AnchorState, PolicySettings, State, rollout_policy_from_anchor
+
+    anchor_state = State(
+        log_n=float(node["log_n"]),
+        log_Te=float(node["log_Te"]),
+        logA=float(node["logA"]),
+    )
+    result = rollout_policy_from_anchor(
+        config=config,
+        anchor=AnchorState(
+            state=anchor_state,
+            sigma_logA=float(sonic["sigma_sonic"]),
+            source="sonic_delta_profile_test",
+            source_index=-1,
+        ),
+        settings=PolicySettings(
+            direction="reverse",
+            objective="delta_drop",
+            n_steps=1,
+            sigma_min=-2.0,
+            sigma_max=2.0,
+            curvature_max=None,
+            sonic_mode="on",
+        ),
+        dx=1.0e-4,
+    )
+
+    assert result["ok"]
+    segment = dict(result["segments"][0])
+    assert bool(segment["sonic_branch_used"])
+    assert segment["solver_method"] == "sonic_left_null_explicit_A_prime"
+    assert segment["support_type"] == "sonic_compatible_left_null"
+    assert abs(float(segment["sigma"]) - float(sonic["sigma_sonic"])) <= 1.0e-12
+    assert float(segment["delta_gain"]) < 0.0
+    assert float(segment["constraint_margins"]["G"]) >= -1.0e-6
+
+
+def test_branch_agnostic_pedal_mode_does_not_force_mach_side() -> None:
+    config = load_case_config(case="freidberg_reference")
+    payload = build_sonic_delta_profile(
+        config=config,
+        settings=SonicDeltaSettings(
+            dx=1.0e-5,
+            n_steps_each_side=1,
+            scan_points=15,
+            objective="pedal",
+            selection_mode="steepest",
+            branch_mode="agnostic",
+        ),
+    )
+
+    assert payload["ok"]
+    summary = dict(payload["active_summary"])
+    assert summary["branch_mode"] == "agnostic"
+    assert int(summary["reverse_direction_violation_count"]) == 0
+    assert int(summary["forward_direction_violation_count"]) == 0
+
+    segments = list(payload["segments"])
+    reverse_step = next(item for item in segments if float(item["x_next"]) < float(item["x_current"]))
+    forward_step = next(item for item in segments if float(item["x_next"]) > float(item["x_current"]))
+    assert float(reverse_step["delta_change"]) < 0.0
+    assert float(forward_step["delta_change"]) > 0.0
+    assert reverse_step["selected_mach_branch"] == "subsonic"
+    assert forward_step["selected_mach_branch"] == "supersonic"
+    assert not bool(reverse_step["branch_filter_enabled"])
+    assert not bool(forward_step["branch_filter_enabled"])
+
+
 if __name__ == "__main__":
     test_sonic_delta_profile_crosses_mach_one_with_g_admissible_nodes()
     test_primitive_sonic_compatibility_uses_primitive_left_null_condition()
+    test_main_policy_uses_explicit_sonic_branch_near_choking()
+    test_branch_agnostic_pedal_mode_does_not_force_mach_side()
     print("sonic delta profile smoke passed")

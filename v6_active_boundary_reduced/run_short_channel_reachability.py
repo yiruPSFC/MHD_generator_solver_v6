@@ -62,6 +62,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--refine-iterations", type=int, default=24)
     parser.add_argument("--active-tol", type=float, default=1e-6)
     parser.add_argument("--residual-tol", type=float, default=1e-8)
+    parser.add_argument("--step-backend", choices=("implicit_be", "rk4"), default="implicit_be")
+    parser.add_argument("--rk4-substeps", type=int, default=1)
+    parser.add_argument("--rk4-error-tol", type=float, default=1.0e-6)
     parser.add_argument("--write-diagnostics", action="store_true")
     return parser
 
@@ -84,6 +87,9 @@ def _settings_for_length(args: argparse.Namespace, *, length: float) -> Preparat
         refine_iterations=int(args.refine_iterations),
         active_tol=float(args.active_tol),
         residual_tol=float(args.residual_tol),
+        step_backend=str(args.step_backend),
+        rk4_substeps=int(args.rk4_substeps),
+        rk4_error_tol=float(args.rk4_error_tol),
     )
 
 

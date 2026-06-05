@@ -82,6 +82,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--residual-tol", type=float, default=1.0e-6)
     parser.add_argument("--active-tol", type=float, default=1.0e-7)
     parser.add_argument("--branch-mach-tol", type=float, default=1.0e-7)
+    parser.add_argument("--branch-mode", choices=("fixed", "agnostic"), default="fixed")
     parser.add_argument("--objective", choices=("pedal", "abs", "drop", "rise"), default="pedal")
     parser.add_argument("--selection-mode", choices=("continuation", "steepest"), default="continuation")
     parser.add_argument("--target-mach-slope", type=float, default=20.0)
@@ -105,6 +106,7 @@ def main(argv: list[str] | None = None) -> int:
         residual_tol=float(args.residual_tol),
         active_tol=float(args.active_tol),
         branch_mach_tol=float(args.branch_mach_tol),
+        branch_mode=str(args.branch_mode),
         objective=str(args.objective),
         selection_mode=str(args.selection_mode),
         target_mach_slope_1_per_m=float(args.target_mach_slope),

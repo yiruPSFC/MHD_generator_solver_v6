@@ -123,6 +123,14 @@ def _settings_from_args(args: argparse.Namespace) -> PreparationSettings:
         refine_iterations=int(args.refine_iterations),
         active_tol=float(args.active_tol),
         residual_tol=float(args.residual_tol),
+        sonic_mode=str(args.sonic_mode),
+        sonic_mach_tol=float(args.sonic_mach_tol),
+        sonic_det_abs_tol=float(args.sonic_det_abs_tol),
+        sonic_compatibility_tol=float(args.sonic_compatibility_tol),
+        sonic_residual_tol=float(args.sonic_residual_tol),
+        step_backend=str(args.step_backend),
+        rk4_substeps=int(args.rk4_substeps),
+        rk4_error_tol=float(args.rk4_error_tol),
     )
 
 
@@ -160,6 +168,14 @@ def _refined_settings_from_args(args: argparse.Namespace, coarse: PreparationSet
         refine_iterations=int(coarse.refine_iterations),
         active_tol=float(coarse.active_tol),
         residual_tol=float(coarse.residual_tol),
+        sonic_mode=str(coarse.sonic_mode),
+        sonic_mach_tol=float(coarse.sonic_mach_tol),
+        sonic_det_abs_tol=float(coarse.sonic_det_abs_tol),
+        sonic_compatibility_tol=float(coarse.sonic_compatibility_tol),
+        sonic_residual_tol=float(coarse.sonic_residual_tol),
+        step_backend=str(coarse.step_backend),
+        rk4_substeps=int(coarse.rk4_substeps),
+        rk4_error_tol=float(coarse.rk4_error_tol),
     )
 
 
@@ -293,6 +309,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--refine-iterations", type=int, default=24)
     parser.add_argument("--active-tol", type=float, default=1e-6)
     parser.add_argument("--residual-tol", type=float, default=1e-8)
+    parser.add_argument("--sonic-mode", choices=("auto", "off", "on"), default="auto")
+    parser.add_argument("--sonic-mach-tol", type=float, default=1.0e-3)
+    parser.add_argument("--sonic-det-abs-tol", type=float, default=1.0e-2)
+    parser.add_argument("--sonic-compatibility-tol", type=float, default=1.0e-7)
+    parser.add_argument("--sonic-residual-tol", type=float, default=1.0e-6)
+    parser.add_argument("--step-backend", choices=("implicit_be", "rk4"), default="implicit_be")
+    parser.add_argument("--rk4-substeps", type=int, default=1)
+    parser.add_argument("--rk4-error-tol", type=float, default=1.0e-6)
     parser.add_argument("--anchor-x", type=float, default=0.0)
     parser.add_argument("--anchor-logA", type=float, default=0.0)
     parser.add_argument(

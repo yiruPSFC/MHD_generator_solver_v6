@@ -96,6 +96,22 @@ Example:
   --out-dir outputs/active_boundary_sonic_delta_profile
 ```
 
+The same choking behavior is now wired into the main reverse preparation
+policy.  For reverse `delta_drop` steps, `sonic_mode=auto` switches from the
+ordinary sign-aware affine endpoint to the primitive left-null solve when the
+current state is near `M=1` or has small `det_D`.  In that branch the area pedal
+is no longer scanned as a free interval; it is set by
+
+```text
+A_prime_sonic = - ell^T f0 / ell^T f1
+sigma_sonic = A_prime_sonic / A
+```
+
+and the finite step is then accepted only if the usual residual, `G`, and
+`T_p` checks pass.  The relevant settings, exposed on the rollout/scan/outer
+optimizer CLIs as matching dashed flags, are `sonic_mode`, `sonic_mach_tol`,
+`sonic_det_abs_tol`, `sonic_compatibility_tol`, and `sonic_residual_tol`.
+
 ## Anchor-design scan and optimization
 
 The optimization layer uses the same design vocabulary as
@@ -178,3 +194,59 @@ Early-stage SciPy optimization:
   --popsize 6 \
   --out-dir outputs/anchor_optimize_example
 ```
+
+## Outer L-BFGS-B reduced-model optimizer
+
+The outer reduced-model optimizer lives under `outer_solver/`.  It optimizes
+the five primary inlet/anchor controls
+
+```text
+log_n_p_in, T_e_in, Z_in, I_0, log_seed_fraction
+```
+
+where `log_n_p_in` is the internal representation of physical `np_in`.  The
+CLI accepts `--bound np_in ...` or `--bound n_p_in ...` and log-transforms the
+range.  `B_T` is fixed by default and can be set with `--fixed B_T VALUE`.
+
+The prescreening stage samples candidates and keeps states with non-negative
+`G`, low anchor `T_e/T_p`, and positive local `d(T_e/T_p)/dx` near the anchor.
+The selected seeds are not handed directly to SciPy.  Each seed is first
+certified with normalized `+/- --neighborhood-eps` perturbations in every
+control direction.  `L-BFGS-B` only runs from seeds whose whole local
+neighborhood completes the rollout.  The final `best` is also chosen only from
+top feasible evaluations that pass the same neighborhood certification.
+
+This keeps accept/fail boundary probes out of the final optimizer result:
+`best_seen_uncertified` records the highest feasible point encountered during
+raw function evaluation, while `best` is reserved for a locally robust feasible
+profile.  If no robust seed exists, the run writes diagnostics and skips
+`L-BFGS-B` by default.
+
+Example:
+
+```bash
+./.venv_jit/bin/python -m v6_active_boundary_reduced.outer_solver.lbfgsb \
+  --case yamasaki2004 \
+  --dx 0.01 \
+  --n-steps 60 \
+  --bound np_in 2.0e25 5.0e25 \
+  --bound T_e_in 5000 7000 \
+  --bound Z_in 70 110 \
+  --bound I_0 1000 1800 \
+  --bound log_seed_fraction -13.8 -9.2 \
+  --fixed B_T 12.0 \
+  --prescreen-candidates 128 \
+  --prescreen-top-k 8 \
+  --neighborhood-eps 0.001 \
+  --certify-top-k 8 \
+  --maxiter 24 \
+  --out-dir outputs/active_boundary_outer_lbfgsb_example
+```
+
+Use `--allow-nonrobust-lbfgsb` only for diagnostics.  That option still requires
+post-run neighborhood certification before a point appears as `best`.
+
+The reward is a soft-penalty objective built from the active-boundary rollout:
+`Delta` improvement, magnetic-field range, `Amax/Amin` range, too-low minimum
+`T_p`, too-high maximum `T_e`, `G` shortfall, choking/Mach excess, and incomplete
+rollout penalties.

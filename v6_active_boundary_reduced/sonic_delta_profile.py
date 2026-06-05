@@ -26,6 +26,7 @@ class SonicDeltaSettings:
     residual_tol: float = 1.0e-6
     active_tol: float = 1.0e-7
     branch_mach_tol: float = 1.0e-7
+    branch_mode: str = "fixed"
     objective: str = "pedal"
     selection_mode: str = "continuation"
     target_mach_slope_1_per_m: float = 20.0
@@ -65,13 +66,17 @@ def build_sonic_delta_profile(
         config=config,
     )
 
+    branch_mode = _branch_mode(opts)
+    left_branch = "agnostic" if branch_mode == "agnostic" else "supersonic"
+    right_branch = "agnostic" if branch_mode == "agnostic" else "subsonic"
+
     left_nodes, left_segments = _march_side(
         config=config,
         settings=opts,
         start=sonic_state,
         sigma_start=sigma_star,
         direction=-1,
-        branch="supersonic",
+        branch=left_branch,
         side="left",
     )
     right_nodes, right_segments = _march_side(
@@ -80,7 +85,7 @@ def build_sonic_delta_profile(
         start=sonic_state,
         sigma_start=sigma_star,
         direction=1,
-        branch="subsonic",
+        branch=right_branch,
         side="right",
     )
 
@@ -94,10 +99,11 @@ def build_sonic_delta_profile(
     mach_values = np.asarray([float(node["mach"]) for node in nodes], dtype=float)
     g_margins = np.asarray([float(node["G"]) - float(opts.g_floor) for node in nodes], dtype=float)
     delta_values = np.asarray([float(node["Delta"]) for node in nodes], dtype=float)
+    mach_crosses_sonic = bool(np.nanmin(mach_values) < 1.0 and np.nanmax(mach_values) > 1.0)
+    direction_violations = _direction_violation_counts(segments=segments, active_tol=float(opts.active_tol))
     ok = bool(
         len(nodes) >= 3
-        and np.nanmin(mach_values) < 1.0
-        and np.nanmax(mach_values) > 1.0
+        and (branch_mode == "agnostic" or mach_crosses_sonic)
         and np.nanmin(g_margins) >= -float(opts.active_tol)
         and all(bool(segment.get("ok", False)) for segment in segments)
     )
@@ -124,6 +130,9 @@ def build_sonic_delta_profile(
             "sonic_G": float(sonic_metrics["G"]),
             "sonic_Delta": float(sonic_metrics["Delta"]),
             "selection_mode": str(opts.selection_mode),
+            "branch_mode": branch_mode,
+            "mach_crosses_sonic": mach_crosses_sonic,
+            **direction_violations,
         },
         "nodes": nodes,
         "segments": segments,
@@ -293,8 +302,9 @@ def _select_step(
             )
         )
     feasible = [item for item in candidates if bool(item["feasible"])]
+    branch_filter_enabled = bool(_branch_mode(settings) == "fixed" and str(branch) in {"subsonic", "supersonic"})
     branched = [item for item in feasible if _branch_ok(float(item["mach"]), branch=branch, settings=settings)]
-    selectable = branched if branched else feasible
+    selectable = (branched if branched else feasible) if branch_filter_enabled else feasible
     if not selectable:
         best_failed = min(candidates, key=lambda item: float(item.get("constraint_violation", 1.0e300)), default=None)
         return {
@@ -310,7 +320,8 @@ def _select_step(
             "candidate_count": int(len(candidates)),
             "feasible_candidate_count": int(len(feasible)),
             "branch_candidate_count": int(len(branched)),
-            "error": "no root satisfied residual, G/Tp, and branch constraints",
+            "branch_filter_enabled": branch_filter_enabled,
+            "error": "no root satisfied residual and active constraints",
             "best_failed": _candidate_public(best_failed) if best_failed is not None else {},
         }
     steepest = max(selectable, key=lambda item: _objective_score(item, settings=settings, direction=direction))
@@ -331,6 +342,7 @@ def _select_step(
     else:
         raise ValueError("selection_mode must be continuation or steepest.")
     branch_selected = bool(_branch_ok(float(selected["mach"]), branch=branch, settings=settings))
+    selected_mach_branch = _mach_branch(float(selected["mach"]), settings=settings)
     return {
         "ok": True,
         "side": side,
@@ -346,7 +358,9 @@ def _select_step(
         "candidate_count": int(len(candidates)),
         "feasible_candidate_count": int(len(feasible)),
         "branch_candidate_count": int(len(branched)),
+        "branch_filter_enabled": branch_filter_enabled,
         "branch_selected": branch_selected,
+        "selected_mach_branch": selected_mach_branch,
         "objective": str(settings.objective),
         "objective_score": float(_objective_score(selected, settings=settings, direction=direction)),
         "steepest_candidate": _candidate_public(steepest),
@@ -504,11 +518,12 @@ def _initial_guesses(
     branch: str,
 ) -> list[State]:
     logA_next = float(current.logA + float(direction) * float(dx) * 0.5 * (float(sigma_current) + float(sigma_next)))
-    sign = -1.0 if str(branch) == "supersonic" else 1.0
     pairs = [(0.0, 0.0)]
-    for magnitude in (1.0e-6, 1.0e-4, 1.0e-3, 5.0e-3, 1.0e-2):
-        pairs.append((sign * magnitude, -sign * magnitude))
-        pairs.append((-sign * magnitude, sign * magnitude))
+    signs = (-1.0, 1.0) if str(branch) == "agnostic" else (-1.0 if str(branch) == "supersonic" else 1.0,)
+    for sign in signs:
+        for magnitude in (1.0e-6, 1.0e-4, 1.0e-3, 5.0e-3, 1.0e-2):
+            pairs.append((sign * magnitude, -sign * magnitude))
+            pairs.append((-sign * magnitude, sign * magnitude))
     for magnitude in (1.0e-3, 5.0e-3):
         pairs.extend(
             [
@@ -536,6 +551,22 @@ def _branch_ok(mach: float, *, branch: str, settings: SonicDeltaSettings) -> boo
     if str(branch) == "supersonic":
         return float(mach) >= 1.0 + tol
     return True
+
+
+def _branch_mode(settings: SonicDeltaSettings) -> str:
+    mode = str(settings.branch_mode).strip().lower()
+    if mode not in {"fixed", "agnostic"}:
+        raise ValueError("branch_mode must be fixed or agnostic.")
+    return mode
+
+
+def _mach_branch(mach: float, *, settings: SonicDeltaSettings) -> str:
+    tol = float(settings.branch_mach_tol)
+    if float(mach) <= 1.0 - tol:
+        return "subsonic"
+    if float(mach) >= 1.0 + tol:
+        return "supersonic"
+    return "sonic_near"
 
 
 def _objective_score(item: dict[str, Any], *, settings: SonicDeltaSettings, direction: int = 0) -> float:
@@ -566,13 +597,16 @@ def _continuation_score(
     settings: SonicDeltaSettings,
 ) -> float:
     next_state = item["next_state"]
-    branch_sign = -1.0 if str(branch) == "subsonic" else 1.0
-    target_offset = min(
-        float(settings.target_mach_offset_max),
-        max(float(settings.branch_mach_tol) * 10.0, abs(float(x_next)) * float(settings.target_mach_slope_1_per_m)),
-    )
-    target_mach = 1.0 + branch_sign * target_offset
-    mach_penalty = abs(float(item["mach"]) - target_mach)
+    if str(branch) == "agnostic":
+        mach_penalty = abs(float(item["mach"]) - 1.0)
+    else:
+        branch_sign = -1.0 if str(branch) == "subsonic" else 1.0
+        target_offset = min(
+            float(settings.target_mach_offset_max),
+            max(float(settings.branch_mach_tol) * 10.0, abs(float(x_next)) * float(settings.target_mach_slope_1_per_m)),
+        )
+        target_mach = 1.0 + branch_sign * target_offset
+        mach_penalty = abs(float(item["mach"]) - target_mach)
     sigma_penalty = 0.1 * abs(float(item["sigma_next"]) - float(sigma_current))
     state_penalty = 2.0 * float(
         np.hypot(
@@ -581,6 +615,25 @@ def _continuation_score(
         )
     )
     return -float(mach_penalty + sigma_penalty + state_penalty)
+
+
+def _direction_violation_counts(*, segments: list[dict[str, Any]], active_tol: float) -> dict[str, int]:
+    reverse_bad = 0
+    forward_bad = 0
+    for segment in segments:
+        if not bool(segment.get("ok", False)):
+            continue
+        change = float(segment["delta_change"])
+        x_current = float(segment["x_current"])
+        x_next = float(segment["x_next"])
+        if x_next < x_current and change > float(active_tol):
+            reverse_bad += 1
+        elif x_next > x_current and change < -float(active_tol):
+            forward_bad += 1
+    return {
+        "reverse_direction_violation_count": int(reverse_bad),
+        "forward_direction_violation_count": int(forward_bad),
+    }
 
 
 def _candidate_public(item: dict[str, Any] | None) -> dict[str, Any]:

@@ -198,6 +198,14 @@ def _score_rollout(
     target_tp_margin = float(outlet["T_p"]) - tp_floor
     target_ok = bool(target_g_margin >= -active_tol and target_tp_margin >= -active_tol)
     rollout_ok = bool(payload.get("ok", False)) and target_ok
+    failure_diagnostics = _failure_diagnostics(
+        payload_ok=bool(payload.get("ok", False)),
+        target_ok=target_ok,
+        active_summary=active_summary,
+        target_g_margin=target_g_margin,
+        target_tp_margin=target_tp_margin,
+        active_tol=active_tol,
+    )
     failure_reason = failure
     if failure_reason is None and not target_ok:
         failure_reason = (
@@ -205,7 +213,7 @@ def _score_rollout(
             f"G_margin={target_g_margin:.6g}, Tp_margin={target_tp_margin:.6g}"
         )
     if failure_reason is None and not bool(payload.get("ok", False)):
-        failure_reason = "reverse_rollout_failed"
+        failure_reason = _rollout_failure_message(failure_diagnostics)
     failure_penalty = 0.0 if rollout_ok else float(weights.failure_penalty)
     raw_score = float(weights.delta_improvement) * delta_improvement
     raw_score -= inlet_delta_penalty + te_shortfall_penalty + tp_shortfall_penalty
@@ -215,6 +223,7 @@ def _score_rollout(
         "ok": rollout_ok,
         "score": float(score),
         "failure": failure_reason,
+        "failure_diagnostics": failure_diagnostics,
         "elapsed_s": float(elapsed_s),
         "design": design.to_dict(),
         "search_variables": {name: float(getattr(design, name)) for name in SEARCH_DESIGN_VARIABLE_NAMES},
@@ -240,6 +249,96 @@ def _score_rollout(
     }
 
 
+def _failure_diagnostics(
+    *,
+    payload_ok: bool,
+    target_ok: bool,
+    active_summary: dict[str, Any],
+    target_g_margin: float,
+    target_tp_margin: float,
+    active_tol: float,
+) -> dict[str, Any]:
+    if bool(payload_ok) and bool(target_ok):
+        return {}
+    termination = dict(active_summary.get("termination", {}) or {})
+    margins = dict(termination.get("constraint_margins", {}) or {})
+    primary_blockers = [
+        str(name) for name, value in margins.items() if float(value) < -float(active_tol)
+    ]
+    if not target_ok:
+        if float(target_g_margin) < -float(active_tol):
+            primary_blockers.append("target_G")
+        if float(target_tp_margin) < -float(active_tol):
+            primary_blockers.append("target_Tp")
+    if not primary_blockers and not bool(termination.get("ok", bool(payload_ok))):
+        reason = str(termination.get("reason") or termination.get("support_type") or "rollout")
+        primary_blockers.append(reason)
+
+    scan_diagnostics = dict(termination.get("scan_diagnostics", {}) or {})
+    best_residual = dict(scan_diagnostics.get("best_residual", {}) or {})
+    best_violation = dict(scan_diagnostics.get("best_violation", {}) or {})
+    return {
+        "kind": "target_anchor" if not target_ok else "rollout",
+        "primary_blockers": sorted(set(primary_blockers)),
+        "termination_reason": termination.get("reason"),
+        "termination_error": termination.get("error"),
+        "failed_step": termination.get("step"),
+        "support_type": termination.get("support_type"),
+        "solver_method": termination.get("solver_method"),
+        "sigma": termination.get("sigma"),
+        "sigma_interval_lower": termination.get("sigma_interval_lower"),
+        "sigma_interval_upper": termination.get("sigma_interval_upper"),
+        "constraint_margins": margins,
+        "max_abs_scaled_residual": termination.get("max_abs_scaled_residual"),
+        "least_squares_nfev": termination.get("least_squares_nfev"),
+        "reverse_interval_error": termination.get("reverse_interval_error"),
+        "reverse_interval_conflict": termination.get("reverse_interval_conflict"),
+        "reverse_interval_conflict_kind": termination.get("reverse_interval_conflict_kind"),
+        "reverse_interval_conflict_summary": termination.get("reverse_interval_conflict_summary"),
+        "reverse_interval_conflict_lower_source": termination.get("reverse_interval_conflict_lower_source"),
+        "reverse_interval_conflict_upper_source": termination.get("reverse_interval_conflict_upper_source"),
+        "reverse_interval_conflict_sigma_lower": termination.get("reverse_interval_conflict_sigma_lower"),
+        "reverse_interval_conflict_sigma_upper": termination.get("reverse_interval_conflict_sigma_upper"),
+        "reverse_interval_conflict_sigma_gap": termination.get("reverse_interval_conflict_sigma_gap"),
+        "reverse_interval_conflict_Aprime_lower": termination.get("reverse_interval_conflict_Aprime_lower"),
+        "reverse_interval_conflict_Aprime_upper": termination.get("reverse_interval_conflict_Aprime_upper"),
+        "reverse_interval_conflict_Aprime_gap": termination.get("reverse_interval_conflict_Aprime_gap"),
+        "scan_feasible_count": scan_diagnostics.get("feasible_count"),
+        "scan_n": scan_diagnostics.get("n_scan"),
+        "best_residual": best_residual,
+        "best_violation": best_violation,
+        "target_g_margin": float(target_g_margin),
+        "target_tp_margin": float(target_tp_margin),
+    }
+
+
+def _rollout_failure_message(diagnostics: dict[str, Any]) -> str:
+    if not diagnostics:
+        return "reverse_rollout_failed"
+    blockers = ",".join(str(item) for item in diagnostics.get("primary_blockers", []) or [])
+    pieces = [
+        "reverse_rollout_failed",
+        f"step={diagnostics.get('failed_step')}",
+        f"reason={diagnostics.get('termination_reason')}",
+        f"blockers={blockers or 'unknown'}",
+        f"support={diagnostics.get('support_type')}",
+    ]
+    best_residual = dict(diagnostics.get("best_residual", {}) or {})
+    margins = dict(best_residual.get("constraint_margins", {}) or {})
+    if best_residual:
+        pieces.extend(
+            [
+                f"best_residual_sigma={best_residual.get('sigma')}",
+                f"best_residual={best_residual.get('max_abs_scaled_residual')}",
+                f"residual_margin={margins.get('residual')}",
+            ]
+        )
+    interval_summary = str(diagnostics.get("reverse_interval_conflict_summary") or "")
+    if interval_summary:
+        pieces.append(f"interval_conflict={interval_summary}")
+    return "; ".join(pieces)
+
+
 def _failure_result(
     *,
     design: dict[str, float],
@@ -253,6 +352,11 @@ def _failure_result(
         "ok": False,
         "score": -float(weights.failure_penalty),
         "failure": str(failure),
+        "failure_diagnostics": {
+            "kind": "exception",
+            "primary_blockers": ["exception"],
+            "termination_error": str(failure),
+        },
         "elapsed_s": float(elapsed_s),
         "design": {str(k): float(v) for k, v in design.items()},
         "search_variables": {
@@ -297,6 +401,11 @@ def _node_summary(node: dict[str, Any]) -> dict[str, float]:
 
 
 def flatten_result_for_csv(result: dict[str, Any]) -> dict[str, Any]:
+    active_summary = dict(result.get("active_summary", {}) or {})
+    termination = dict(active_summary.get("termination", {}) or {})
+    bound_sources = dict(termination.get("bound_sources", {}) or {})
+    constraint_margins = dict(termination.get("constraint_margins", {}) or {})
+    scan_diagnostics = dict(termination.get("scan_diagnostics", {}) or {})
     row: dict[str, Any] = {
         "case_id": result.get("case_id"),
         "ok": bool(result.get("ok", False)),
@@ -306,6 +415,146 @@ def flatten_result_for_csv(result: dict[str, Any]) -> dict[str, Any]:
         "max_abs_scaled_residual": float(result.get("max_abs_scaled_residual", np.nan)),
         "n_steps_completed": int(result.get("n_steps_completed", 0)),
     }
+    failure_diagnostics = dict(result.get("failure_diagnostics", {}) or {})
+    for name in (
+        "kind",
+        "termination_reason",
+        "termination_error",
+        "failed_step",
+        "support_type",
+        "solver_method",
+        "sigma",
+        "sigma_interval_lower",
+        "sigma_interval_upper",
+        "max_abs_scaled_residual",
+        "least_squares_nfev",
+        "reverse_interval_error",
+        "reverse_interval_conflict",
+        "reverse_interval_conflict_kind",
+        "reverse_interval_conflict_summary",
+        "reverse_interval_conflict_lower_source",
+        "reverse_interval_conflict_upper_source",
+        "reverse_interval_conflict_sigma_lower",
+        "reverse_interval_conflict_sigma_upper",
+        "reverse_interval_conflict_sigma_gap",
+        "reverse_interval_conflict_Aprime_lower",
+        "reverse_interval_conflict_Aprime_upper",
+        "reverse_interval_conflict_Aprime_gap",
+        "scan_feasible_count",
+        "scan_n",
+        "target_g_margin",
+        "target_tp_margin",
+    ):
+        if name in failure_diagnostics:
+            row[f"failure_{name}"] = failure_diagnostics[name]
+    if "primary_blockers" in failure_diagnostics:
+        row["failure_primary_blockers"] = ",".join(
+            str(item) for item in failure_diagnostics.get("primary_blockers", []) or []
+        )
+    for name, value in dict(failure_diagnostics.get("constraint_margins", {}) or {}).items():
+        row[f"failure_margin_{name}"] = value
+    for label in ("best_residual", "best_violation"):
+        item = dict(failure_diagnostics.get(label, {}) or {})
+        for name in (
+            "sigma",
+            "feasible",
+            "constraint_violation",
+            "max_abs_scaled_residual",
+            "least_squares_nfev",
+        ):
+            if name in item:
+                row[f"failure_{label}_{name}"] = item[name]
+        for name, value in dict(item.get("constraint_margins", {}) or {}).items():
+            row[f"failure_{label}_margin_{name}"] = value
+    for name in (
+        "n_steps_requested",
+        "n_steps_completed",
+        "logA_min",
+        "logA_max",
+        "A_min",
+        "A_max",
+        "Te_min_K",
+        "Te_max_K",
+        "Tp_min_K",
+        "Tp_max_K",
+        "mach_min",
+        "mach_max",
+        "sigma_min",
+        "sigma_max",
+        "G_min_excluding_anchor",
+        "G_active_count_excluding_anchor",
+        "G_margin_near_count_excluding_anchor",
+        "Tp_min_excluding_anchor_K",
+        "Tp_floor_active_count_excluding_anchor",
+        "Tp_floor_margin_near_count_excluding_anchor",
+    ):
+        if name in active_summary:
+            row[f"active_{name}"] = active_summary[name]
+    for name in (
+        "ok",
+        "reason",
+        "step",
+        "support_type",
+        "solver_method",
+        "sigma",
+        "sigma_interval_lower",
+        "sigma_interval_upper",
+        "max_abs_scaled_residual",
+        "least_squares_nfev",
+        "error",
+        "reverse_interval_error",
+        "reverse_interval_conflict",
+        "reverse_interval_conflict_kind",
+        "reverse_interval_conflict_summary",
+        "reverse_interval_conflict_lower_source",
+        "reverse_interval_conflict_upper_source",
+        "reverse_interval_conflict_sigma_lower",
+        "reverse_interval_conflict_sigma_upper",
+        "reverse_interval_conflict_sigma_gap",
+        "reverse_interval_conflict_Aprime_lower",
+        "reverse_interval_conflict_Aprime_upper",
+        "reverse_interval_conflict_Aprime_gap",
+    ):
+        if name in termination:
+            row[f"termination_{name}"] = termination[name]
+    for side, source in bound_sources.items():
+        row[f"termination_bound_source_{side}"] = source
+    for name, value in constraint_margins.items():
+        row[f"termination_margin_{name}"] = value
+    for name in (
+        "n_scan",
+        "feasible_count",
+        "sigma_min",
+        "sigma_max",
+        "feasible_sigma_min",
+        "feasible_sigma_max",
+    ):
+        if name in scan_diagnostics:
+            row[f"scan_{name}"] = scan_diagnostics[name]
+    for label in (
+        "best_violation",
+        "best_residual",
+        "left_endpoint",
+        "right_endpoint",
+        "best_objective_feasible",
+    ):
+        item = dict(scan_diagnostics.get(label, {}) or {})
+        if not item:
+            continue
+        for name in (
+            "sigma",
+            "ok",
+            "feasible",
+            "objective_value",
+            "delta_gain",
+            "constraint_violation",
+            "max_abs_scaled_residual",
+            "least_squares_nfev",
+        ):
+            if name in item:
+                row[f"scan_{label}_{name}"] = item[name]
+        for name, value in dict(item.get("constraint_margins", {}) or {}).items():
+            row[f"scan_{label}_margin_{name}"] = value
     for name, value in dict(result.get("design", {}) or {}).items():
         row[f"design_{name}"] = float(value)
     for name, value in dict(result.get("objective_terms", {}) or {}).items():

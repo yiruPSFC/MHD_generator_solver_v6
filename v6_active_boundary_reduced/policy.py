@@ -38,6 +38,14 @@ class PolicySettings:
     refine_iterations: int = 24
     active_tol: float = 1e-6
     residual_tol: float = 1e-8
+    sonic_mode: str = "auto"
+    sonic_mach_tol: float = 1.0e-3
+    sonic_det_abs_tol: float = 1.0e-2
+    sonic_compatibility_tol: float = 1.0e-7
+    sonic_residual_tol: float = 1.0e-6
+    step_backend: str = "implicit_be"
+    rk4_substeps: int = 1
+    rk4_error_tol: float = 1.0e-6
 
 
 @dataclass(frozen=True)
@@ -53,6 +61,14 @@ class PreparationSettings:
     refine_iterations: int = 24
     active_tol: float = 1e-6
     residual_tol: float = 1e-8
+    sonic_mode: str = "auto"
+    sonic_mach_tol: float = 1.0e-3
+    sonic_det_abs_tol: float = 1.0e-2
+    sonic_compatibility_tol: float = 1.0e-7
+    sonic_residual_tol: float = 1.0e-6
+    step_backend: str = "implicit_be"
+    rk4_substeps: int = 1
+    rk4_error_tol: float = 1.0e-6
 
     @property
     def objective(self) -> str:
@@ -249,6 +265,8 @@ def rollout_policy(
             )
         )
         segments.append({**{key: value for key, value in step.items() if key != "next_state"}, "k": int(k)})
+        if not bool(step.get("ok", False)):
+            break
     active_summary = _active_summary(nodes=nodes, segments=segments, settings=settings)
     return {
         "ok": bool(all(bool(item["ok"]) for item in segments)),
@@ -331,6 +349,8 @@ def recover_preparation_profile(
             )
         )
         segments.append({**{key: value for key, value in step.items() if key != "next_state"}, "k": int(k)})
+        if not bool(step.get("ok", False)):
+            break
     active_summary = _active_summary(nodes=nodes, segments=segments, settings=settings)  # type: ignore[arg-type]
     return {
         "ok": bool(all(bool(item["ok"]) for item in segments)),
@@ -415,6 +435,8 @@ def rollout_policy_from_anchor(
             )
         )
         segments.append({**{key: value for key, value in step.items() if key != "next_state"}, "k": int(k)})
+        if not bool(step.get("ok", False)):
+            break
     active_summary = _active_summary(nodes=nodes, segments=segments, settings=settings)
     return {
         "ok": bool(all(bool(item["ok"]) for item in segments)),
@@ -534,6 +556,7 @@ def _legacy_policy_step(
             "sigma_interval_lower": float(lo),
             "sigma_interval_upper": float(hi),
             "bound_sources": bound_sources,
+            "termination_reason": "empty_sigma_interval",
         }
 
     base_sigma = float(np.clip(sigma_prev, lo, hi))
@@ -609,6 +632,8 @@ def _legacy_policy_step(
             "sigma_interval_upper": float(hi),
             "pedal_direction": pedal,
             "bound_sources": bound_sources,
+            "termination_reason": "no_feasible_sigma",
+            "scan_diagnostics": _scan_diagnostics(scan),
             **_eval_public(best_failed),
         }
 
@@ -645,6 +670,7 @@ def _legacy_policy_step(
         "sigma_interval_upper": float(hi),
         "pedal_direction": float(pedal),
         "bound_sources": bound_sources,
+        "scan_diagnostics": _scan_diagnostics(scan),
         **_eval_public(chosen),
     }
 
@@ -698,6 +724,20 @@ def _reverse_sign_policy_step(
             "T_p_floor": float(settings.tp_floor_K),
             "T_p_margin_current": tp_margin_current,
         }
+
+    sonic = _primitive_sonic_compatibility(current, config=config)
+    if _should_use_sonic_branch(sonic=sonic, settings=settings):
+        return _sonic_compatible_policy_step(
+            current=current,
+            seed_next=seed_next,
+            sigma_prev=sigma_prev,
+            warm_start=warm_start,
+            sigma_warm_start=sigma_warm_start,
+            dx=step,
+            config=config,
+            settings=settings,
+            sonic=sonic,
+        )
 
     params = _physics_params(config)
     try:
@@ -779,7 +819,13 @@ def _reverse_sign_policy_step(
 
     if validation_failure:
         g_step = None
-        if str(decision.endpoint_source) in {"G_lower", "G_upper"} or "G" in _constraint_blockers(chosen, settings=settings):
+        if (
+            _step_backend(settings) != "rk4"
+            and (
+                str(decision.endpoint_source) in {"G_lower", "G_upper"}
+                or "G" in _constraint_blockers(chosen, settings=settings)
+            )
+        ):
             g_step = _solve_g_boundary_step(
                 current=current,
                 initial=initial,
@@ -841,6 +887,265 @@ def _reverse_sign_policy_step(
     }
 
 
+def _primitive_sonic_compatibility(state: State, *, config: CaseConfig) -> dict[str, Any]:
+    params = _physics_params(config)
+    area = float(state.area(config))
+    terms = dynamic_terms_numba(
+        float(state.n_p),
+        float(state.T_e),
+        area,
+        0.0,
+        float(params.dot_N),
+        float(params.I_0),
+        float(params.seed_fraction),
+        float(params.B),
+        float(params.heavy_particle_mass_kg),
+        float(params.seed_ionization_energy_J),
+        float(params.sigma_ep),
+    )
+    matrix = np.array([[float(terms[0]), float(terms[1])], [float(terms[3]), float(terms[4])]], dtype=float)
+    f0 = np.array([float(terms[7]), float(terms[8])], dtype=float)
+    f1 = np.array([-float(terms[2]), -float(terms[5])], dtype=float)
+    metrics = _closure_metrics(state, config=config)
+    if not (np.all(np.isfinite(matrix)) and np.all(np.isfinite(f0)) and np.all(np.isfinite(f1))):
+        return {
+            "ok": False,
+            "mach": float(metrics["mach"]),
+            "det_D": float("nan"),
+            "singular_value_min": float("nan"),
+            "singular_value_max": float("nan"),
+            "ellTf0": float("nan"),
+            "ellTf1": float("nan"),
+            "A_prime_sonic": float("nan"),
+            "sigma_sonic": float("nan"),
+            "compatibility_residual": float("nan"),
+            "compatibility_scaled_residual": float("nan"),
+            "error": "non-finite primitive sonic matrix",
+        }
+    try:
+        u, singular_values, _ = np.linalg.svd(matrix)
+    except np.linalg.LinAlgError as exc:
+        return {
+            "ok": False,
+            "mach": float(metrics["mach"]),
+            "det_D": float(np.linalg.det(matrix)),
+            "singular_value_min": float("nan"),
+            "singular_value_max": float("nan"),
+            "ellTf0": float("nan"),
+            "ellTf1": float("nan"),
+            "A_prime_sonic": float("nan"),
+            "sigma_sonic": float("nan"),
+            "compatibility_residual": float("nan"),
+            "compatibility_scaled_residual": float("nan"),
+            "error": f"primitive sonic SVD failed: {exc}",
+        }
+    left_null = np.asarray(u[:, -1], dtype=float)
+    numerator = float(left_null @ f0)
+    denominator = float(left_null @ f1)
+    if abs(denominator) <= 1.0e-300 or area <= 0.0:
+        sigma = float("nan")
+    else:
+        sigma = float(-numerator / (area * denominator))
+    residual = float(left_null @ (f0 + area * sigma * f1)) if np.isfinite(sigma) else float("nan")
+    scaled = (
+        residual / max(1.0, abs(numerator), abs(area * sigma * denominator))
+        if np.isfinite(residual) and np.isfinite(sigma)
+        else float("nan")
+    )
+    return {
+        "ok": bool(np.isfinite(sigma) and np.isfinite(scaled)),
+        "mach": float(metrics["mach"]),
+        "det_D": float(np.linalg.det(matrix)),
+        "singular_value_min": float(np.min(singular_values)) if singular_values.size else float("nan"),
+        "singular_value_max": float(np.max(singular_values)) if singular_values.size else float("nan"),
+        "ellTf0": numerator,
+        "ellTf1": denominator,
+        "A_prime_sonic": float(area * sigma) if np.isfinite(sigma) else float("nan"),
+        "sigma_sonic": sigma,
+        "compatibility_residual": residual,
+        "compatibility_scaled_residual": scaled,
+        "error": "",
+    }
+
+
+def _should_use_sonic_branch(*, sonic: dict[str, Any], settings: PolicySettings) -> bool:
+    mode = str(getattr(settings, "sonic_mode", "auto")).strip().lower()
+    if mode in {"off", "none", "disabled", "false", "0"}:
+        return False
+    if mode in {"on", "always", "enabled", "true", "1"}:
+        return True
+    if mode != "auto":
+        raise ValueError("sonic_mode must be auto, off, or on.")
+    mach = float(sonic.get("mach", float("nan")))
+    det_D = float(sonic.get("det_D", float("nan")))
+    mach_near = np.isfinite(mach) and abs(mach - 1.0) <= float(getattr(settings, "sonic_mach_tol", 1.0e-3))
+    det_near = np.isfinite(det_D) and abs(det_D) <= float(getattr(settings, "sonic_det_abs_tol", 1.0e-2))
+    return bool(mach_near or det_near)
+
+
+def _sonic_compatible_policy_step(
+    *,
+    current: State,
+    seed_next: State,
+    sigma_prev: float,
+    warm_start: State | None,
+    sigma_warm_start: float | None,
+    dx: float,
+    config: CaseConfig,
+    settings: PolicySettings,
+    sonic: dict[str, Any],
+) -> dict[str, Any]:
+    lo, hi, bound_sources = _sigma_interval(
+        current=current,
+        sigma_prev=sigma_prev,
+        dx=dx,
+        direction=-1,
+        settings=settings,
+    )
+    base = _sonic_diagnostics(
+        sonic=sonic,
+        lo=lo,
+        hi=hi,
+        bound_sources=bound_sources,
+        settings=settings,
+    )
+    if lo > hi:
+        return {
+            **_invalid_step_payload(
+                current=current,
+                support_type="empty_sonic_sigma_interval",
+                error="sigma interval is empty before sonic compatibility",
+            ),
+            "termination_reason": "empty_sonic_sigma_interval",
+            **base,
+        }
+
+    sigma = float(sonic.get("sigma_sonic", float("nan")))
+    if not bool(sonic.get("ok", False)) or not np.isfinite(sigma):
+        return {
+            **_invalid_step_payload(
+                current=current,
+                support_type="sonic_sigma_not_finite",
+                error=str(sonic.get("error") or "primitive sonic compatibility did not produce finite sigma"),
+            ),
+            "termination_reason": "sonic_sigma_not_finite",
+            **base,
+        }
+    if sigma < float(lo) - float(settings.active_tol) or sigma > float(hi) + float(settings.active_tol):
+        return {
+            **_invalid_step_payload(
+                current=current,
+                support_type="sonic_sigma_out_of_interval",
+                error="explicit sonic sigma is outside slope/area/curvature bounds",
+            ),
+            "sigma": sigma,
+            "termination_reason": "sonic_sigma_out_of_interval",
+            **base,
+        }
+
+    initial = warm_start if warm_start is not None else seed_next
+    if sigma_warm_start is not None and np.isfinite(float(sigma_warm_start)):
+        sigma = float(np.clip(sigma, lo, hi))
+    chosen = _evaluate_sigma(
+        current=current,
+        sigma=sigma,
+        dx=dx,
+        direction=-1,
+        config=config,
+        settings=settings,
+        initial=initial,
+    )
+    chosen = {**chosen, "solver_method": "sonic_left_null_explicit_A_prime"}
+    chosen = _apply_sonic_residual_gate(chosen, settings=settings)
+    validation_failure = _validation_failure_reason(chosen, settings=settings)
+    delta_gain = float(chosen.get("delta_gain", float("nan")))
+    direction_failure = ""
+    if str(settings.objective) == "delta_drop" and np.isfinite(delta_gain):
+        if delta_gain > float(settings.active_tol):
+            direction_failure = "delta_not_dropping_upstream"
+
+    support = "sonic_compatible_left_null"
+    if validation_failure or direction_failure:
+        support = "sonic_finite_step_validation_failed"
+    return {
+        "ok": bool(chosen["ok"] and chosen["feasible"] and not validation_failure and not direction_failure),
+        "sigma": float(chosen["sigma"]),
+        "next_state": chosen["next_state"],
+        "support_type": support,
+        "affine_support_type": support,
+        "bound_sources": bound_sources,
+        "validation_status": "ok" if not validation_failure and not direction_failure else "failed",
+        "validation_failure_reason": ",".join(item for item in (validation_failure, direction_failure) if item),
+        "sonic_objective_score": float(-delta_gain) if np.isfinite(delta_gain) else float("nan"),
+        "sonic_direction_ok": bool(not direction_failure),
+        "sonic_residual_gate": str(chosen.get("sonic_residual_gate", "")),
+        "sonic_step_residual_tol": float(chosen.get("sonic_residual_tol", float("nan"))),
+        **base,
+        **_eval_public(chosen),
+    }
+
+
+def _apply_sonic_residual_gate(item: dict[str, Any], *, settings: PolicySettings) -> dict[str, Any]:
+    out = dict(item)
+    residual_tol = float(getattr(settings, "sonic_residual_tol", 1.0e-6))
+    max_residual = float(out.get("max_abs_scaled_residual", float("inf")))
+    margins = dict(out.get("constraint_margins", {}) or {})
+    margins["residual"] = float(residual_tol - max_residual)
+    out["constraint_margins"] = margins
+    active_tol = float(settings.active_tol)
+    active_feasible = bool(
+        float(margins.get("G", 0.0)) >= -active_tol
+        and float(margins.get("Tp", 0.0)) >= -active_tol
+        and float(margins.get("residual", 0.0)) >= -active_tol
+    )
+    if active_feasible and np.isfinite(max_residual):
+        out["ok"] = True
+        out["feasible"] = True
+        out["residual_ok"] = bool(max_residual <= residual_tol)
+        out["sonic_residual_gate"] = "accepted"
+        out["sonic_residual_tol"] = residual_tol
+        out["constraint_violation"] = 0.0
+    else:
+        out["sonic_residual_gate"] = "failed"
+        out["sonic_residual_tol"] = residual_tol
+        out["constraint_violation"] = float(sum(max(-float(value), 0.0) for value in margins.values()))
+    return out
+
+
+def _sonic_diagnostics(
+    *,
+    sonic: dict[str, Any],
+    lo: float,
+    hi: float,
+    bound_sources: dict[str, str],
+    settings: PolicySettings,
+) -> dict[str, Any]:
+    return {
+        "sonic_branch_used": True,
+        "sonic_mode": str(getattr(settings, "sonic_mode", "auto")),
+        "sonic_mach_tol": float(getattr(settings, "sonic_mach_tol", 1.0e-3)),
+        "sonic_det_abs_tol": float(getattr(settings, "sonic_det_abs_tol", 1.0e-2)),
+        "sonic_compatibility_tol": float(getattr(settings, "sonic_compatibility_tol", 1.0e-7)),
+        "sonic_residual_tol": float(getattr(settings, "sonic_residual_tol", 1.0e-6)),
+        "sonic_mach": float(sonic.get("mach", float("nan"))),
+        "det_D": float(sonic.get("det_D", float("nan"))),
+        "sonic_singular_value_min": float(sonic.get("singular_value_min", float("nan"))),
+        "sonic_singular_value_max": float(sonic.get("singular_value_max", float("nan"))),
+        "ellTf0": float(sonic.get("ellTf0", float("nan"))),
+        "ellTf1": float(sonic.get("ellTf1", float("nan"))),
+        "A_prime_sonic": float(sonic.get("A_prime_sonic", float("nan"))),
+        "sigma_sonic": float(sonic.get("sigma_sonic", float("nan"))),
+        "sonic_compatibility_residual": float(sonic.get("compatibility_residual", float("nan"))),
+        "sonic_compatibility_scaled_residual": float(
+            sonic.get("compatibility_scaled_residual", float("nan"))
+        ),
+        "sigma_interval_lower": float(lo),
+        "sigma_interval_upper": float(hi),
+        "lower_source": str(bound_sources.get("lower", "")),
+        "upper_source": str(bound_sources.get("upper", "")),
+    }
+
+
 def _invalid_step_payload(*, current: State, support_type: str, error: str) -> dict[str, Any]:
     return {
         "ok": False,
@@ -858,6 +1163,48 @@ def _invalid_step_payload(*, current: State, support_type: str, error: str) -> d
         "solver_method": str(support_type),
         "max_abs_scaled_residual": float("nan"),
         "least_squares_nfev": -1,
+    }
+
+
+def _reverse_interval_conflict_diagnostics(*, affine: ForwardAffineCoefficients, interval) -> dict[str, Any]:
+    lower = float(interval.sigma_lo)
+    upper = float(interval.sigma_hi)
+    area = float(affine.A_current)
+    conflict = bool(
+        not bool(interval.ok)
+        and np.isfinite(lower)
+        and np.isfinite(upper)
+        and lower > upper
+    )
+    sigma_gap = float(lower - upper) if conflict else 0.0
+    aprime_lower = float(area * lower) if np.isfinite(area) and np.isfinite(lower) else float("nan")
+    aprime_upper = float(area * upper) if np.isfinite(area) and np.isfinite(upper) else float("nan")
+    aprime_gap = float(area * sigma_gap) if conflict and np.isfinite(area) else float("nan")
+    lower_source = str(interval.lower_source)
+    upper_source = str(interval.upper_source)
+    if conflict:
+        summary = (
+            f"{lower_source} requires sigma >= {lower:.6g} "
+            f"(A_prime >= {aprime_lower:.6g}), but {upper_source} requires "
+            f"sigma <= {upper:.6g} (A_prime <= {aprime_upper:.6g}); "
+            f"sigma_gap={sigma_gap:.6g}."
+        )
+    elif not bool(interval.ok):
+        summary = f"reverse interval failed: {interval.error}"
+    else:
+        summary = ""
+    return {
+        "reverse_interval_conflict": conflict,
+        "reverse_interval_conflict_kind": f"{lower_source}_vs_{upper_source}" if conflict else "",
+        "reverse_interval_conflict_summary": summary,
+        "reverse_interval_conflict_lower_source": lower_source if conflict else "",
+        "reverse_interval_conflict_upper_source": upper_source if conflict else "",
+        "reverse_interval_conflict_sigma_lower": lower if conflict else float("nan"),
+        "reverse_interval_conflict_sigma_upper": upper if conflict else float("nan"),
+        "reverse_interval_conflict_sigma_gap": sigma_gap,
+        "reverse_interval_conflict_Aprime_lower": aprime_lower if conflict else float("nan"),
+        "reverse_interval_conflict_Aprime_upper": aprime_upper if conflict else float("nan"),
+        "reverse_interval_conflict_Aprime_gap": aprime_gap,
     }
 
 
@@ -898,6 +1245,7 @@ def _sign_aware_base_diagnostics(
         "A_prime_sonic": float("nan"),
         "sigma_sonic": float("nan"),
         **interval_diagnostics(interval),
+        **_reverse_interval_conflict_diagnostics(affine=affine, interval=interval),
     }
 
 
@@ -998,7 +1346,7 @@ def _sign_aware_scan_fallback(
             settings=settings,
             initial=chosen["next_state"],
         )
-    return {**chosen, "solver_method": "sign_aware_scan_backtrack"}
+    return {**chosen, "solver_method": str(chosen.get("solver_method") or "sign_aware_scan_backtrack")}
 
 
 def _direct_boundary_choice(
@@ -1053,18 +1401,20 @@ def _direct_boundary_choice(
     if "G" not in preferred_blockers:
         return None
 
-    g_step = _solve_g_boundary_step(
-        current=current,
-        initial=g_initial,
-        sigma_initial=float(np.clip(sigma_initial, lo, hi)),
-        lo=lo,
-        hi=hi,
-        dx=dx,
-        direction=direction,
-        config=config,
-        settings=settings,
-        preferred=preferred,
-    )
+    g_step = None
+    if _step_backend(settings) != "rk4":
+        g_step = _solve_g_boundary_step(
+            current=current,
+            initial=g_initial,
+            sigma_initial=float(np.clip(sigma_initial, lo, hi)),
+            lo=lo,
+            hi=hi,
+            dx=dx,
+            direction=direction,
+            config=config,
+            settings=settings,
+            preferred=preferred,
+        )
     if g_step is not None:
         return g_step
 
@@ -1210,6 +1560,21 @@ def _solve_g_boundary_step(
     return result_from_solution(sol)
 
 
+def _step_backend(settings: PolicySettings) -> str:
+    backend = str(getattr(settings, "step_backend", "implicit_be")).strip().lower().replace("-", "_")
+    aliases = {
+        "be": "implicit_be",
+        "backward_euler": "implicit_be",
+        "implicit": "implicit_be",
+        "implicit_be": "implicit_be",
+        "rk4": "rk4",
+        "explicit_rk4": "rk4",
+    }
+    if backend not in aliases:
+        raise ValueError("step_backend must be 'implicit_be' or 'rk4'.")
+    return aliases[backend]
+
+
 def _evaluate_sigma(
     *,
     current: State,
@@ -1221,15 +1586,27 @@ def _evaluate_sigma(
     initial: State,
 ) -> dict[str, Any]:
     logA_next = float(current.logA + float(direction) * float(dx) * float(sigma))
-    next_state, residual = _solve_next_state(
-        current=current,
-        logA_next=logA_next,
-        sigma=float(sigma),
-        dx=dx,
-        direction=direction,
-        config=config,
-        initial=initial,
-    )
+    backend = _step_backend(settings)
+    if backend == "rk4":
+        next_state, residual = _solve_next_state_rk4(
+            current=current,
+            logA_next=logA_next,
+            sigma=float(sigma),
+            dx=dx,
+            direction=direction,
+            config=config,
+            settings=settings,
+        )
+    else:
+        next_state, residual = _solve_next_state(
+            current=current,
+            logA_next=logA_next,
+            sigma=float(sigma),
+            dx=dx,
+            direction=direction,
+            config=config,
+            initial=initial,
+        )
     metrics = _closure_metrics(next_state, config=config)
     current_delta = _closure_metrics(current, config=config)["Delta"]
     delta_gain = float(metrics["Delta"] - current_delta)
@@ -1237,10 +1614,15 @@ def _evaluate_sigma(
         objective_value = -delta_gain
     else:
         objective_value = delta_gain
+    residual_tol = (
+        float(getattr(settings, "rk4_error_tol", 1.0e-6))
+        if backend == "rk4"
+        else float(settings.residual_tol)
+    )
     margins = {
         "G": float(metrics["G"] - float(settings.g_floor)),
         "Tp": float(metrics["T_p"] - float(settings.tp_floor_K)),
-        "residual": float(settings.residual_tol - residual["max_abs_scaled_residual"]),
+        "residual": float(residual_tol - residual["max_abs_scaled_residual"]),
     }
     feasible = bool(all(value >= -float(settings.active_tol) for value in margins.values()))
     violation = float(sum(max(-value, 0.0) for value in margins.values()))
@@ -1253,6 +1635,7 @@ def _evaluate_sigma(
         "delta_gain": delta_gain,
         "constraint_margins": margins,
         "constraint_violation": violation,
+        "step_backend": backend,
         **metrics,
         **residual,
     }
@@ -1319,7 +1702,137 @@ def _solve_next_state(
         "max_abs_scaled_residual": max_abs,
         "least_squares_cost": float(sol.cost),
         "least_squares_nfev": int(sol.nfev),
+        "step_backend": "implicit_be",
     }
+
+
+def _primitive_log_rhs(
+    *,
+    state: State,
+    sigma: float,
+    config: CaseConfig,
+) -> np.ndarray:
+    params = _physics_params(config)
+    n = float(state.n_p)
+    te = float(state.T_e)
+    area = float(state.area(config))
+    terms = dynamic_terms_numba(
+        n,
+        te,
+        area,
+        float(sigma),
+        float(params.dot_N),
+        float(params.I_0),
+        float(params.seed_fraction),
+        float(params.B),
+        float(params.heavy_particle_mass_kg),
+        float(params.seed_ionization_energy_J),
+        float(params.sigma_ep),
+    )
+    matrix = np.array([[float(terms[0]), float(terms[1])], [float(terms[3]), float(terms[4])]], dtype=float)
+    rhs = np.array([float(terms[7]), float(terms[8])], dtype=float)
+    derivatives = np.linalg.solve(matrix, rhs)
+    return np.array(
+        [
+            float(derivatives[0]) / max(n, 1.0e-300),
+            float(derivatives[1]) / max(te, 1.0e-300),
+            float(sigma),
+        ],
+        dtype=float,
+    )
+
+
+def _rk4_integrate_state(
+    *,
+    current: State,
+    sigma: float,
+    dx_signed: float,
+    config: CaseConfig,
+    substeps: int,
+) -> State:
+    n_substeps = max(int(substeps), 1)
+    h = float(dx_signed) / float(n_substeps)
+    y = np.array([float(current.log_n), float(current.log_Te), float(current.logA)], dtype=float)
+
+    def rhs(values: np.ndarray) -> np.ndarray:
+        return _primitive_log_rhs(
+            state=State(log_n=float(values[0]), log_Te=float(values[1]), logA=float(values[2])),
+            sigma=float(sigma),
+            config=config,
+        )
+
+    for _ in range(n_substeps):
+        k1 = rhs(y)
+        k2 = rhs(y + 0.5 * h * k1)
+        k3 = rhs(y + 0.5 * h * k2)
+        k4 = rhs(y + h * k3)
+        y = y + (h / 6.0) * (k1 + 2.0 * k2 + 2.0 * k3 + k4)
+    return State(log_n=float(y[0]), log_Te=float(y[1]), logA=float(y[2]))
+
+
+def _solve_next_state_rk4(
+    *,
+    current: State,
+    logA_next: float,
+    sigma: float,
+    dx: float,
+    direction: int,
+    config: CaseConfig,
+    settings: PolicySettings,
+) -> tuple[State, dict[str, float | bool | int | str]]:
+    dx_signed = float(direction) * float(dx)
+    substeps = max(int(getattr(settings, "rk4_substeps", 1)), 1)
+    try:
+        coarse = _rk4_integrate_state(
+            current=current,
+            sigma=float(sigma),
+            dx_signed=dx_signed,
+            config=config,
+            substeps=substeps,
+        )
+        fine = _rk4_integrate_state(
+            current=current,
+            sigma=float(sigma),
+            dx_signed=dx_signed,
+            config=config,
+            substeps=2 * substeps,
+        )
+        coarse = State(log_n=coarse.log_n, log_Te=coarse.log_Te, logA=float(logA_next))
+        fine = State(log_n=fine.log_n, log_Te=fine.log_Te, logA=float(logA_next))
+        err = max(abs(float(fine.log_n - coarse.log_n)), abs(float(fine.log_Te - coarse.log_Te)))
+        finite = bool(
+            np.isfinite(fine.log_n)
+            and np.isfinite(fine.log_Te)
+            and np.isfinite(fine.logA)
+            and fine.n_p > 0.0
+            and fine.T_e > 0.0
+            and fine.area(config) > 0.0
+        )
+        tol = float(getattr(settings, "rk4_error_tol", 1.0e-6))
+        return fine, {
+            "residual_ok": bool(finite and err <= tol),
+            "ok": bool(finite and err <= tol),
+            "max_abs_scaled_residual": float(err),
+            "rk4_error_estimate": float(err),
+            "rk4_error_tol": tol,
+            "rk4_substeps": int(substeps),
+            "least_squares_cost": 0.0,
+            "least_squares_nfev": -1,
+            "step_backend": "rk4",
+        }
+    except Exception as exc:
+        return current, {
+            "residual_ok": False,
+            "ok": False,
+            "max_abs_scaled_residual": float("inf"),
+            "rk4_error_estimate": float("inf"),
+            "rk4_error_tol": float(getattr(settings, "rk4_error_tol", 1.0e-6)),
+            "rk4_substeps": int(substeps),
+            "least_squares_cost": float("inf"),
+            "least_squares_nfev": -1,
+            "step_backend": "rk4",
+            "error": f"rk4 step failed: {exc}",
+        }
 
 
 def _pedal_direction(
@@ -1449,6 +1962,54 @@ def _refine_boundary(
 ) -> dict[str, Any]:
     feasible = feasible_eval
     infeasible = infeasible_eval
+    blockers = _constraint_blockers(infeasible, settings=settings)
+    if "G" in blockers:
+        g_feasible = float(dict(feasible.get("constraint_margins", {}) or {}).get("G", float("nan")))
+        g_infeasible = float(dict(infeasible.get("constraint_margins", {}) or {}).get("G", float("nan")))
+        if np.isfinite(g_feasible) and np.isfinite(g_infeasible) and g_feasible * g_infeasible <= 0.0:
+            cache: dict[float, dict[str, Any]] = {
+                float(feasible["sigma"]): feasible,
+                float(infeasible["sigma"]): infeasible,
+            }
+
+            def evaluate(sigma: float) -> dict[str, Any]:
+                key = float(sigma)
+                if key not in cache:
+                    cache[key] = _evaluate_sigma(
+                        current=current,
+                        sigma=key,
+                        dx=dx,
+                        direction=direction,
+                        config=config,
+                        settings=settings,
+                        initial=initial,
+                    )
+                return cache[key]
+
+            try:
+                sigma_root = float(
+                    brentq(
+                        lambda sigma: float(evaluate(float(sigma))["constraint_margins"]["G"]),
+                        float(feasible["sigma"]),
+                        float(infeasible["sigma"]),
+                        xtol=1e-10,
+                        rtol=1e-10,
+                        maxiter=max(8, int(settings.refine_iterations)),
+                    )
+                )
+                root = evaluate(sigma_root)
+                if bool(root.get("feasible", False)):
+                    return {
+                        **root,
+                        "boundary_blockers": ["G"],
+                        "boundary_bracket_width": abs(float(feasible["sigma"]) - float(infeasible["sigma"])),
+                        "boundary_infeasible_sigma": float(infeasible["sigma"]),
+                        "boundary_infeasible_margins": dict(infeasible.get("constraint_margins", {})),
+                        "solver_method": "brentq_G_boundary_refine",
+                    }
+            except ValueError:
+                pass
+
     for _ in range(int(settings.refine_iterations)):
         mid_sigma = 0.5 * (float(feasible["sigma"]) + float(infeasible["sigma"]))
         mid = _evaluate_sigma(
@@ -1533,6 +2094,51 @@ def _eval_public(item: dict[str, Any]) -> dict[str, Any]:
         "solver_method": str(item.get("solver_method", "legacy_scan")),
         "max_abs_scaled_residual": float(item.get("max_abs_scaled_residual", float("nan"))),
         "least_squares_nfev": int(item.get("least_squares_nfev", -1)),
+        "step_backend": str(item.get("step_backend", "")),
+        "rk4_error_estimate": float(item.get("rk4_error_estimate", float("nan"))),
+        "rk4_substeps": int(item.get("rk4_substeps", -1)),
+    }
+
+
+def _scan_diagnostics(scan: list[dict[str, Any]]) -> dict[str, Any]:
+    if not scan:
+        return {"n_scan": 0, "feasible_count": 0}
+    feasible = [item for item in scan if bool(item.get("feasible", False))]
+    by_violation = min(scan, key=lambda item: float(item.get("constraint_violation", 1e300)))
+    by_residual = min(scan, key=lambda item: float(item.get("max_abs_scaled_residual", 1e300)))
+    payload: dict[str, Any] = {
+        "n_scan": int(len(scan)),
+        "feasible_count": int(len(feasible)),
+        "sigma_min": float(min(float(item["sigma"]) for item in scan)),
+        "sigma_max": float(max(float(item["sigma"]) for item in scan)),
+        "best_violation": _scan_item_summary(by_violation),
+        "best_residual": _scan_item_summary(by_residual),
+        "left_endpoint": _scan_item_summary(scan[0]),
+        "right_endpoint": _scan_item_summary(scan[-1]),
+    }
+    if feasible:
+        payload["feasible_sigma_min"] = float(min(float(item["sigma"]) for item in feasible))
+        payload["feasible_sigma_max"] = float(max(float(item["sigma"]) for item in feasible))
+        payload["best_objective_feasible"] = _scan_item_summary(
+            max(feasible, key=lambda item: float(item.get("objective_value", -1e300)))
+        )
+    return payload
+
+
+def _scan_item_summary(item: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "sigma": float(item.get("sigma", float("nan"))),
+        "ok": bool(item.get("ok", False)),
+        "feasible": bool(item.get("feasible", False)),
+        "objective_value": float(item.get("objective_value", float("nan"))),
+        "delta_gain": float(item.get("delta_gain", float("nan"))),
+        "constraint_violation": float(item.get("constraint_violation", float("nan"))),
+        "constraint_margins": dict(item.get("constraint_margins", {}) or {}),
+        "max_abs_scaled_residual": float(item.get("max_abs_scaled_residual", float("nan"))),
+        "least_squares_nfev": int(item.get("least_squares_nfev", -1)),
+        "step_backend": str(item.get("step_backend", "")),
+        "rk4_error_estimate": float(item.get("rk4_error_estimate", float("nan"))),
+        "rk4_substeps": int(item.get("rk4_substeps", -1)),
     }
 
 
@@ -1587,14 +2193,34 @@ def _active_summary(*, nodes: list[dict[str, Any]], segments: list[dict[str, Any
     tp_margin_near_count = int(
         sum(1 for node in nodes[1:] if float(node["T_p"]) - float(settings.tp_floor_K) <= float(settings.active_tol))
     )
+    sigmas = [float(node["sigma_logA"]) for node in nodes if np.isfinite(float(node["sigma_logA"]))]
     return {
         "support_counts": support_counts,
+        "termination": _termination_summary(segments),
+        "n_steps_requested": int(settings.n_steps),
+        "n_steps_completed": int(len(segments)),
         "Delta_start": float(nodes[0]["Delta"]),
         "Delta_end": float(nodes[-1]["Delta"]),
         "Delta_gain": float(nodes[-1]["Delta"] - nodes[0]["Delta"]),
         "G_min_excluding_anchor": float(min(float(node["G"]) for node in nodes[1:])) if len(nodes) > 1 else None,
         "Tp_min_excluding_anchor_K": float(min(float(node["T_p"]) for node in nodes[1:])) if len(nodes) > 1 else None,
-        "max_abs_scaled_residual": float(max(float(seg["max_abs_scaled_residual"]) for seg in segments)) if segments else 0.0,
+        "logA_min": float(min(float(node["logA"]) for node in nodes)),
+        "logA_max": float(max(float(node["logA"]) for node in nodes)),
+        "A_min": float(min(float(node["A"]) for node in nodes)),
+        "A_max": float(max(float(node["A"]) for node in nodes)),
+        "Te_min_K": float(min(float(node["T_e"]) for node in nodes)),
+        "Te_max_K": float(max(float(node["T_e"]) for node in nodes)),
+        "Tp_min_K": float(min(float(node["T_p"]) for node in nodes)),
+        "Tp_max_K": float(max(float(node["T_p"]) for node in nodes)),
+        "mach_min": float(min(float(node["mach"]) for node in nodes)),
+        "mach_max": float(max(float(node["mach"]) for node in nodes)),
+        "sigma_min": float(min(sigmas)) if sigmas else None,
+        "sigma_max": float(max(sigmas)) if sigmas else None,
+        "max_abs_scaled_residual": (
+            float(max(float(seg.get("max_abs_scaled_residual", 0.0)) for seg in segments))
+            if segments
+            else 0.0
+        ),
         "G_active_count_excluding_anchor": int(
             support_counts.get("G_supported", 0)
             + support_counts.get("G_limited_reverse", 0)
@@ -1603,4 +2229,59 @@ def _active_summary(*, nodes: list[dict[str, Any]], segments: list[dict[str, Any
         "G_margin_near_count_excluding_anchor": g_margin_near_count,
         "Tp_floor_active_count_excluding_anchor": int(support_counts.get("Tp_floor_supported", 0)),
         "Tp_floor_margin_near_count_excluding_anchor": tp_margin_near_count,
+    }
+
+
+def _termination_summary(segments: list[dict[str, Any]]) -> dict[str, Any]:
+    if not segments:
+        return {
+            "ok": True,
+            "reason": "no_segments",
+            "step": None,
+        }
+    last = dict(segments[-1])
+    ok = bool(all(bool(item.get("ok", False)) for item in segments))
+    if ok:
+        reason = "completed_requested_steps"
+    else:
+        reason = str(last.get("termination_reason") or last.get("support_type") or last.get("error") or "failed_step")
+    return {
+        "ok": bool(ok),
+        "reason": reason,
+        "step": int(last.get("k", len(segments) - 1)),
+        "support_type": str(last.get("support_type", "unknown")),
+        "solver_method": str(last.get("solver_method", "unknown")),
+        "sigma": float(last.get("sigma", float("nan"))),
+        "sigma_interval_lower": float(last.get("sigma_interval_lower", float("nan"))),
+        "sigma_interval_upper": float(last.get("sigma_interval_upper", float("nan"))),
+        "bound_sources": dict(last.get("bound_sources", {}) or {}),
+        "constraint_margins": dict(last.get("constraint_margins", {}) or {}),
+        "boundary_blockers": list(last.get("boundary_blockers", []) or []),
+        "max_abs_scaled_residual": float(last.get("max_abs_scaled_residual", float("nan"))),
+        "least_squares_nfev": int(last.get("least_squares_nfev", -1)),
+        "step_backend": str(last.get("step_backend", "")),
+        "rk4_error_estimate": float(last.get("rk4_error_estimate", float("nan"))),
+        "rk4_substeps": int(last.get("rk4_substeps", -1)),
+        "error": None if last.get("error") is None else str(last.get("error")),
+        "reverse_interval_error": str(last.get("reverse_interval_error", "")),
+        "reverse_interval_conflict": bool(last.get("reverse_interval_conflict", False)),
+        "reverse_interval_conflict_kind": str(last.get("reverse_interval_conflict_kind", "")),
+        "reverse_interval_conflict_summary": str(last.get("reverse_interval_conflict_summary", "")),
+        "reverse_interval_conflict_lower_source": str(last.get("reverse_interval_conflict_lower_source", "")),
+        "reverse_interval_conflict_upper_source": str(last.get("reverse_interval_conflict_upper_source", "")),
+        "reverse_interval_conflict_sigma_lower": float(
+            last.get("reverse_interval_conflict_sigma_lower", float("nan"))
+        ),
+        "reverse_interval_conflict_sigma_upper": float(
+            last.get("reverse_interval_conflict_sigma_upper", float("nan"))
+        ),
+        "reverse_interval_conflict_sigma_gap": float(last.get("reverse_interval_conflict_sigma_gap", float("nan"))),
+        "reverse_interval_conflict_Aprime_lower": float(
+            last.get("reverse_interval_conflict_Aprime_lower", float("nan"))
+        ),
+        "reverse_interval_conflict_Aprime_upper": float(
+            last.get("reverse_interval_conflict_Aprime_upper", float("nan"))
+        ),
+        "reverse_interval_conflict_Aprime_gap": float(last.get("reverse_interval_conflict_Aprime_gap", float("nan"))),
+        "scan_diagnostics": dict(last.get("scan_diagnostics", {}) or {}),
     }
