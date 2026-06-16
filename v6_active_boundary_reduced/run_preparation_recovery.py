@@ -12,7 +12,7 @@ from v6_firedrake_reduced.cases.freidberg_reference import load_reference_profil
 from v6_firedrake_reduced.design import load_case_config
 
 from .policy import PreparationSettings, anchor_from_dict, anchor_from_profile, recover_preparation_profile
-from .plot_preparation_recovery import write_preparation_diagnostics
+from .preparation_recovery_diagnostics import write_preparation_diagnostics
 
 
 def _json_default(value: Any):
@@ -60,7 +60,7 @@ def build_parser() -> argparse.ArgumentParser:
     anchor.add_argument(
         "--anchor-json",
         type=Path,
-        help="JSON target state. Fields: n_p or log_n, T_e or log_Te, A or logA, sigma_logA, optional x.",
+        help="JSON target state. Fields: n_p or log_n, T_e or log_Te, A or logA; optional sigma_logA and x.",
     )
     anchor.add_argument(
         "--anchor-profile-index",
@@ -70,6 +70,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--out-dir", type=Path, required=True)
     parser.add_argument("--dx", type=float, required=True, help="Positive upstream marching step [m].")
     parser.add_argument("--n-steps", type=int, default=60)
+    # REVIEW: reverse preparation currently only supports delta_drop; power_next is kept as a visible legacy CLI option.
+    parser.add_argument(
+        "--objective",
+        choices=("delta_drop", "power_next"),
+        default="delta_drop",
+        help="Local greedy target. delta_drop preserves the existing reverse-preparation policy.",
+    )
     parser.add_argument("--sigma-min", type=float, default=-0.5)
     parser.add_argument("--sigma-max", type=float, default=0.5)
     parser.add_argument("--curvature-max", type=float, default=8.0)
@@ -79,15 +86,24 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--scan-points", type=int, default=41)
     parser.add_argument("--refine-iterations", type=int, default=24)
     parser.add_argument("--active-tol", type=float, default=1e-6)
-    parser.add_argument("--residual-tol", type=float, default=1e-8)
     parser.add_argument("--sonic-mode", choices=("auto", "off", "on"), default="auto")
     parser.add_argument("--sonic-mach-tol", type=float, default=1.0e-3)
     parser.add_argument("--sonic-det-abs-tol", type=float, default=1.0e-2)
     parser.add_argument("--sonic-compatibility-tol", type=float, default=1.0e-7)
     parser.add_argument("--sonic-residual-tol", type=float, default=1.0e-6)
-    parser.add_argument("--step-backend", choices=("implicit_be", "rk4"), default="implicit_be")
     parser.add_argument("--rk4-substeps", type=int, default=1)
     parser.add_argument("--rk4-error-tol", type=float, default=1.0e-6)
+    parser.add_argument(
+        "--g-boundary-fallback-mode",
+        default="endpoint_brentq",
+        metavar="{endpoint_brentq,affine_expand_then_endpoint_brentq}",
+        help="G-boundary fallback mode; legacy and affine_expand are accepted aliases.",
+    )
+    parser.add_argument(
+        "--write-diagnostics",
+        action="store_true",
+        help="Write diagnostic tables and plots. Disabled by default for batch runs.",
+    )
     return parser
 
 
@@ -108,6 +124,7 @@ def main(argv: list[str] | None = None) -> int:
     settings = PreparationSettings(
         n_steps=int(args.n_steps),
         dx=float(args.dx),
+        objective=str(args.objective),
         sigma_min=float(args.sigma_min),
         sigma_max=float(args.sigma_max),
         curvature_max=None if bool(args.no_curvature_bound) else float(args.curvature_max),
@@ -116,15 +133,14 @@ def main(argv: list[str] | None = None) -> int:
         scan_points=int(args.scan_points),
         refine_iterations=int(args.refine_iterations),
         active_tol=float(args.active_tol),
-        residual_tol=float(args.residual_tol),
         sonic_mode=str(args.sonic_mode),
         sonic_mach_tol=float(args.sonic_mach_tol),
         sonic_det_abs_tol=float(args.sonic_det_abs_tol),
         sonic_compatibility_tol=float(args.sonic_compatibility_tol),
         sonic_residual_tol=float(args.sonic_residual_tol),
-        step_backend=str(args.step_backend),
         rk4_substeps=int(args.rk4_substeps),
         rk4_error_tol=float(args.rk4_error_tol),
+        g_boundary_fallback_mode=str(args.g_boundary_fallback_mode),
     )
     payload = recover_preparation_profile(config=config, anchor=anchor, settings=settings)
     out_dir = Path(args.out_dir)
@@ -145,7 +161,9 @@ def main(argv: list[str] | None = None) -> int:
         A=np.asarray(arrays["A"], dtype=float),
         sigma_logA=np.asarray(arrays["sigma_logA"], dtype=float),
     )
-    diagnostic_manifest = write_preparation_diagnostics(summary_path)
+    diagnostic_manifest = (
+        write_preparation_diagnostics(summary_path) if bool(args.write_diagnostics) else None
+    )
     short = {
         "ok": bool(payload["ok"]),
         "out_dir": str(out_dir),

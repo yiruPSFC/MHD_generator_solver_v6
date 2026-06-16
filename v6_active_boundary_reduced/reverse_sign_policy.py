@@ -4,6 +4,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from .sigma_interval import build_base_sigma_interval, max_with_source, min_with_source
+
 
 @dataclass(frozen=True)
 class ReverseCoefficients:
@@ -66,7 +68,7 @@ def build_reverse_sigma_interval(
     A_current: float,
     logA_current: float,
     dx: float,
-    sigma_prev: float,
+    sigma_prev: float | None,
     sigma_min: float,
     sigma_max: float,
     curvature_max: float | None,
@@ -84,28 +86,27 @@ def build_reverse_sigma_interval(
     if area <= 0.0 or not np.isfinite(area):
         return _empty_interval("A_current must be positive and finite.")
 
-    sigma_slope_lower = float(sigma_min)
-    sigma_slope_upper = float(sigma_max)
-    sigma_logA_lower = float((float(logA_current) - float(logA_max)) / step)
-    sigma_logA_upper = float((float(logA_current) - float(logA_min)) / step)
-    if curvature_max is None or not np.isfinite(float(curvature_max)):
-        sigma_curvature_lower = -float("inf")
-        sigma_curvature_upper = float("inf")
-    else:
-        width = abs(float(curvature_max))
-        sigma_curvature_lower = float(sigma_prev) - width
-        sigma_curvature_upper = float(sigma_prev) + width
-
-    lo = -float("inf")
-    hi = float("inf")
-    lower_source = "none"
-    upper_source = "none"
-    lo, lower_source = _max_with_source(lo, lower_source, sigma_slope_lower, "slope_min")
-    hi, upper_source = _min_with_source(hi, upper_source, sigma_slope_upper, "slope_max")
-    lo, lower_source = _max_with_source(lo, lower_source, sigma_logA_lower, "area_max")
-    hi, upper_source = _min_with_source(hi, upper_source, sigma_logA_upper, "area_min")
-    lo, lower_source = _max_with_source(lo, lower_source, sigma_curvature_lower, "curvature_min")
-    hi, upper_source = _min_with_source(hi, upper_source, sigma_curvature_upper, "curvature_max")
+    base = build_base_sigma_interval(
+        logA_current=logA_current,
+        dx=step,
+        direction=-1,
+        sigma_prev=sigma_prev,
+        sigma_min=sigma_min,
+        sigma_max=sigma_max,
+        curvature_max=curvature_max,
+        logA_min=logA_min,
+        logA_max=logA_max,
+    )
+    sigma_slope_lower = float(base.sigma_slope_lower)
+    sigma_slope_upper = float(base.sigma_slope_upper)
+    sigma_logA_lower = float(base.sigma_logA_lower)
+    sigma_logA_upper = float(base.sigma_logA_upper)
+    sigma_curvature_lower = float(base.sigma_curvature_lower)
+    sigma_curvature_upper = float(base.sigma_curvature_upper)
+    lo = float(base.sigma_lo)
+    hi = float(base.sigma_hi)
+    lower_source = str(base.lower_source)
+    upper_source = str(base.upper_source)
     if lo > hi:
         return ReverseInterval(
             ok=False,
@@ -128,11 +129,11 @@ def build_reverse_sigma_interval(
     sigma_G_bound = float("nan")
     if float(q1) > float(q1_tol):
         sigma_G_bound = float(-float(q0) / (float(q1) * area))
-        lo, lower_source = _max_with_source(lo, lower_source, sigma_G_bound, "G_lower")
+        lo, lower_source = max_with_source(lo, lower_source, sigma_G_bound, "G_lower")
         reverse_G_bound_kind = "lower"
     elif float(q1) < -float(q1_tol):
         sigma_G_bound = float(-float(q0) / (float(q1) * area))
-        hi, upper_source = _min_with_source(hi, upper_source, sigma_G_bound, "G_upper")
+        hi, upper_source = min_with_source(hi, upper_source, sigma_G_bound, "G_upper")
         reverse_G_bound_kind = "upper"
     elif float(q0) < -float(g_margin_tol):
         return ReverseInterval(
@@ -260,18 +261,6 @@ def interval_diagnostics(interval: ReverseInterval) -> dict[str, float | str | b
         "sigma_curvature_upper": float(interval.sigma_curvature_upper),
         "reverse_interval_error": str(interval.error),
     }
-
-
-def _max_with_source(current: float, source: str, candidate: float, candidate_source: str) -> tuple[float, str]:
-    if float(candidate) > float(current):
-        return float(candidate), str(candidate_source)
-    return float(current), str(source)
-
-
-def _min_with_source(current: float, source: str, candidate: float, candidate_source: str) -> tuple[float, str]:
-    if float(candidate) < float(current):
-        return float(candidate), str(candidate_source)
-    return float(current), str(source)
 
 
 def _empty_interval(error: str) -> ReverseInterval:

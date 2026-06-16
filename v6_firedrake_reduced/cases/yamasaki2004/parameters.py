@@ -153,6 +153,50 @@ class Yamasaki2004PaperParameters:
 
 
 @dataclass(frozen=True)
+class Yamasaki2004GasdynamicAnchor:
+    """Paper-window throat anchor used to initialize the solver seed.
+
+    The anchor is closed from the reported throat area, stagnation state, and
+    mass-flow window using ideal-helium isentropic relations.  It is not an
+    additional paper measurement; it is a physically constrained replacement
+    for the older free `Z_in=80` initialization.
+    """
+
+    stagnation_pressure_Pa: float = 0.16e6
+    mass_flow_rate_kg_s: float = 0.29
+    hall_current_A: float = 1270.0
+    static_pressure_Pa: float = 128524.57545505436
+    heavy_particle_temperature_K: float = 2061.2420623928897
+    mach: float = 0.5241417338611576
+    velocity_m_s: float = 1400.1788156456312
+    n_p_m3: float = 4.5162076186570146e24
+    dot_N_s: float = 4.363213781943659e25
+    electron_temperature_K: float = 4853.331648034366
+    z_in: float = 36.30476678086178
+    velikhov_margin: float = 68.59439640721423
+
+    def to_dict(self) -> dict[str, float | str]:
+        return {
+            "source": (
+                "ideal-He isentropic throat closure from A_in=6.9e-3 m^2, "
+                "T0=2250 K, p0=0.16 MPa, mdot=0.29 kg/s, I=1270 A"
+            ),
+            "stagnation_pressure_Pa": float(self.stagnation_pressure_Pa),
+            "mass_flow_rate_kg_s": float(self.mass_flow_rate_kg_s),
+            "hall_current_A": float(self.hall_current_A),
+            "static_pressure_Pa": float(self.static_pressure_Pa),
+            "heavy_particle_temperature_K": float(self.heavy_particle_temperature_K),
+            "mach": float(self.mach),
+            "velocity_m_s": float(self.velocity_m_s),
+            "n_p_m3": float(self.n_p_m3),
+            "dot_N_s": float(self.dot_N_s),
+            "electron_temperature_K": float(self.electron_temperature_K),
+            "z_in": float(self.z_in),
+            "velikhov_margin": float(self.velikhov_margin),
+        }
+
+
+@dataclass(frozen=True)
 class Yamasaki2004ModelSeed:
     """Solver initialization windows near the paper case.
 
@@ -160,9 +204,15 @@ class Yamasaki2004ModelSeed:
     neighborhood for state variables that the paper does not report directly.
     """
 
-    n_p_in_m3: RangeValue = field(default_factory=lambda: RangeValue(4.0e24, 5.5e24, 4.7587e24))
-    electron_temperature_in_K: RangeValue = field(default_factory=lambda: RangeValue(4200.0, 6200.0, 4900.0))
-    z_in: RangeValue = field(default_factory=lambda: RangeValue(40.0, 120.0, 80.0))
+    gasdynamic_anchor: Yamasaki2004GasdynamicAnchor = field(default_factory=Yamasaki2004GasdynamicAnchor)
+    n_p_in_m3: RangeValue = field(
+        default_factory=lambda: RangeValue(2.8e24, 4.8e24, 4.5162076186570146e24)
+    )
+    electron_temperature_in_K: RangeValue = field(
+        default_factory=lambda: RangeValue(4200.0, 6200.0, 4853.331648034366)
+    )
+    z_in: RangeValue = field(default_factory=lambda: RangeValue(20.0, 70.0, 36.30476678086178))
+    hall_current_A: RangeValue = field(default_factory=lambda: RangeValue(800.0, 1300.0, 1270.0))
     area_log_window_offset: RangeValue = field(default_factory=lambda: RangeValue(-0.15, 0.15, 0.0))
     schedule_n_intervals: int = 40
     adaptive_bridge_count: int = 2
@@ -177,7 +227,7 @@ class Yamasaki2004ModelSeed:
             "np_in": self.n_p_in_m3.inlet_window_dict(),
             "te_in": self.electron_temperature_in_K.inlet_window_dict(),
             "z_in": self.z_in.inlet_window_dict(),
-            "I_0": paper.hall_current_A.inlet_window_dict(),
+            "I_0": self.hall_current_A.inlet_window_dict(),
             "seed_fraction": paper.seed_fraction.inlet_window_dict(),
         }
 

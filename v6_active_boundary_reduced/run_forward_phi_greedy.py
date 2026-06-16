@@ -19,7 +19,6 @@ from .policy import (
     State,
     _closure_metrics,
     _evaluate_sigma,
-    _extrapolated_state,
     _physics_params,
 )
 from .reachability_common import json_default, load_anchor_json, save_profile_npz, write_csv, write_json
@@ -46,7 +45,7 @@ def _build_forward_interval(
     *,
     current: State,
     A_current: float,
-    sigma_prev: float,
+    sigma_prev: float | None,
     dx: float,
     settings: PolicySettings,
     logA_min: float,
@@ -66,7 +65,12 @@ def _build_forward_interval(
     sigma_slope_upper = float(settings.sigma_max)
     sigma_logA_lower = float((float(logA_min) - float(current.logA)) / step)
     sigma_logA_upper = float((float(logA_max) - float(current.logA)) / step)
-    if settings.curvature_max is None or not np.isfinite(float(settings.curvature_max)):
+    if (
+        settings.curvature_max is None
+        or not np.isfinite(float(settings.curvature_max))
+        or sigma_prev is None
+        or not np.isfinite(float(sigma_prev))
+    ):
         sigma_curvature_lower = -float("inf")
         sigma_curvature_upper = float("inf")
     else:
@@ -136,7 +140,6 @@ def _scan_best_feasible(
     dx: float,
     config,
     settings: PolicySettings,
-    initial: State,
 ) -> dict[str, Any] | None:
     scan = [
         _evaluate_sigma(
@@ -146,7 +149,6 @@ def _scan_best_feasible(
             direction=1,
             config=config,
             settings=settings,
-            initial=initial,
         )
         for sigma in np.linspace(float(lo), float(hi), max(int(settings.scan_points), 3))
     ]
@@ -156,8 +158,9 @@ def _scan_best_feasible(
     return max(feasible, key=lambda item: float(item.get("objective_value", -np.inf)))
 
 
-def _node_payload(k: int, x: float, state: State, *, config, sigma: float) -> dict[str, Any]:
+def _node_payload(k: int, x: float, state: State, *, config, sigma: float | None) -> dict[str, Any]:
     metrics = _closure_metrics(state, config=config)
+    sigma_value = float("nan") if sigma is None else float(sigma)
     return {
         "k": int(k),
         "x": float(x),
@@ -165,7 +168,7 @@ def _node_payload(k: int, x: float, state: State, *, config, sigma: float) -> di
         "T_e": float(state.T_e),
         "A": float(state.area(config)),
         "logA": float(state.logA),
-        "sigma_logA": float(sigma),
+        "sigma_logA": sigma_value,
         **metrics,
     }
 
@@ -195,8 +198,8 @@ def rollout_forward_phi_greedy(
         logA_max = math.log(max(float(A_ceil) / max(float(config.area_scale_m2), 1e-300), 1e-300))
 
     states = [source.state]
-    sigma_prev = float(source.sigma_logA)
-    nodes = [_node_payload(0, 0.0, source.state, config=config, sigma=sigma_prev)]
+    sigma_prev: float | None = None
+    nodes = [_node_payload(0, 0.0, source.state, config=config, sigma=source.sigma_logA)]
     segments: list[dict[str, Any]] = []
     params = _physics_params(config)
 
@@ -249,11 +252,11 @@ def rollout_forward_phi_greedy(
             endpoint_source = str(interval["lower_source"])
             objective_bound_kind = "lower"
         else:
-            sigma_selected = float(np.clip(sigma_prev, interval["sigma_interval_lower"], interval["sigma_interval_upper"]))
+            regularizer = 0.0 if sigma_prev is None or not np.isfinite(float(sigma_prev)) else float(sigma_prev)
+            sigma_selected = float(np.clip(regularizer, interval["sigma_interval_lower"], interval["sigma_interval_upper"]))
             endpoint_source = "regularizer"
             objective_bound_kind = "flat"
 
-        initial = _extrapolated_state(states)
         chosen = _evaluate_sigma(
             current=current,
             sigma=sigma_selected,
@@ -261,7 +264,6 @@ def rollout_forward_phi_greedy(
             direction=1,
             config=config,
             settings=settings,
-            initial=initial,
         )
         solver_method = "forward_phi_endpoint"
         if not bool(chosen.get("feasible", False)):
@@ -272,7 +274,6 @@ def rollout_forward_phi_greedy(
                 dx=dx,
                 config=config,
                 settings=settings,
-                initial=initial,
             )
             if fallback is not None:
                 chosen = fallback
@@ -346,7 +347,7 @@ def rollout_forward_phi_greedy(
             "log_n": float(source.state.log_n),
             "log_Te": float(source.state.log_Te),
             "logA": float(source.state.logA),
-            "sigma_logA": float(source.sigma_logA),
+            "sigma_logA": _finite_or_none(float(source.sigma_logA)) if source.sigma_logA is not None else None,
             "source": str(source.source),
             "source_index": int(source.source_index),
         },
@@ -468,7 +469,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--g-floor", type=float, default=0.0)
     parser.add_argument("--tp-floor", type=float, default=300.0)
     parser.add_argument("--active-tol", type=float, default=1e-6)
-    parser.add_argument("--residual-tol", type=float, default=1e-8)
     parser.add_argument("--scan-points", type=int, default=41)
     parser.add_argument("--A-floor", type=float, default=None)
     parser.add_argument("--A-ceil", type=float, default=None)
@@ -492,7 +492,6 @@ def main(argv: list[str] | None = None) -> int:
         tp_floor_K=float(args.tp_floor),
         scan_points=int(args.scan_points),
         active_tol=float(args.active_tol),
-        residual_tol=float(args.residual_tol),
     )
     payload = rollout_forward_phi_greedy(
         config=config,

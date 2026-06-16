@@ -463,6 +463,7 @@ def _settings_from_args(args: argparse.Namespace) -> PreparationSettings:
     return PreparationSettings(
         n_steps=int(args.n_steps),
         dx=float(args.dx),
+        objective=str(args.objective),
         sigma_min=float(args.sigma_min),
         sigma_max=float(args.sigma_max),
         curvature_max=None if bool(args.no_curvature_bound) else float(args.curvature_max),
@@ -471,15 +472,14 @@ def _settings_from_args(args: argparse.Namespace) -> PreparationSettings:
         scan_points=int(args.scan_points),
         refine_iterations=int(args.refine_iterations),
         active_tol=float(args.active_tol),
-        residual_tol=float(args.residual_tol),
         sonic_mode=str(args.sonic_mode),
         sonic_mach_tol=float(args.sonic_mach_tol),
         sonic_det_abs_tol=float(args.sonic_det_abs_tol),
         sonic_compatibility_tol=float(args.sonic_compatibility_tol),
         sonic_residual_tol=float(args.sonic_residual_tol),
-        step_backend=str(args.step_backend),
         rk4_substeps=int(args.rk4_substeps),
         rk4_error_tol=float(args.rk4_error_tol),
+        g_boundary_fallback_mode=str(args.g_boundary_fallback_mode),
     )
 
 
@@ -499,6 +499,7 @@ def _rollout_weights_from_args(args: argparse.Namespace) -> PreparationObjective
 def _reward_weights_from_args(args: argparse.Namespace) -> OuterRewardWeights:
     return OuterRewardWeights(
         delta_improvement=float(args.delta_improvement_weight),
+        mhd_output_power_MW=float(args.mhd_output_power_weight),
         min_tp_floor_K=float(args.min_tp_floor),
         min_tp_shortfall=float(args.min_tp_shortfall_weight),
         max_te_ceiling_K=float(args.max_te_ceiling),
@@ -587,6 +588,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--accept-failed-rollout-seeds", action="store_true")
     parser.add_argument("--dx", type=float, required=True)
     parser.add_argument("--n-steps", type=int, default=60)
+    parser.add_argument(
+        "--objective",
+        choices=("delta_drop", "power_next"),
+        default="delta_drop",
+        help="Local greedy target used inside each active-boundary rollout.",
+    )
     parser.add_argument("--sigma-min", type=float, default=-0.5)
     parser.add_argument("--sigma-max", type=float, default=0.5)
     parser.add_argument("--curvature-max", type=float, default=0.05)
@@ -596,19 +603,24 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--scan-points", type=int, default=41)
     parser.add_argument("--refine-iterations", type=int, default=24)
     parser.add_argument("--active-tol", type=float, default=1e-6)
-    parser.add_argument("--residual-tol", type=float, default=1e-8)
     parser.add_argument("--sonic-mode", choices=("auto", "off", "on"), default="auto")
     parser.add_argument("--sonic-mach-tol", type=float, default=1.0e-3)
     parser.add_argument("--sonic-det-abs-tol", type=float, default=1.0e-2)
     parser.add_argument("--sonic-compatibility-tol", type=float, default=1.0e-7)
     parser.add_argument("--sonic-residual-tol", type=float, default=1.0e-6)
-    parser.add_argument("--step-backend", choices=("implicit_be", "rk4"), default="implicit_be")
     parser.add_argument("--rk4-substeps", type=int, default=1)
     parser.add_argument("--rk4-error-tol", type=float, default=1.0e-6)
+    parser.add_argument(
+        "--g-boundary-fallback-mode",
+        default="endpoint_brentq",
+        metavar="{endpoint_brentq,affine_expand_then_endpoint_brentq}",
+        help="G-boundary fallback mode; legacy and affine_expand are accepted aliases.",
+    )
     parser.add_argument("--anchor-x", type=float, default=0.0)
     parser.add_argument("--anchor-logA", type=float, default=0.0)
     parser.add_argument("--anchor-sigma", type=float, default=None)
     parser.add_argument("--delta-improvement-weight", type=float, default=1.0)
+    parser.add_argument("--mhd-output-power-weight", type=float, default=0.0)
     parser.add_argument("--min-tp-floor", type=float, default=3000.0)
     parser.add_argument("--min-tp-shortfall-weight", type=float, default=1.0)
     parser.add_argument("--max-te-ceiling", type=float, default=10000.0)

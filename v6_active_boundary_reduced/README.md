@@ -24,23 +24,18 @@ pedal is `sigma = d(log A)/dx`.  Area is not an independent control:
 logA_next = logA - dx * sigma
 ```
 
-The default step solver treats the common `G`-limited case as a local
-three-equation algebraic solve:
+The finite-step evaluator now uses explicit RK4 for local state advancement:
 
 ```text
-unknowns:  log_n_next, log_Te_next, sigma
-equations: primitive momentum residual = 0
-           primitive energy residual   = 0
-           G_next - G_floor             = 0
+given:   current state, sigma, dx
+return:  next log_n, log_Te, logA
+accept:  RK4 error estimate, G_next, and Tp_next satisfy local gates
 ```
 
 The hot physical closure and dynamic-term formulas are implemented in
-`numba_physics.py` with `numba.njit(cache=True)`.  The older scan-and-refine
-policy is kept as a fallback for non-`G` active sets or failed local solves.
-For reverse preparation, the `G`-boundary solve is warm-started by linearly
-extrapolating the last two accepted generated states and the last two accepted
-`sigma` values.  This does not change the pedal-direction test; it only changes
-the nonlinear solver initial guess.
+`numba_physics.py` with `numba.njit(cache=True)`.  The scan-and-refine policy is
+kept as a fallback for endpoint validation failures, but there is no longer an
+implicit backward-Euler step backend or separate nonlinear `G`-boundary solve.
 
 Current prototype constraints:
 

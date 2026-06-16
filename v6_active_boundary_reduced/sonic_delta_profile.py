@@ -11,6 +11,7 @@ from v6_firedrake_reduced.sonic_compatibility import solve_local_sonic_match
 
 from .numba_physics import dynamic_terms_numba
 from .policy import State, _closure_metrics, _physics_params
+from .sonic import sonic_finite_residual_vector
 
 
 @dataclass(frozen=True)
@@ -457,40 +458,15 @@ def _solve_next_state_trapezoid(
     area_next = float(params.area_scale_m2) * float(np.exp(np.clip(logA_next, -700.0, 700.0)))
 
     def residual(y: np.ndarray) -> np.ndarray:
-        log_n_next = float(y[0])
-        log_Te_next = float(y[1])
-        n_next = float(np.exp(np.clip(log_n_next, -700.0, 700.0)))
-        te_next = float(np.exp(np.clip(log_Te_next, -700.0, 700.0)))
-        terms = dynamic_terms_numba(
-            n_next,
-            te_next,
-            area_next,
-            float(sigma_next),
-            float(params.dot_N),
-            float(params.I_0),
-            float(params.seed_fraction),
-            float(params.B),
-            float(params.heavy_particle_mass_kg),
-            float(params.seed_ionization_energy_J),
-            float(params.sigma_ep),
+        return sonic_finite_residual_vector(
+            current=current,
+            log_n_next=float(y[0]),
+            log_Te_next=float(y[1]),
+            area_next=area_next,
+            sigma=float(sigma_next),
+            dx_signed=dx_signed,
+            params=params,
         )
-        dn_dx = (n_next - current.n_p) / dx_signed
-        dte_dx = (te_next - current.T_e) / dx_signed
-        momentum = float(terms[0]) * dn_dx + float(terms[1]) * dte_dx - float(terms[7])
-        energy = float(terms[3]) * dn_dx + float(terms[4]) * dte_dx - float(terms[8])
-        m_scale = max(
-            1.0,
-            abs(float(terms[0]) * max(n_next, 1.0) / max(abs(dx_signed), 1.0e-300)),
-            abs(float(terms[1]) * max(te_next, 1.0) / max(abs(dx_signed), 1.0e-300)),
-            abs(float(terms[7])),
-        )
-        e_scale = max(
-            1.0,
-            abs(float(terms[3]) * max(n_next, 1.0) / max(abs(dx_signed), 1.0e-300)),
-            abs(float(terms[4]) * max(te_next, 1.0) / max(abs(dx_signed), 1.0e-300)),
-            abs(float(terms[8])),
-        )
-        return np.array([momentum / m_scale, energy / e_scale], dtype=float)
 
     guess = np.array([float(initial.log_n), float(initial.log_Te)], dtype=float)
     sol = least_squares(residual, guess, xtol=1.0e-11, ftol=1.0e-11, gtol=1.0e-11, max_nfev=80)

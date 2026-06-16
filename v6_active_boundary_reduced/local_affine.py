@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .numba_physics import closure_state_numba, dynamic_terms_numba
+from .numba_physics import closure_state_numba, dynamic_terms_numba, g_state_and_gradients_numba
 from .policy_types import PhysicsParamsLike
 
 
@@ -38,6 +38,7 @@ def compute_forward_affine_coefficients(
     logA: float,
     params: PhysicsParamsLike,
     log_gradient_eps: float = 1.0e-5,
+    g_gradient_mode: str = "finite_difference",
 ) -> ForwardAffineCoefficients:
     """Compute local physical-forward affine coefficients at the current state.
 
@@ -85,6 +86,7 @@ def compute_forward_affine_coefficients(
         y0 = np.linalg.solve(D, f0)
         y1 = np.linalg.solve(D, f1)
     except np.linalg.LinAlgError:
+        # RISK: Singular D should have been routed to sonic left-null compatibility before affine endpoint use.
         y0 = np.array([np.nan, np.nan], dtype=float)
         y1 = np.array([np.nan, np.nan], dtype=float)
 
@@ -114,13 +116,19 @@ def compute_forward_affine_coefficients(
     a0 = float(dPhi_dn * y0[0] + dPhi_dTe * y0[1])
     a1 = float(dPhi_dn * y1[0] + dPhi_dTe * y1[1] + dPhi_dA)
 
-    dG_dn, dG_dTe, dG_dA = _closure_G_gradients(
-        n_p=n,
-        T_e=te,
-        A=area,
-        params=params,
-        log_gradient_eps=float(log_gradient_eps),
-    )
+    mode = str(g_gradient_mode).strip().lower().replace("-", "_")
+    if mode in {"analytic", "analytical"}:
+        dG_dn, dG_dTe, dG_dA = _closure_G_gradients_analytic(n_p=n, T_e=te, A=area, params=params)
+    elif mode in {"finite_difference", "central_difference", "centered_difference"}:
+        dG_dn, dG_dTe, dG_dA = _closure_G_gradients(
+            n_p=n,
+            T_e=te,
+            A=area,
+            params=params,
+            log_gradient_eps=float(log_gradient_eps),
+        )
+    else:
+        raise ValueError("g_gradient_mode must be 'finite_difference' or 'analytic'.")
     b0 = float(dG_dn * y0[0] + dG_dTe * y0[1])
     b1 = float(dG_dn * y1[0] + dG_dTe * y1[1] + dG_dA)
 
@@ -183,3 +191,25 @@ def _closure_G_gradients(
         float(dG_dlogte / max(float(T_e), 1.0e-300)),
         float(dG_dlogA / max(float(A), 1.0e-300)),
     )
+
+
+def _closure_G_gradients_analytic(
+    *,
+    n_p: float,
+    T_e: float,
+    A: float,
+    params: PhysicsParamsLike,
+) -> tuple[float, float, float]:
+    _, dG_dn, dG_dTe, dG_dA = g_state_and_gradients_numba(
+        float(n_p),
+        float(T_e),
+        float(A),
+        float(params.dot_N),
+        float(params.I_0),
+        float(params.seed_fraction),
+        float(params.B),
+        float(params.heavy_particle_mass_kg),
+        float(params.seed_ionization_energy_J),
+        float(params.sigma_ep),
+    )
+    return float(dG_dn), float(dG_dTe), float(dG_dA)

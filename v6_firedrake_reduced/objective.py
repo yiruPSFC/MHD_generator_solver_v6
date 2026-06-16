@@ -16,6 +16,7 @@ DEFAULT_VELIKHOV_PENALTY_WEIGHT = 25.0
 DEFAULT_THERMAL_TP_PENALTY_SCALE_K = 100.0
 DEFAULT_THERMAL_RATIO_PENALTY_SCALE = 1.0
 DEFAULT_THERMAL_PENALTY_WEIGHT = 1.0
+DEFAULT_THERMAL_GAMMA = 5.0 / 3.0
 
 
 @dataclass(frozen=True)
@@ -47,7 +48,10 @@ class ProfileMetrics:
     thermal_Tp_in_penalty_candidate: float
     thermal_Tp_low_penalty_candidate: float
     thermal_Tp_high_penalty_candidate: float
+    thermal_stagnation_Tp_high_penalty_candidate: float
     thermal_Te_over_Tp_penalty_candidate: float
+    min_stagnation_T_p_K: float
+    max_stagnation_T_p_K: float
     hall_voltage_V: float
     electric_power_from_hall_W: float
     mhd_output_power_W: float
@@ -83,7 +87,12 @@ class ProfileMetrics:
             "thermal_Tp_in_penalty_candidate": float(self.thermal_Tp_in_penalty_candidate),
             "thermal_Tp_low_penalty_candidate": float(self.thermal_Tp_low_penalty_candidate),
             "thermal_Tp_high_penalty_candidate": float(self.thermal_Tp_high_penalty_candidate),
+            "thermal_stagnation_Tp_high_penalty_candidate": float(
+                self.thermal_stagnation_Tp_high_penalty_candidate
+            ),
             "thermal_Te_over_Tp_penalty_candidate": float(self.thermal_Te_over_Tp_penalty_candidate),
+            "min_stagnation_T_p_K": float(self.min_stagnation_T_p_K),
+            "max_stagnation_T_p_K": float(self.max_stagnation_T_p_K),
             "hall_voltage_V": float(self.hall_voltage_V),
             "electric_power_from_hall_W": float(self.electric_power_from_hall_W),
             "mhd_output_power_W": float(self.mhd_output_power_W),
@@ -125,8 +134,10 @@ def thermal_window_settings(config: CaseConfig) -> dict[str, float | bool | str 
         "tp_in_max_K": _optional_finite_float(config, "thermal_tp_in_max_K"),
         "tp_floor_K": _optional_finite_float(config, "thermal_tp_floor_K"),
         "tp_path_max_K": _optional_finite_float(config, "thermal_tp_path_max_K"),
+        "stagnation_tp_path_max_K": _optional_finite_float(config, "thermal_stagnation_tp_path_max_K"),
         "te_over_tp_min": _optional_finite_float(config, "thermal_te_over_tp_min"),
         "te_over_tp_max": _optional_finite_float(config, "thermal_te_over_tp_max"),
+        "gamma": float(config.metadata.get("thermal_gamma", DEFAULT_THERMAL_GAMMA)),
         "tp_scale_K": max(
             float(config.metadata.get("thermal_tp_penalty_scale_K", DEFAULT_THERMAL_TP_PENALTY_SCALE_K)),
             1e-300,
@@ -140,6 +151,9 @@ def thermal_window_settings(config: CaseConfig) -> dict[str, float | bool | str 
         ),
         "tp_path_weight": float(
             config.metadata.get("thermal_tp_path_penalty_weight", DEFAULT_THERMAL_PENALTY_WEIGHT)
+        ),
+        "stagnation_tp_path_weight": float(
+            config.metadata.get("thermal_stagnation_tp_penalty_weight", DEFAULT_THERMAL_PENALTY_WEIGHT)
         ),
         "ratio_weight": float(
             config.metadata.get("thermal_te_over_tp_penalty_weight", DEFAULT_THERMAL_PENALTY_WEIGHT)
@@ -169,6 +183,7 @@ def _thermal_window_penalty_from_arrays(
     x: np.ndarray,
     T_e: np.ndarray,
     T_p: np.ndarray,
+    mach: np.ndarray,
     inlet_T_p: float,
     config: CaseConfig,
 ) -> dict[str, float | bool]:
@@ -177,11 +192,15 @@ def _thermal_window_penalty_from_arrays(
     ratio_scale = float(settings["ratio_scale"])
     tp_in_weight = float(settings["tp_in_weight"])
     tp_path_weight = float(settings["tp_path_weight"])
+    stagnation_tp_path_weight = float(settings["stagnation_tp_path_weight"])
     ratio_weight = float(settings["ratio_weight"])
+    gamma = float(settings["gamma"])
     x_arr = np.asarray(x, dtype=float)
     T_e_arr = np.asarray(T_e, dtype=float)
     T_p_arr = np.asarray(T_p, dtype=float)
+    mach_arr = np.asarray(mach, dtype=float)
     ratio = T_e_arr / np.maximum(T_p_arr, 1.0)
+    stagnation_T_p = T_p_arr * (1.0 + 0.5 * (gamma - 1.0) * mach_arr**2)
 
     tp_in_penalty = 0.0
     tp_in_max = settings["tp_in_max_K"]
@@ -206,6 +225,15 @@ def _thermal_window_penalty_from_arrays(
             weight=tp_path_weight,
         )
 
+    stagnation_tp_high_penalty = 0.0
+    stagnation_tp_path_max = settings["stagnation_tp_path_max_K"]
+    if stagnation_tp_path_max is not None:
+        stagnation_tp_high_penalty = _mean_path_penalty(
+            x=x_arr,
+            scaled_violation=np.maximum(stagnation_T_p - float(stagnation_tp_path_max), 0.0) / tp_scale,
+            weight=stagnation_tp_path_weight,
+        )
+
     ratio_low = np.zeros_like(ratio)
     ratio_min = settings["te_over_tp_min"]
     if ratio_min is not None:
@@ -220,7 +248,9 @@ def _thermal_window_penalty_from_arrays(
         weight=ratio_weight,
     )
 
-    candidate = float(tp_in_penalty + tp_low_penalty + tp_high_penalty + ratio_penalty)
+    candidate = float(
+        tp_in_penalty + tp_low_penalty + tp_high_penalty + stagnation_tp_high_penalty + ratio_penalty
+    )
     active = bool(settings["active"])
     return {
         "active": active,
@@ -230,7 +260,10 @@ def _thermal_window_penalty_from_arrays(
         "tp_in": float(tp_in_penalty),
         "tp_low": float(tp_low_penalty),
         "tp_high": float(tp_high_penalty),
+        "stagnation_tp_high": float(stagnation_tp_high_penalty),
         "ratio": float(ratio_penalty),
+        "min_stagnation_T_p_K": float(np.nanmin(stagnation_T_p)),
+        "max_stagnation_T_p_K": float(np.nanmax(stagnation_T_p)),
     }
 
 
@@ -314,6 +347,7 @@ def evaluate_profile_metrics(
         x=x,
         T_e=T_e,
         T_p=T_p,
+        mach=mach,
         inlet_T_p=float(inlet["T_p"]),
         config=config,
     )
@@ -347,7 +381,10 @@ def evaluate_profile_metrics(
         thermal_Tp_in_penalty_candidate=float(thermal_penalty["tp_in"]),
         thermal_Tp_low_penalty_candidate=float(thermal_penalty["tp_low"]),
         thermal_Tp_high_penalty_candidate=float(thermal_penalty["tp_high"]),
+        thermal_stagnation_Tp_high_penalty_candidate=float(thermal_penalty["stagnation_tp_high"]),
         thermal_Te_over_Tp_penalty_candidate=float(thermal_penalty["ratio"]),
+        min_stagnation_T_p_K=float(thermal_penalty["min_stagnation_T_p_K"]),
+        max_stagnation_T_p_K=float(thermal_penalty["max_stagnation_T_p_K"]),
         hall_voltage_V=hall_voltage,
         electric_power_from_hall_W=electric_power_from_hall_W,
         mhd_output_power_W=mhd_output_power_W,

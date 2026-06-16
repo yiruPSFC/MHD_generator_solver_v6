@@ -6,7 +6,6 @@ from typing import Any
 
 import numpy as np
 
-from v6_firedrake_reduced.cases.freidberg_reference import load_reference_profile
 from v6_firedrake_reduced.design import (
     DESIGN_VARIABLE_NAMES,
     CaseConfig,
@@ -14,7 +13,9 @@ from v6_firedrake_reduced.design import (
     load_case_config,
 )
 
-from .policy import AnchorState, PreparationSettings, State, recover_preparation_profile
+from .numba_physics import closure_state_numba, inlet_design_numba
+from .physics_constants import K_B
+from .policy import AnchorState, PreparationSettings, State, _physics_params, recover_preparation_profile
 
 
 AREA_DESIGN_VARIABLE_NAMES = ("a1", "a2", "a3")
@@ -34,6 +35,8 @@ class AnchorOptions:
 @dataclass(frozen=True)
 class PreparationObjectiveWeights:
     delta_improvement: float = 1.0
+    mhd_output_power_MW: float = 0.0
+    enthalpy_extraction_percent: float = 0.0
     inlet_delta: float = 0.05
     inlet_te_floor_K: float = 6000.0
     inlet_tp_floor_K: float = 3000.0
@@ -43,17 +46,35 @@ class PreparationObjectiveWeights:
     failure_penalty: float = 1.0e6
 
 
+@dataclass(frozen=True)
+class ProfileMetrics:
+    mhd_output_power_W: float
+    raw_enthalpy_extraction_percent: float
+    inlet_enthalpy_flux_W: float
+    hall_voltage_V: float
+    electric_power_from_hall_W: float
+    min_T_p_K: float
+    max_Te_over_Tp: float
+    min_mach: float
+    finite_profile: bool
+
+    def to_dict(self) -> dict[str, float | bool]:
+        return {
+            "mhd_output_power_W": float(self.mhd_output_power_W),
+            "mhd_output_power_MW": float(self.mhd_output_power_W) / 1.0e6,
+            "raw_enthalpy_extraction_percent": float(self.raw_enthalpy_extraction_percent),
+            "inlet_enthalpy_flux_W": float(self.inlet_enthalpy_flux_W),
+            "hall_voltage_V": float(self.hall_voltage_V),
+            "electric_power_from_hall_W": float(self.electric_power_from_hall_W),
+            "min_T_p_K": float(self.min_T_p_K),
+            "max_Te_over_Tp": float(self.max_Te_over_Tp),
+            "min_mach": float(self.min_mach),
+            "finite_profile": bool(self.finite_profile),
+        }
+
+
 def load_base_config(*, case: str, n_intervals: int | None = None) -> CaseConfig:
     return load_case_config(case=case, n_intervals=n_intervals)
-
-
-def default_anchor_sigma(config: CaseConfig) -> float:
-    if str(config.case) == "freidberg_reference":
-        profile = load_reference_profile()
-        sigma = np.asarray(profile["sigma_logA"], dtype=float).reshape(-1)
-        if sigma.size:
-            return float(sigma[0])
-    return 0.0
 
 
 def design_from_overrides(
@@ -91,14 +112,13 @@ def anchor_from_design(
     design = config.design
     if float(design.T_e_in) <= 0.0:
         raise ValueError("design.T_e_in must be positive.")
-    sigma = default_anchor_sigma(config) if opts.sigma_logA is None else float(opts.sigma_logA)
     return AnchorState(
         state=State(
             log_n=float(design.log_n_p_in),
             log_Te=float(np.log(float(design.T_e_in))),
             logA=float(opts.logA),
         ),
-        sigma_logA=float(sigma),
+        sigma_logA=None if opts.sigma_logA is None else float(opts.sigma_logA),
         x=float(opts.x),
         source=str(opts.source),
         source_index=-1,
@@ -131,6 +151,7 @@ def evaluate_preparation_design(
         result = _score_rollout(
             payload=payload,
             design=design,
+            config=config,
             weights=objective_weights,
             elapsed_s=time.perf_counter() - started,
             case_id=case_id,
@@ -163,6 +184,7 @@ def _score_rollout(
     *,
     payload: dict[str, Any],
     design: DesignVector,
+    config: CaseConfig,
     weights: PreparationObjectiveWeights,
     elapsed_s: float,
     case_id: int | None,
@@ -196,8 +218,29 @@ def _score_rollout(
     ) ** 2
     target_g_margin = float(outlet["G"]) - g_floor
     target_tp_margin = float(outlet["T_p"]) - tp_floor
+    profile_metrics = _profile_metric_terms(payload=payload, design=design, config=config)
+    profile_metrics_ok = bool(float(profile_metrics.get("profile_metrics_ok", 0.0)) >= 0.5)
+    profile_metrics_required = bool(
+        float(weights.mhd_output_power_MW) != 0.0
+        or float(weights.enthalpy_extraction_percent) != 0.0
+    )
+    # REVIEW: Profile metrics are optional for delta-only scans, but required when they affect reward.
+    mhd_output_MW = float(profile_metrics.get("mhd_output_power_W", float("nan"))) / 1.0e6
+    enthalpy_extraction = float(profile_metrics.get("raw_enthalpy_extraction_percent", float("nan")))
+    mhd_power_reward = (
+        float(weights.mhd_output_power_MW) * mhd_output_MW if np.isfinite(mhd_output_MW) else 0.0
+    )
+    enthalpy_reward = (
+        float(weights.enthalpy_extraction_percent) * enthalpy_extraction
+        if np.isfinite(enthalpy_extraction)
+        else 0.0
+    )
     target_ok = bool(target_g_margin >= -active_tol and target_tp_margin >= -active_tol)
-    rollout_ok = bool(payload.get("ok", False)) and target_ok
+    rollout_ok = (
+        bool(payload.get("ok", False))
+        and target_ok
+        and (profile_metrics_ok or not profile_metrics_required)
+    )
     failure_diagnostics = _failure_diagnostics(
         payload_ok=bool(payload.get("ok", False)),
         target_ok=target_ok,
@@ -206,16 +249,34 @@ def _score_rollout(
         target_tp_margin=target_tp_margin,
         active_tol=active_tol,
     )
+    if profile_metrics_required and not profile_metrics_ok:
+        failure_diagnostics = dict(failure_diagnostics)
+        blockers = list(failure_diagnostics.get("primary_blockers", []) or [])
+        blockers.append("profile_metrics")
+        failure_diagnostics.update(
+            {
+                "kind": failure_diagnostics.get("kind") or "profile_metrics",
+                "primary_blockers": sorted(set(str(item) for item in blockers)),
+                "profile_metrics_failure": str(
+                    profile_metrics.get("profile_metrics_failure", "profile_metrics_unavailable")
+                ),
+            }
+        )
     failure_reason = failure
     if failure_reason is None and not target_ok:
         failure_reason = (
             "target_anchor_infeasible: "
             f"G_margin={target_g_margin:.6g}, Tp_margin={target_tp_margin:.6g}"
         )
+    if failure_reason is None and profile_metrics_required and not profile_metrics_ok:
+        failure_reason = "profile_metrics_unavailable: " + str(
+            profile_metrics.get("profile_metrics_failure", "unknown")
+        )
     if failure_reason is None and not bool(payload.get("ok", False)):
         failure_reason = _rollout_failure_message(failure_diagnostics)
     failure_penalty = 0.0 if rollout_ok else float(weights.failure_penalty)
     raw_score = float(weights.delta_improvement) * delta_improvement
+    raw_score += mhd_power_reward + enthalpy_reward
     raw_score -= inlet_delta_penalty + te_shortfall_penalty + tp_shortfall_penalty
     score = raw_score if rollout_ok and np.isfinite(raw_score) else -float(weights.failure_penalty)
     return {
@@ -231,6 +292,8 @@ def _score_rollout(
         "objective_terms": {
             "delta_improvement": float(delta_improvement),
             "delta_improvement_reward": float(weights.delta_improvement) * delta_improvement,
+            "mhd_output_power_MW_reward": mhd_power_reward,
+            "enthalpy_extraction_percent_reward": enthalpy_reward,
             "inlet_delta_penalty": inlet_delta_penalty,
             "inlet_te_shortfall_penalty": te_shortfall_penalty,
             "inlet_tp_shortfall_penalty": tp_shortfall_penalty,
@@ -239,6 +302,7 @@ def _score_rollout(
             "target_g_margin": target_g_margin,
             "target_tp_margin": target_tp_margin,
             "target_ok": float(1.0 if target_ok else 0.0),
+            **profile_metrics,
         },
         "outlet": _node_summary(outlet),
         "preparation_inlet": _node_summary(inlet),
@@ -246,6 +310,151 @@ def _score_rollout(
         "support_counts": support_counts,
         "max_abs_scaled_residual": float(active_summary.get("max_abs_scaled_residual", np.nan)),
         "n_steps_completed": max(len(nodes) - 1, 0),
+    }
+
+
+def _inlet_enthalpy_flux(*, design: DesignVector, config: CaseConfig) -> float:
+    params = _physics_params(config)
+    inlet = inlet_design_numba(
+        float(design.n_p_in),
+        float(design.T_e_in),
+        float(design.Z_in),
+        float(design.I_0),
+        float(design.seed_fraction),
+        float(design.B_T),
+        float(config.area_scale_m2),
+        float(params.heavy_particle_mass_kg),
+        float(params.seed_ionization_energy_J),
+        float(params.sigma_ep),
+    )
+    n_p = max(float(inlet[0]), 1.0)
+    n_e = max(float(inlet[1]), 0.0)
+    T_e = max(float(inlet[2]), 1.0)
+    T_p = max(float(inlet[3]), 1.0)
+    v_in = max(float(inlet[7]), 1.0e-30)
+    area = max(float(inlet[11]), 1.0e-30)
+    thermal_density = 2.5 * K_B * (n_p * T_p + n_e * T_e)
+    kinetic_density = 0.5 * float(params.heavy_particle_mass_kg) * n_p * v_in * v_in
+    return float(area * v_in * (thermal_density + kinetic_density))
+
+
+def evaluate_profile_metrics(
+    *,
+    profile: dict[str, Any],
+    design: DesignVector,
+    config: CaseConfig,
+) -> ProfileMetrics:
+    x = np.asarray(profile["x"], dtype=float).reshape(-1)
+    n_p = np.asarray(profile["n_p"], dtype=float).reshape(-1)
+    T_e = np.asarray(profile["T_e"], dtype=float).reshape(-1)
+    area = np.asarray(profile["A"], dtype=float).reshape(-1)
+    sigma = np.asarray(profile["sigma_logA"], dtype=float).reshape(-1)
+    if not (x.size == n_p.size == T_e.size == area.size == sigma.size):
+        raise ValueError("profile arrays x, n_p, T_e, A, and sigma_logA must have matching lengths.")
+    if x.size < 2:
+        raise ValueError("profile metrics require at least two profile points.")
+
+    params = _physics_params(config)
+    T_p_values: list[float] = []
+    mach_values: list[float] = []
+    power_density: list[float] = []
+    hall_field: list[float] = []
+    for n_val, te_val, area_val in zip(n_p, T_e, area, strict=True):
+        closure = closure_state_numba(
+            float(n_val),
+            float(te_val),
+            float(area_val),
+            float(params.dot_N),
+            float(params.I_0),
+            float(params.seed_fraction),
+            float(params.B),
+            float(params.heavy_particle_mass_kg),
+            float(params.seed_ionization_energy_J),
+            float(params.sigma_ep),
+        )
+        A_safe = float(closure[2])
+        J_x = float(closure[14])
+        E_x = float(closure[16])
+        T_p_values.append(float(closure[10]))
+        mach_values.append(float(closure[17]))
+        power_density.append(float(-A_safe * J_x * E_x))
+        hall_field.append(float(-E_x))
+
+    T_p = np.asarray(T_p_values, dtype=float)
+    mach = np.asarray(mach_values, dtype=float)
+    power_density_arr = np.asarray(power_density, dtype=float)
+    hall_field_arr = np.asarray(hall_field, dtype=float)
+    mhd_output_power_W = float(np.trapezoid(power_density_arr, x))
+    hall_voltage = float(np.trapezoid(hall_field_arr, x))
+    inlet_flux_W = _inlet_enthalpy_flux(design=design, config=config)
+    te_over_tp = T_e / np.maximum(T_p, 1.0)
+    return ProfileMetrics(
+        mhd_output_power_W=mhd_output_power_W,
+        raw_enthalpy_extraction_percent=float(100.0 * mhd_output_power_W / max(inlet_flux_W, 1e-30)),
+        inlet_enthalpy_flux_W=inlet_flux_W,
+        hall_voltage_V=hall_voltage,
+        electric_power_from_hall_W=float(float(design.I_0) * hall_voltage),
+        min_T_p_K=float(np.nanmin(T_p)),
+        max_Te_over_Tp=float(np.nanmax(te_over_tp)),
+        min_mach=float(np.nanmin(mach)),
+        finite_profile=bool(
+            np.all(np.isfinite(x))
+            and np.all(np.isfinite(n_p))
+            and np.all(np.isfinite(T_e))
+            and np.all(np.isfinite(area))
+            and np.all(np.isfinite(sigma))
+            and np.all(np.isfinite(T_p))
+            and np.all(np.isfinite(mach))
+            and np.all(np.isfinite(power_density_arr))
+            and np.all(np.isfinite(hall_field_arr))
+            and np.all(np.isfinite(te_over_tp))
+        ),
+    )
+
+
+def _profile_metric_terms(
+    *,
+    payload: dict[str, Any],
+    design: DesignVector,
+    config: CaseConfig,
+) -> dict[str, Any]:
+    arrays = dict(payload.get("profile_arrays", {}) or {})
+    required = ("x", "n_p", "T_e", "A", "sigma_logA")
+    missing = [name for name in required if name not in arrays]
+    if missing:
+        return {
+            "profile_metrics_ok": 0.0,
+            "profile_metrics_failure": "missing_profile_arrays:" + ",".join(missing),
+        }
+    profile = {name: np.asarray(arrays[name], dtype=float).reshape(-1) for name in required}
+    sizes = {profile[name].size for name in required}
+    if len(sizes) != 1 or next(iter(sizes)) < 2:
+        return {
+            "profile_metrics_ok": 0.0,
+            "profile_metrics_failure": "invalid_profile_array_sizes",
+        }
+    order = np.argsort(profile["x"])
+    sorted_profile = {name: values[order] for name, values in profile.items()}
+    try:
+        metrics = evaluate_profile_metrics(profile=sorted_profile, design=design, config=config)
+    except Exception as exc:
+        return {
+            "profile_metrics_ok": 0.0,
+            "profile_metrics_failure": type(exc).__name__ + ": " + str(exc),
+        }
+    values = metrics.to_dict()
+    return {
+        "profile_metrics_ok": 1.0,
+        "profile_metrics_failure": "",
+        "mhd_output_power_W": float(values["mhd_output_power_W"]),
+        "mhd_output_power_MW": float(values["mhd_output_power_W"]) / 1.0e6,
+        "raw_enthalpy_extraction_percent": float(values["raw_enthalpy_extraction_percent"]),
+        "inlet_enthalpy_flux_W": float(values["inlet_enthalpy_flux_W"]),
+        "hall_voltage_V": float(values["hall_voltage_V"]),
+        "electric_power_from_hall_W": float(values["electric_power_from_hall_W"]),
+        "profile_min_T_p_K": float(values["min_T_p_K"]),
+        "profile_max_Te_over_Tp": float(values["max_Te_over_Tp"]),
+        "profile_min_mach": float(values["min_mach"]),
     }
 
 
@@ -290,7 +499,6 @@ def _failure_diagnostics(
         "sigma_interval_upper": termination.get("sigma_interval_upper"),
         "constraint_margins": margins,
         "max_abs_scaled_residual": termination.get("max_abs_scaled_residual"),
-        "least_squares_nfev": termination.get("least_squares_nfev"),
         "reverse_interval_error": termination.get("reverse_interval_error"),
         "reverse_interval_conflict": termination.get("reverse_interval_conflict"),
         "reverse_interval_conflict_kind": termination.get("reverse_interval_conflict_kind"),
@@ -368,6 +576,8 @@ def _failure_result(
         "objective_terms": {
             "delta_improvement": float("nan"),
             "delta_improvement_reward": float("nan"),
+            "mhd_output_power_MW_reward": float("nan"),
+            "enthalpy_extraction_percent_reward": float("nan"),
             "inlet_delta_penalty": float("nan"),
             "inlet_te_shortfall_penalty": float("nan"),
             "inlet_tp_shortfall_penalty": float("nan"),
@@ -396,6 +606,10 @@ def _node_summary(node: dict[str, Any]) -> dict[str, float]:
         "G",
         "beta",
         "Z",
+        "power_density_W_per_m",
+        "hall_field_V_per_m",
+        "J_x",
+        "E_x",
     )
     return {name: float(node[name]) for name in fields if name in node}
 
@@ -422,12 +636,41 @@ def flatten_result_for_csv(result: dict[str, Any]) -> dict[str, Any]:
         "termination_error",
         "failed_step",
         "support_type",
+        "selected_support_type",
+        "selected_sigma_origin",
+        "selected_sigma_source",
+        "affine_support_type",
+        "affine_objective_bound_kind",
+        "affine_selected_endpoint_source",
+        "objective_bound_kind",
+        "selected_endpoint_source",
         "solver_method",
+        "sign_aware_fallback_status",
+        "sign_aware_fallback_attempted",
+        "sign_aware_fallback_used",
+        "sign_aware_fallback_recovered",
+        "sign_aware_fallback_solver_method",
+        "sign_aware_fallback_validation_failure",
+        "sign_aware_endpoint_sigma",
+        "sign_aware_endpoint_ok",
+        "sign_aware_endpoint_feasible",
+        "sign_aware_endpoint_solver_method",
+        "sign_aware_endpoint_validation_failure",
+        "sign_aware_endpoint_constraint_violation",
+        "sonic_objective_score",
+        "sonic_direction_ok",
+        "sonic_direction_gate",
+        "sonic_compatibility_status",
+        "sonic_compatibility_selected_sigma",
+        "sonic_compatibility_selected_scaled_residual",
+        "sonic_compatibility_best_interval_sigma",
+        "sonic_compatibility_best_interval_scaled_residual",
+        "sonic_compatibility_variation_scaled",
+        "sonic_compatibility_root_sigma",
         "sigma",
         "sigma_interval_lower",
         "sigma_interval_upper",
         "max_abs_scaled_residual",
-        "least_squares_nfev",
         "reverse_interval_error",
         "reverse_interval_conflict",
         "reverse_interval_conflict_kind",
@@ -440,6 +683,7 @@ def flatten_result_for_csv(result: dict[str, Any]) -> dict[str, Any]:
         "reverse_interval_conflict_Aprime_lower",
         "reverse_interval_conflict_Aprime_upper",
         "reverse_interval_conflict_Aprime_gap",
+        "profile_metrics_failure",
         "scan_feasible_count",
         "scan_n",
         "target_g_margin",
@@ -460,7 +704,6 @@ def flatten_result_for_csv(result: dict[str, Any]) -> dict[str, Any]:
             "feasible",
             "constraint_violation",
             "max_abs_scaled_residual",
-            "least_squares_nfev",
         ):
             if name in item:
                 row[f"failure_{label}_{name}"] = item[name]
@@ -479,6 +722,11 @@ def flatten_result_for_csv(result: dict[str, Any]) -> dict[str, Any]:
         "Tp_max_K",
         "mach_min",
         "mach_max",
+        "objective",
+        "power_density_min_W_per_m",
+        "power_density_max_W_per_m",
+        "mhd_output_power_W",
+        "mhd_output_power_MW",
         "sigma_min",
         "sigma_max",
         "G_min_excluding_anchor",
@@ -500,7 +748,6 @@ def flatten_result_for_csv(result: dict[str, Any]) -> dict[str, Any]:
         "sigma_interval_lower",
         "sigma_interval_upper",
         "max_abs_scaled_residual",
-        "least_squares_nfev",
         "error",
         "reverse_interval_error",
         "reverse_interval_conflict",
@@ -549,7 +796,6 @@ def flatten_result_for_csv(result: dict[str, Any]) -> dict[str, Any]:
             "delta_gain",
             "constraint_violation",
             "max_abs_scaled_residual",
-            "least_squares_nfev",
         ):
             if name in item:
                 row[f"scan_{label}_{name}"] = item[name]
@@ -558,7 +804,14 @@ def flatten_result_for_csv(result: dict[str, Any]) -> dict[str, Any]:
     for name, value in dict(result.get("design", {}) or {}).items():
         row[f"design_{name}"] = float(value)
     for name, value in dict(result.get("objective_terms", {}) or {}).items():
-        row[f"objective_{name}"] = float(value)
+        if isinstance(value, (bool, np.bool_)):
+            row[f"objective_{name}"] = bool(value)
+        elif isinstance(value, (int, float, np.integer, np.floating)):
+            row[f"objective_{name}"] = float(value)
+        elif value is None:
+            row[f"objective_{name}"] = ""
+        else:
+            row[f"objective_{name}"] = str(value)
     for prefix in ("outlet", "preparation_inlet"):
         for name, value in dict(result.get(prefix, {}) or {}).items():
             row[f"{prefix}_{name}"] = float(value)

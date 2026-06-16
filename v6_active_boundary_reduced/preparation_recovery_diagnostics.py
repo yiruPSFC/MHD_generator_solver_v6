@@ -11,9 +11,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from v6_firedrake_reduced.design import CaseConfig, DesignBounds, DesignVector
-from v6_firedrake_reduced.forward import _freidberg_balance_terms
-from v6_firedrake_reduced.legacy_physics import closure_state, inlet_design_generic, ops_for_numeric
 from v6_firedrake_reduced.transport import working_fluid_for_config
+
+from .numba_physics import closure_state_numba, freidberg_balance_terms_numba, inlet_design_numba
 
 
 def _json_default(value: Any):
@@ -54,68 +54,74 @@ def _rows_from_summary(summary: dict[str, Any]) -> list[dict[str, float]]:
     config = _config_from_payload(dict(summary["case_config"]))
     settings = dict(summary.get("settings", {}) or {})
     g_floor = float(settings.get("g_floor", 0.0))
-    ops = ops_for_numeric()
     fluid = working_fluid_for_config(config)
     design = config.design
-    inlet = inlet_design_generic(
-        ops=ops,
-        n_p_in=design.n_p_in,
-        T_e_in=design.T_e_in,
-        Z_in=design.Z_in,
-        I_0=design.I_0,
-        seed_fraction=design.seed_fraction,
-        B=float(design.B_T),
-        inlet_A=float(config.area_scale_m2),
-        working_fluid=fluid,
+    inlet = inlet_design_numba(
+        float(design.n_p_in),
+        float(design.T_e_in),
+        float(design.Z_in),
+        float(design.I_0),
+        float(design.seed_fraction),
+        float(design.B_T),
+        float(config.area_scale_m2),
+        float(fluid.heavy_particle_mass_kg),
+        float(fluid.seed_ionization_energy_J),
+        float(fluid.sigma_ep),
     )
     rows: list[dict[str, float]] = []
     for node in summary["nodes"]:
-        closure = closure_state(
-            ops=ops,
-            n_p=float(node["n_p"]),
-            T_e=float(node["T_e"]),
-            A=float(node["A"]),
-            dot_N=float(inlet["dot_N"]),
-            I_0=float(design.I_0),
-            seed_fraction=design.seed_fraction,
-            B=float(design.B_T),
-            working_fluid=fluid,
+        closure = closure_state_numba(
+            float(node["n_p"]),
+            float(node["T_e"]),
+            float(node["A"]),
+            float(inlet[6]),
+            float(design.I_0),
+            float(design.seed_fraction),
+            float(design.B_T),
+            float(fluid.heavy_particle_mass_kg),
+            float(fluid.seed_ionization_energy_J),
+            float(fluid.sigma_ep),
         )
-        balances = _freidberg_balance_terms(
-            ops=ops,
-            closure=closure,
-            A=float(node["A"]),
-            B_T=float(design.B_T),
-            area_scale_m2=float(config.area_scale_m2),
-            heavy_particle_mass_kg=float(fluid.heavy_particle_mass_kg),
-            length_m=float(config.length_m),
+        balances = freidberg_balance_terms_numba(
+            float(node["n_p"]),
+            float(node["T_e"]),
+            float(node["A"]),
+            float(inlet[6]),
+            float(design.I_0),
+            float(design.seed_fraction),
+            float(design.B_T),
+            float(config.area_scale_m2),
+            float(fluid.heavy_particle_mass_kg),
+            float(fluid.seed_ionization_energy_J),
+            float(fluid.sigma_ep),
+            float(config.length_m),
         )
-        n_s = max(float(closure["n_s"]), 1e-300)
-        f_I = float(closure["n_e"]) / n_s
+        n_s = max(float(closure[3]), 1e-300)
+        f_I = float(closure[4]) / n_s
         rows.append(
             {
                 "k": int(node["k"]),
                 "x": float(node["x"]),
                 "n_p": float(node["n_p"]),
                 "T_e": float(node["T_e"]),
-                "T_p": float(closure["T_p"]),
-                "delta_T": float(float(node["T_e"]) / max(float(closure["T_p"]), 1e-300) - 1.0),
-                "mach": float(closure["mach"]),
+                "T_p": float(closure[10]),
+                "delta_T": float(float(node["T_e"]) / max(float(closure[10]), 1e-300) - 1.0),
+                "mach": float(closure[17]),
                 "A": float(node["A"]),
                 "sigma_logA": float(node["sigma_logA"]),
-                "G": float(closure["G"]),
-                "G_margin": float(closure["G"] - g_floor),
+                "G": float(closure[18]),
+                "G_margin": float(closure[18] - g_floor),
                 "f_I": f_I,
-                "v_p": float(closure["v_p"]),
-                "beta": float(closure["beta"]),
-                "Z": float(closure["Z"]),
-                "n_e": float(closure["n_e"]),
-                "H_p": float(balances["H_p"]),
-                "L_p": float(balances["L_p"]),
-                "rhs_H": float(balances["rhs_H"]),
-                "rhs_L": float(balances["rhs_L"]),
-                "H_scale": float(balances["H_scale"]),
-                "L_scale": float(balances["L_scale"]),
+                "v_p": float(closure[9]),
+                "beta": float(closure[5]),
+                "Z": float(closure[7]),
+                "n_e": float(closure[4]),
+                "H_p": float(balances[0]),
+                "L_p": float(balances[1]),
+                "rhs_H": float(balances[2]),
+                "rhs_L": float(balances[3]),
+                "H_scale": float(balances[4]),
+                "L_scale": float(balances[5]),
             }
         )
     _attach_hl_residuals(rows)
@@ -305,7 +311,7 @@ def _shade_segments(ax, rows: list[dict[str, float]], segments: list[dict[str, A
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Plot and tabulate a preparation recovery run.")
+    parser = argparse.ArgumentParser(description="Write diagnostic tables and plots for a preparation recovery run.")
     parser.add_argument("summary", type=Path, help="Path to preparation_recovery_summary.json.")
     parser.add_argument("--out-dir", type=Path, default=None)
     return parser

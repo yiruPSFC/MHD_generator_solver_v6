@@ -68,7 +68,7 @@ def anchor_payload(anchor: AnchorState, *, config: CaseConfig) -> dict[str, Any]
         "log_n": float(anchor.state.log_n),
         "log_Te": float(anchor.state.log_Te),
         "logA": float(anchor.state.logA),
-        "sigma_logA": float(anchor.sigma_logA),
+        "sigma_logA": None if anchor.sigma_logA is None else float(anchor.sigma_logA),
         **metrics,
     }
 

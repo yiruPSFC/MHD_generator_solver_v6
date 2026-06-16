@@ -25,7 +25,7 @@ from .objective import (
     flatten_result_for_csv,
     load_base_config,
 )
-from .plot_preparation_recovery import write_preparation_diagnostics
+from .preparation_recovery_diagnostics import write_preparation_diagnostics
 from .policy import PreparationSettings
 
 
@@ -67,6 +67,7 @@ def _settings_from_args(args: argparse.Namespace) -> PreparationSettings:
     return PreparationSettings(
         n_steps=int(args.n_steps),
         dx=float(args.dx),
+        objective=str(args.objective),
         sigma_min=float(args.sigma_min),
         sigma_max=float(args.sigma_max),
         curvature_max=None if bool(args.no_curvature_bound) else float(args.curvature_max),
@@ -75,21 +76,22 @@ def _settings_from_args(args: argparse.Namespace) -> PreparationSettings:
         scan_points=int(args.scan_points),
         refine_iterations=int(args.refine_iterations),
         active_tol=float(args.active_tol),
-        residual_tol=float(args.residual_tol),
         sonic_mode=str(args.sonic_mode),
         sonic_mach_tol=float(args.sonic_mach_tol),
         sonic_det_abs_tol=float(args.sonic_det_abs_tol),
         sonic_compatibility_tol=float(args.sonic_compatibility_tol),
         sonic_residual_tol=float(args.sonic_residual_tol),
-        step_backend=str(args.step_backend),
         rk4_substeps=int(args.rk4_substeps),
         rk4_error_tol=float(args.rk4_error_tol),
+        g_boundary_fallback_mode=str(args.g_boundary_fallback_mode),
     )
 
 
 def _weights_from_args(args: argparse.Namespace) -> PreparationObjectiveWeights:
     return PreparationObjectiveWeights(
         delta_improvement=float(args.delta_improvement_weight),
+        mhd_output_power_MW=float(args.mhd_output_power_weight),
+        enthalpy_extraction_percent=float(args.enthalpy_extraction_weight),
         inlet_delta=float(args.inlet_delta_weight),
         inlet_te_floor_K=float(args.inlet_te_floor),
         inlet_tp_floor_K=float(args.inlet_tp_floor),
@@ -215,6 +217,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--diagnose-best", action="store_true")
     parser.add_argument("--dx", type=float, required=True, help="Positive upstream marching step [m].")
     parser.add_argument("--n-steps", type=int, default=60)
+    parser.add_argument(
+        "--objective",
+        choices=("delta_drop", "power_next"),
+        default="delta_drop",
+        help="Local greedy target used inside each active-boundary rollout.",
+    )
     parser.add_argument("--sigma-min", type=float, default=-0.5)
     parser.add_argument("--sigma-max", type=float, default=0.5)
     parser.add_argument("--curvature-max", type=float, default=8.0)
@@ -224,15 +232,19 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--scan-points", type=int, default=41)
     parser.add_argument("--refine-iterations", type=int, default=24)
     parser.add_argument("--active-tol", type=float, default=1e-6)
-    parser.add_argument("--residual-tol", type=float, default=1e-8)
     parser.add_argument("--sonic-mode", choices=("auto", "off", "on"), default="auto")
     parser.add_argument("--sonic-mach-tol", type=float, default=1.0e-3)
     parser.add_argument("--sonic-det-abs-tol", type=float, default=1.0e-2)
     parser.add_argument("--sonic-compatibility-tol", type=float, default=1.0e-7)
     parser.add_argument("--sonic-residual-tol", type=float, default=1.0e-6)
-    parser.add_argument("--step-backend", choices=("implicit_be", "rk4"), default="implicit_be")
     parser.add_argument("--rk4-substeps", type=int, default=1)
     parser.add_argument("--rk4-error-tol", type=float, default=1.0e-6)
+    parser.add_argument(
+        "--g-boundary-fallback-mode",
+        default="endpoint_brentq",
+        metavar="{endpoint_brentq,affine_expand_then_endpoint_brentq}",
+        help="G-boundary fallback mode; legacy and affine_expand are accepted aliases.",
+    )
     parser.add_argument("--anchor-x", type=float, default=0.0)
     parser.add_argument("--anchor-logA", type=float, default=0.0)
     parser.add_argument(
@@ -242,6 +254,8 @@ def build_parser() -> argparse.ArgumentParser:
         help="Target dlogA/dx. Default uses Freidberg profile index 0 when available, otherwise 0.",
     )
     parser.add_argument("--delta-improvement-weight", type=float, default=1.0)
+    parser.add_argument("--mhd-output-power-weight", type=float, default=0.0)
+    parser.add_argument("--enthalpy-extraction-weight", type=float, default=0.0)
     parser.add_argument("--inlet-delta-weight", type=float, default=0.05)
     parser.add_argument("--inlet-te-floor", type=float, default=6000.0)
     parser.add_argument("--inlet-tp-floor", type=float, default=3000.0)

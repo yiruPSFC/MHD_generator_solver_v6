@@ -9,6 +9,7 @@ import numpy as np
 @dataclass(frozen=True)
 class OuterRewardWeights:
     delta_improvement: float = 1.0
+    mhd_output_power_MW: float = 0.0
     min_tp_floor_K: float = 3000.0
     min_tp_shortfall: float = 1.0
     max_te_ceiling_K: float = 10000.0
@@ -89,6 +90,12 @@ def score_outer_result(result: dict[str, Any], *, weights: OuterRewardWeights) -
     )
     if not np.isfinite(delta_improvement):
         delta_improvement = 0.0
+    mhd_output_power_MW = _finite(
+        active_summary.get("mhd_output_power_MW"),
+        _finite(objective_terms.get("mhd_output_power_MW"), 0.0),
+    )
+    if not np.isfinite(mhd_output_power_MW):
+        mhd_output_power_MW = 0.0
     min_tp = _finite(
         active_summary.get("Tp_min_K"),
         _finite(_profile_stat(nodes, "T_p", min), float(weights.min_tp_floor_K)),
@@ -139,6 +146,7 @@ def score_outer_result(result: dict[str, Any], *, weights: OuterRewardWeights) -
     failure_penalty = 0.0 if rollout_ok else float(weights.failure_penalty)
     score_before_failure = (
         float(weights.delta_improvement) * delta_improvement
+        + float(weights.mhd_output_power_MW) * mhd_output_power_MW
         - tp_penalty
         - te_penalty
         - area_penalty
@@ -169,6 +177,8 @@ def score_outer_result(result: dict[str, Any], *, weights: OuterRewardWeights) -
         "terms": {
             "delta_improvement": float(delta_improvement),
             "delta_improvement_reward": float(weights.delta_improvement) * delta_improvement,
+            "mhd_output_power_MW": float(mhd_output_power_MW),
+            "mhd_output_power_reward": float(weights.mhd_output_power_MW) * mhd_output_power_MW,
             "min_tp_K": float(min_tp),
             "min_tp_shortfall_penalty": float(tp_penalty),
             "max_te_K": float(max_te),

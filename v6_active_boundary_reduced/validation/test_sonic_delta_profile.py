@@ -112,6 +112,61 @@ def test_main_policy_uses_explicit_sonic_branch_near_choking() -> None:
     assert abs(float(segment["sigma"]) - float(sonic["sigma_sonic"])) <= 1.0e-12
     assert float(segment["delta_gain"]) < 0.0
     assert float(segment["constraint_margins"]["G"]) >= -1.0e-6
+    assert segment["step_error_kind"] == "physical_residual"
+    assert bool(segment["physical_residual_ok"])
+    assert np.isfinite(float(segment["physical_residual_scaled"]))
+
+
+def test_sonic_compatibility_choice_classifies_degenerate_cases() -> None:
+    from v6_active_boundary_reduced.policy import PolicySettings, _choose_sonic_sigma
+
+    settings = PolicySettings(sonic_compatibility_tol=1.0e-6, active_tol=1.0e-9)
+    root = _choose_sonic_sigma(
+        sonic={"ellTf0": -2.0, "ellTf1": 1.0},
+        area=1.0,
+        lo=0.0,
+        hi=4.0,
+        sigma_reference=0.5,
+        settings=settings,
+    )
+    assert root["ok"]
+    assert root["status"] == "root_in_interval"
+    assert abs(float(root["sigma"]) - 2.0) <= 1.0e-12
+
+    flat = _choose_sonic_sigma(
+        sonic={"ellTf0": 1.0e-12, "ellTf1": 0.0},
+        area=1.0,
+        lo=-1.0,
+        hi=1.0,
+        sigma_reference=0.25,
+        settings=settings,
+    )
+    assert flat["ok"]
+    assert flat["status"] == "flat_compatible"
+    assert abs(float(flat["sigma"]) - 0.25) <= 1.0e-12
+
+    flat_forcing = _choose_sonic_sigma(
+        sonic={"ellTf0": 1.0, "ellTf1": 0.0},
+        area=1.0,
+        lo=-1.0,
+        hi=1.0,
+        sigma_reference=0.25,
+        settings=settings,
+    )
+    assert not flat_forcing["ok"]
+    assert flat_forcing["status"] == "unreachable_flat_forcing"
+
+    outside = _choose_sonic_sigma(
+        sonic={"ellTf0": -10.0, "ellTf1": 1.0},
+        area=1.0,
+        lo=0.0,
+        hi=1.0,
+        sigma_reference=0.5,
+        settings=settings,
+    )
+    assert not outside["ok"]
+    assert outside["status"] == "unreachable_interval"
+    assert abs(float(outside["best_interval_sigma"]) - 1.0) <= 1.0e-12
 
 
 def test_branch_agnostic_pedal_mode_does_not_force_mach_side() -> None:
@@ -149,5 +204,6 @@ if __name__ == "__main__":
     test_sonic_delta_profile_crosses_mach_one_with_g_admissible_nodes()
     test_primitive_sonic_compatibility_uses_primitive_left_null_condition()
     test_main_policy_uses_explicit_sonic_branch_near_choking()
+    test_sonic_compatibility_choice_classifies_degenerate_cases()
     test_branch_agnostic_pedal_mode_does_not_force_mach_side()
     print("sonic delta profile smoke passed")

@@ -624,6 +624,7 @@ def _thermal_window_penalty_expr(
     ops,
     T_e: Any,
     T_p: Any,
+    mach: Any,
     inlet_T_p: Any,
     config: CaseConfig,
     measure: Any,
@@ -637,7 +638,9 @@ def _thermal_window_penalty_expr(
     ratio_scale = max(float(settings["ratio_scale"]), 1e-300)
     tp_in_weight = float(settings["tp_in_weight"])
     tp_path_weight = float(settings["tp_path_weight"])
+    stagnation_tp_path_weight = float(settings["stagnation_tp_path_weight"])
     ratio_weight = float(settings["ratio_weight"])
+    gamma = float(settings["gamma"])
 
     penalty = 0.0
     tp_in_max = settings["tp_in_max_K"]
@@ -654,6 +657,12 @@ def _thermal_window_penalty_expr(
     if tp_path_max is not None:
         excess = ops.max(T_p - float(tp_path_max), 0.0) / tp_scale
         penalty = penalty + tp_path_weight * fd.assemble((excess**2) * measure) / length
+
+    stagnation_tp_path_max = settings["stagnation_tp_path_max_K"]
+    if stagnation_tp_path_max is not None:
+        stagnation_T_p = T_p * (1.0 + 0.5 * (gamma - 1.0) * mach * mach)
+        excess = ops.max(stagnation_T_p - float(stagnation_tp_path_max), 0.0) / tp_scale
+        penalty = penalty + stagnation_tp_path_weight * fd.assemble((excess**2) * measure) / length
 
     ratio = T_e / ops.max(T_p, 1.0)
     ratio_violation = 0.0
@@ -1060,6 +1069,7 @@ def solve_forward(
             ops=ops,
             T_e=T_e,
             T_p=closure["T_p"],
+            mach=closure["mach"],
             inlet_T_p=inlet["T_p"],
             config=config,
             measure=measure,
@@ -1090,6 +1100,7 @@ def solve_forward(
             "thermal_window_penalty_formula": (
                 "score -= Tp_in_weight*max(Tp_in - Tp_in_max, 0)^2/Tp_scale^2 "
                 "+ Tp_path_weight*mean(path Tp shortfalls/excesses)^2 "
+                "+ stagnation_Tp_path_weight*mean(path Tp0 excesses)^2 "
                 "+ ratio_weight*mean(Te/Tp band violations)^2"
             ),
             "residual_scaling": residual_scaling,

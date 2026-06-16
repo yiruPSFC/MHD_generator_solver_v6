@@ -22,6 +22,151 @@ from .run_firedrake_reduced import _json_default, _run_optimize, _write_json
 from .transport import normalize_electron_transport
 
 
+THERMAL_HISTORY_FIELDS = (
+    "min_T_p_K",
+    "max_Te_over_Tp",
+    "thermal_window_penalty",
+    "thermal_window_penalty_candidate",
+    "thermal_Tp_in_penalty_candidate",
+    "thermal_Tp_low_penalty_candidate",
+    "thermal_Tp_high_penalty_candidate",
+    "thermal_stagnation_Tp_high_penalty_candidate",
+    "thermal_Te_over_Tp_penalty_candidate",
+    "min_stagnation_T_p_K",
+    "max_stagnation_T_p_K",
+)
+
+
+def _add_thermal_window_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--thermal-window-mode",
+        default="diagnostic",
+        choices=("diagnostic", "penalty"),
+        help="Use reconstructed T_p / T_e/T_p only as diagnostics, or subtract a soft thermal-window penalty.",
+    )
+    parser.add_argument(
+        "--thermal-tp-in-max",
+        type=float,
+        default=2000.0,
+        help="Soft inlet T_p ceiling [K] used by --thermal-window-mode penalty.",
+    )
+    parser.add_argument(
+        "--thermal-tp-floor",
+        type=float,
+        default=300.0,
+        help="Soft path floor for reconstructed T_p nodes [K].",
+    )
+    parser.add_argument(
+        "--thermal-tp-path-max",
+        type=float,
+        default=None,
+        help="Optional soft path ceiling for reconstructed T_p nodes [K].",
+    )
+    parser.add_argument(
+        "--thermal-stagnation-tp-path-max",
+        type=float,
+        default=None,
+        help="Optional soft path ceiling for isentropic heavy-particle stagnation temperature T_p0 [K].",
+    )
+    parser.add_argument(
+        "--thermal-te-over-tp-min",
+        type=float,
+        default=None,
+        help="Optional soft lower band edge for reconstructed T_e/T_p.",
+    )
+    parser.add_argument(
+        "--thermal-te-over-tp-max",
+        type=float,
+        default=None,
+        help="Optional soft upper band edge for reconstructed T_e/T_p.",
+    )
+    parser.add_argument("--thermal-tp-penalty-scale", type=float, default=100.0)
+    parser.add_argument("--thermal-te-over-tp-penalty-scale", type=float, default=1.0)
+    parser.add_argument("--thermal-tp-in-penalty-weight", type=float, default=1.0)
+    parser.add_argument("--thermal-tp-path-penalty-weight", type=float, default=1.0)
+    parser.add_argument("--thermal-stagnation-tp-penalty-weight", type=float, default=1.0)
+    parser.add_argument("--thermal-te-over-tp-penalty-weight", type=float, default=1.0)
+
+
+def _thermal_metadata(args: argparse.Namespace) -> dict[str, Any]:
+    return {
+        "thermal_window_mode": str(args.thermal_window_mode),
+        "thermal_tp_in_max_K": None if args.thermal_tp_in_max is None else float(args.thermal_tp_in_max),
+        "thermal_tp_floor_K": None if args.thermal_tp_floor is None else float(args.thermal_tp_floor),
+        "thermal_tp_path_max_K": None if args.thermal_tp_path_max is None else float(args.thermal_tp_path_max),
+        "thermal_stagnation_tp_path_max_K": (
+            None
+            if args.thermal_stagnation_tp_path_max is None
+            else float(args.thermal_stagnation_tp_path_max)
+        ),
+        "thermal_te_over_tp_min": (
+            None if args.thermal_te_over_tp_min is None else float(args.thermal_te_over_tp_min)
+        ),
+        "thermal_te_over_tp_max": (
+            None if args.thermal_te_over_tp_max is None else float(args.thermal_te_over_tp_max)
+        ),
+        "thermal_tp_penalty_scale_K": float(args.thermal_tp_penalty_scale),
+        "thermal_te_over_tp_penalty_scale": float(args.thermal_te_over_tp_penalty_scale),
+        "thermal_tp_in_penalty_weight": float(args.thermal_tp_in_penalty_weight),
+        "thermal_tp_path_penalty_weight": float(args.thermal_tp_path_penalty_weight),
+        "thermal_stagnation_tp_penalty_weight": float(args.thermal_stagnation_tp_penalty_weight),
+        "thermal_te_over_tp_penalty_weight": float(args.thermal_te_over_tp_penalty_weight),
+    }
+
+
+def _metric_history_fields(metrics) -> dict[str, float | bool]:
+    payload = metrics.to_dict()
+    names = (
+        "objective_score",
+        "mhd_output_power_W",
+        "raw_enthalpy_extraction_percent",
+        "min_velikhov_margin",
+        *THERMAL_HISTORY_FIELDS,
+    )
+    return {name: payload[name] for name in names}
+
+
+def _area_control_box_summary(config) -> dict[str, Any]:
+    values = config.design.as_array()
+    lower = config.bounds.lower.as_array()
+    upper = config.bounds.upper.as_array()
+    controls = []
+    for name in AREA_CONTROL_NAMES:
+        idx = DESIGN_VARIABLE_NAMES.index(name)
+        span = max(float(upper[idx] - lower[idx]), 1e-300)
+        fraction = float((values[idx] - lower[idx]) / span)
+        if fraction <= 1e-6:
+            support = "lower_bound"
+        elif fraction >= 1.0 - 1e-6:
+            support = "upper_bound"
+        else:
+            support = "interior"
+        controls.append(
+            {
+                "name": name,
+                "value": float(values[idx]),
+                "lower": float(lower[idx]),
+                "upper": float(upper[idx]),
+                "box_fraction": fraction,
+                "support": support,
+            }
+        )
+    return {
+        "control_names": list(AREA_CONTROL_NAMES),
+        "controls": controls,
+        "summary": {item["name"]: item["support"] for item in controls},
+    }
+
+
+def _attach_area_control_summary(payload: dict[str, Any], config) -> dict[str, Any]:
+    enriched = dict(payload)
+    final_config = config
+    if isinstance(enriched.get("case_config"), dict) and isinstance(enriched["case_config"].get("design"), dict):
+        final_config = _config_with_design(config, DesignVector.from_dict(enriched["case_config"]["design"]))
+    enriched["area_control_box_summary"] = _area_control_box_summary(final_config)
+    return enriched
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Run an area-only Freidberg reference benchmark with fixed inlet/load controls."
@@ -73,6 +218,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--snes-linesearch-type", default=None)
     parser.add_argument("--electron-transport", default=None)
     parser.add_argument("--freidberg-branch-audit", action="store_true")
+    _add_thermal_window_args(parser)
     return parser
 
 
@@ -95,6 +241,7 @@ def _with_runtime_metadata(config, args: argparse.Namespace):
         "slsqp_trial_continuation": bool(args.slsqp_trial_continuation),
         "slsqp_continuation_T_p_floor_K": float(args.slsqp_continuation_T_p_floor_K),
         "slsqp_rebuild_tape_per_trial": bool(args.slsqp_rebuild_tape_per_trial),
+        **_thermal_metadata(args),
     }
     if args.snes_max_it is not None:
         metadata["snes_max_it"] = int(args.snes_max_it)
@@ -228,10 +375,7 @@ def _run_coordinate_search(config, out_dir: Path, *, initial_profile: dict[str, 
                         "direction": float(direction),
                         "step": float(step),
                         "accepted": bool(score > current_score + 1e-10),
-                        "objective_score": score,
-                        "mhd_output_power_W": float(result.metrics.mhd_output_power_W),
-                        "raw_enthalpy_extraction_percent": float(result.metrics.raw_enthalpy_extraction_percent),
-                        "min_velikhov_margin": float(result.metrics.min_velikhov_margin),
+                        **_metric_history_fields(result.metrics),
                         "design": DesignVector.from_array(trial_values).to_dict(),
                     }
                 )
@@ -266,7 +410,18 @@ def _run_coordinate_search(config, out_dir: Path, *, initial_profile: dict[str, 
                 "objective_score",
                 "mhd_output_power_W",
                 "raw_enthalpy_extraction_percent",
+                "min_T_p_K",
+                "max_Te_over_Tp",
                 "min_velikhov_margin",
+                "thermal_window_penalty",
+                "thermal_window_penalty_candidate",
+                "thermal_Tp_in_penalty_candidate",
+                "thermal_Tp_low_penalty_candidate",
+                "thermal_Tp_high_penalty_candidate",
+                "thermal_stagnation_Tp_high_penalty_candidate",
+                "thermal_Te_over_Tp_penalty_candidate",
+                "min_stagnation_T_p_K",
+                "max_stagnation_T_p_K",
                 "design",
             ],
         )
@@ -298,6 +453,7 @@ def _run_coordinate_search(config, out_dir: Path, *, initial_profile: dict[str, 
             "trial_failures": failures,
         },
     }
+    payload = _attach_area_control_summary(payload, _config_with_design(config, best_design))
     _write_json(out_dir / "run_summary.json", payload)
     return payload
 
@@ -354,11 +510,14 @@ def main(argv: list[str] | None = None) -> int:
             slsqp_rebuild_tape_per_trial=bool(args.slsqp_rebuild_tape_per_trial),
             freidberg_branch_audit=bool(args.freidberg_branch_audit),
         )
+        optimize_payload = _attach_area_control_summary(optimize_payload, config)
+        _write_json(out_dir / "run_summary.json", optimize_payload)
     benchmark_payload: dict[str, Any] = {
         "ok": bool(optimize_payload.get("ok", False)),
         "case_config": config.to_dict(),
         "reference_profile_metrics_json": str(out_dir / "reference_profile_metrics.json"),
         "optimizer_run_summary_json": str(out_dir / "run_summary.json"),
+        "area_control_box_summary": optimize_payload.get("area_control_box_summary"),
     }
     if optimize_payload.get("metrics") is not None:
         benchmark_payload["comparison"] = compare_candidate_to_reference(
