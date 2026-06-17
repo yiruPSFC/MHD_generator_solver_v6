@@ -181,6 +181,8 @@ def evaluate_preparation_design(
         )
 
 
+# TODO(stability): Once scan/optimize/Yamasaki runner contracts settle, consider
+# moving preparation scoring into a dedicated module.
 def _score_rollout(
     *,
     payload: dict[str, Any],

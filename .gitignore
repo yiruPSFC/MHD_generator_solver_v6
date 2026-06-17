@@ -8,6 +8,7 @@ _tmp_sweep*.jsonl
 .venv_firedrake
 .venv_firedrake/
 results/
+outputs/
 slurm/
 v6_batch/outputs/
 v6_core/non_batch/outputs/
@@ -23,4 +24,5 @@ v6_global_marginal/reference_recovery/*.png
 v6_global_marginal/reference_recovery/summary.json
 v6_global_marginal/reference_recovery/summary.txt
 MAiNGOresult.txt
+maingo.log
 swirl_vs_radial_flow_schematic.png

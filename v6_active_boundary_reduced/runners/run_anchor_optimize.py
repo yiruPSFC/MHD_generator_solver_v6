@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+"""Legacy/diagnostic continuous search for active-boundary anchor designs.
+
+For production outer optimization, prefer ``v6_active_boundary_reduced.outer_solvers.lbfgsb``.
+This runner remains useful as a lightweight differential-evolution sanity check.
+"""
+
 import os
 
 os.environ.setdefault("OMP_NUM_THREADS", "1")
