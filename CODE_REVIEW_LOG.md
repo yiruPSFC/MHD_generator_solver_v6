@@ -543,3 +543,81 @@ The `ok` flag does not gate on `reverse_direction_violation_count` or `forward_d
 
 Verification:
 Read `sonic_delta_profile.py` with line numbers and traced callers/tests. Ran `PYTHONPATH=. ./.venv_jit/bin/python v6_active_boundary_reduced/validation/test_sonic_delta_profile.py`; `PYTHONPATH=. ./.venv_jit/bin/python -m compileall -q v6_active_boundary_reduced/core/sonic_delta_profile.py v6_active_boundary_reduced/runners/run_sonic_delta_profile.py v6_active_boundary_reduced/validation/test_sonic_delta_profile.py`; and `PYTHONPATH=. ./.venv_jit/bin/python -m v6_active_boundary_reduced.runners.run_sonic_delta_profile --case freidberg_reference --out-dir outputs/tmp_sonic_delta_profile_review --n-steps-each-side 1 --scan-points 15 --no-plot`. The temporary output directory was removed after inspection.
+
+## 2026-06-17 - Remove Sonic Delta Profile Prototype
+
+Scope:
+`v6_active_boundary_reduced/core/sonic_delta_profile.py`, `v6_active_boundary_reduced/runners/run_sonic_delta_profile.py`, `v6_active_boundary_reduced/validation/test_sonic_delta_profile.py`, `v6_active_boundary_reduced/validation/test_sonic_policy.py`, `v6_active_boundary_factorable/validation/test_soft_greedy_rk.py`, `v6_active_boundary_reduced/README.md`, and `ACTIVE_BOUNDARY_DEPENDENCY_CODE_MAP.md`.
+
+Question:
+After reviewing the standalone sonic delta profile builder, the user confirmed it was a historical prototype and no longer needed as a live CLI or core module.
+
+Before:
+The standalone prototype built a local profile around `M=1`, exported its own runner, and supplied helper data to tests. Some retained tests were actually validating the main policy sonic branch, but they used `build_sonic_delta_profile(...)` only to obtain a sonic anchor.
+
+Change:
+Deleted the standalone core module and runner. Replaced `test_sonic_delta_profile.py` with `test_sonic_policy.py`, which builds the Freidberg sonic state directly from `solve_local_sonic_match(...)` and validates the shared policy sonic helpers. Updated the factorable prototype test to use the same direct sonic seed and policy compatibility wrapper. Removed sonic delta profile CLI references from README and the dependency map.
+
+Current Behavior:
+Sonic handling now lives in the main policy/shared helper path: `core.policy` routes near-choking reverse `delta_drop` steps into `core.sonic` compatibility and finite-step helpers. The retained tests cover shared primitive left-null compatibility, explicit main-policy sonic branch behavior, and sonic sigma interval classification without depending on the deleted standalone profile builder.
+
+Rationale:
+This removes a prototype that could be mistaken for a production sonic solver path. Keeping only the shared sonic helper and policy tests makes the architecture clearer: sonic support is a branch of the main reverse preparation policy, not a separate profile generator.
+
+Open Risks:
+Historical review logs still mention the removed prototype for provenance. Any external command line that still invokes `python -m v6_active_boundary_reduced.runners.run_sonic_delta_profile` must switch to the main preparation/anchor workflows or revive a diagnostic script intentionally.
+
+Verification:
+Ran `PYTHONPATH=. ./.venv_jit/bin/python v6_active_boundary_reduced/validation/test_sonic_policy.py`; `PYTHONPATH=. ./.venv_jit/bin/python v6_active_boundary_factorable/validation/test_soft_greedy_rk.py`; `PYTHONPATH=. ./.venv_jit/bin/python -m compileall -q v6_active_boundary_reduced v6_active_boundary_factorable`; `rg -n "sonic_delta_profile|run_sonic_delta_profile|SonicDeltaSettings|build_sonic_delta_profile" v6_active_boundary_reduced v6_active_boundary_factorable ACTIVE_BOUNDARY_DEPENDENCY_CODE_MAP.md`; and `git diff --check`. The remaining `sonic_delta_profile` mentions are only in the historical `SIGN_AWARE_REVERSE_ACTIVE_BOUNDARY_REWRITE.md` log.
+
+## 2026-06-17 - Remove IPOPT Endpoint Reachability Runner
+
+Scope:
+`v6_active_boundary_reduced/runners/run_ipopt_endpoint_reachability.py` and `ACTIVE_BOUNDARY_DEPENDENCY_CODE_MAP.md`.
+
+Question:
+The IPOPT endpoint reachability runner was reviewed after the user questioned whether it was still part of the main active-boundary workflow.
+
+Before:
+The runner built a standalone CasADi `Opti` direct-transcription problem over endpoint-fixed states and interval `sigma_logA` controls, then solved with IPOPT. It used `v6_casadi.optimize_area_profile_casadi_v6` helpers and produced `ipopt_endpoint_summary.json`, `nodes.csv`, `intervals.csv`, `active_sets.csv`, and `profile.npz` artifacts. It did not call `recover_preparation_profile(...)`, `evaluate_preparation_design(...)`, or the current outer L-BFGS-B workflow.
+
+Change:
+Deleted the runner instead of moving it under a legacy IPOPT folder. Removed the live dependency-map entries for the CLI, static imports, `v6_casadi`, and third-party `casadi` from the active-boundary source map.
+
+Current Behavior:
+The active-boundary reduced source tree no longer exposes a CasADi/IPOPT endpoint reachability entrypoint. The remaining main routes are reverse preparation, anchor scan/optimization, robust L-BFGS-B outer optimization, short-channel recovery, forward greedy diagnostics, and Yamasaki benchmarks.
+
+Rationale:
+The runner was isolated from the current documentation and main solver architecture. Keeping it under `runners/` made IPOPT direct transcription look like an active workflow even though it was only a historical comparison route.
+
+Open Risks:
+Existing external scripts that call `python -m v6_active_boundary_reduced.runners.run_ipopt_endpoint_reachability` will fail. Historical output plotting may still include labels for old IPOPT-generated profiles, but those labels do not require the deleted runner.
+
+Verification:
+Ran `PYTHONPATH=. ./.venv_jit/bin/python -m compileall -q v6_active_boundary_reduced v6_active_boundary_factorable`; `PYTHONPATH=. ./.venv_jit/bin/python v6_active_boundary_reduced/validation/test_sonic_policy.py`; `PYTHONPATH=. ./.venv_jit/bin/python v6_active_boundary_factorable/validation/test_soft_greedy_rk.py`; `rg -n "run_ipopt_endpoint_reachability|ipopt_endpoint|v6_casadi|from casadi|import casadi|casadi as" v6_active_boundary_reduced v6_active_boundary_factorable ACTIVE_BOUNDARY_DEPENDENCY_CODE_MAP.md`; and `git diff --check`. The live source/dependency map scan returned no matches.
+
+## 2026-06-17 - Reduced README State Alignment
+
+Scope:
+`v6_active_boundary_reduced/README.md`, checked against `core/policy.py`, `core/objective.py`, `outer_solvers/reward.py`, `runners/run_anchor_scan.py`, `runners/run_anchor_optimize.py`, and `outer_solvers/lbfgsb.py`.
+
+Question:
+After the historical sonic-delta and IPOPT endpoint runners were removed, the README needed to be aligned with the current code state so it can be used as a reliable orientation document without re-reading every file.
+
+Before:
+The README overstated the folder as having only one intended workflow, described all finite steps as RK4, said there was no separate `G`-boundary solve, listed design-anchor sigma as defaulting to Freidberg profile index 0, and did not make the reverse `delta_drop` limitation or optional reward terms explicit.
+
+Change:
+Updated the README text to describe the reverse preparation rollout as the main solver architecture while acknowledging diagnostic/benchmark runners. Clarified that ordinary non-sonic steps use RK4, while the sonic branch is a separate finite-step chart. Documented the current sign-aware `G`-boundary fallback, the lack of IPOPT/CasADi wiring, the `None` default for `--anchor-sigma`, the first-step curvature-history behavior, reverse objective support, and the optional MHD power / enthalpy reward terms.
+
+Current Behavior:
+The README now matches the code-level defaults and routing: reverse preparation should use `--objective delta_drop`; reverse non-`delta_drop` objectives return `unsupported_reverse_objective`; omitted design-anchor sigma leaves the first step without slope history; optional power or enthalpy weights require profile metrics; and the outer reward includes optional MHD output power plus explicit failure and incomplete-rollout penalties.
+
+Rationale:
+The README is the first orientation layer after the dependency map. If it keeps historical prototype wording, deleted runners and legacy options look like active solver paths, which is exactly the confusion this cleanup is trying to remove.
+
+Open Risks:
+Some CLIs still expose `power_next` for diagnostic visibility even though the main reverse policy rejects reverse non-`delta_drop` objectives. That can still confuse users who read only CLI help.
+
+Verification:
+Documentation-only change. Ran `git diff --check`.

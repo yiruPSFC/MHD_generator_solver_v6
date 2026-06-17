@@ -18,16 +18,17 @@ validation/    smoke and behavior-regression tests
 low-dimensional outer optimization path is useful for experiments, but its
 results are not yet stable or easy to interpret as solver behavior.
 
-The only intended workflow in this folder is:
+The main active-boundary solver workflow in this folder is:
 
 ```text
 given:  a hard-to-prepare target state
 return: an upstream preparation profile that could produce it
 ```
 
-The target state is passed as an anchor, either from JSON or from a profile
-node.  The solver then marches upstream only.  The physical coordinate is `x`,
-but the preparation marching coordinate is upstream from the target:
+The target state is passed as an anchor, either from JSON, from a profile node,
+or from design variables in the scan/optimization runners.  The solver then
+marches upstream only.  The physical coordinate is `x`, but the preparation
+marching coordinate is upstream from the target:
 
 ```text
 x_next = x_current - dx
@@ -40,7 +41,7 @@ pedal is `sigma = d(log A)/dx`.  Area is not an independent control:
 logA_next = logA - dx * sigma
 ```
 
-The finite-step evaluator now uses explicit RK4 for local state advancement:
+Ordinary non-sonic finite steps use explicit RK4 for local state advancement:
 
 ```text
 given:   current state, sigma, dx
@@ -49,9 +50,12 @@ accept:  RK4 error estimate, G_next, and Tp_next satisfy local gates
 ```
 
 The hot physical closure and dynamic-term formulas are implemented in
-`core/numba_physics.py` with `numba.njit(cache=True)`.  The scan-and-refine policy is
-kept as a fallback for endpoint validation failures, but there is no longer an
-implicit backward-Euler step backend or separate nonlinear `G`-boundary solve.
+`core/numba_physics.py` with `numba.njit(cache=True)`.  The reverse sign-aware
+path first tries the objective-preferred affine endpoint.  If finite-step
+validation fails because the `G` floor was crossed, it can try a sign-aware
+Brent `G`-boundary fallback before falling back to scan-and-refine endpoint
+selection.  There is no longer an implicit backward-Euler step backend, and
+the active-boundary reduced tree is no longer connected to IPOPT/CasADi.
 
 Current prototype constraints:
 
@@ -60,13 +64,14 @@ G_next >= G_floor
 Tp_next >= Tp_floor
 sigma_min <= sigma <= sigma_max
 logA_min <= logA_next <= logA_max
-|sigma - sigma_prev| <= curvature_max   optional
+|sigma - sigma_prev| <= curvature_max   optional sigma-slew bound
 ```
 
-This folder is intentionally independent of IPOPT/CasADi.  It is a direct
-reverse preparation rollout prototype that can later feed inlet-condition
-optimization and Firedrake/pyadjoint validation once the active-set semantics
-are clear.
+The `runners/` directory still contains diagnostic and benchmark entrypoints,
+but the intended solver architecture is the direct reverse preparation rollout.
+That rollout feeds the early-stage inlet-condition optimization prototypes and
+can later be compared against Firedrake/pyadjoint validation once the active-set
+semantics are clear.
 
 Example Freidberg-inlet preparation recovery:
 
@@ -79,39 +84,21 @@ Example Freidberg-inlet preparation recovery:
   --out-dir outputs/preparation_recovery_freidberg_inlet
 ```
 
-## Sonic-compatible local profile
+## Sonic-compatible reverse-policy branch
 
 Near `M=1`, the primitive momentum/energy matrix becomes singular.  The
-sonic-aware local profile therefore does not divide through that matrix.  At
-the sonic node it computes the left-null compatibility condition
+reverse preparation policy therefore does not divide through that matrix when
+the current state is near choking.  Instead it computes the left-null
+compatibility condition
 
 ```text
 ell^T (f0 + A * sigma_* * f1) = 0
 ```
 
-and locks `sigma_* = dlogA/dx` there.  It then takes trapezoidal `sigma` steps
-away from the sonic node, solves the same primitive finite-step residuals, and
-selects the admissible root with the steepest requested `Delta = Te/Tp - 1`
-change while preserving `G >= G_floor`.
-
-Example:
-
-```bash
-./.venv_jit/bin/python -m v6_active_boundary_reduced.runners.run_sonic_delta_profile \
-  --case freidberg_reference \
-  --dx 1e-5 \
-  --n-steps-each-side 60 \
-  --scan-points 15 \
-  --objective pedal \
-  --selection-mode steepest \
-  --out-dir outputs/active_boundary_sonic_delta_profile
-```
-
-The same choking behavior is now wired into the main reverse preparation
-policy.  For reverse `delta_drop` steps, `sonic_mode=auto` switches from the
-ordinary sign-aware affine endpoint to the primitive left-null solve when the
-current state is near `M=1` or has small `det_D`.  In that branch the area pedal
-is no longer scanned as a free interval; it is set by
+For reverse `delta_drop` steps, `sonic_mode=auto` switches from the ordinary
+sign-aware affine endpoint to the primitive left-null solve when the current
+state is near `M=1` or has small `det_D`.  In that branch the area pedal is no
+longer scanned as a free interval; it is set by
 
 ```text
 A_prime_sonic = - ell^T f0 / ell^T f1
@@ -119,9 +106,20 @@ sigma_sonic = A_prime_sonic / A
 ```
 
 and the finite step is then accepted only if the usual residual, `G`, and
-`T_p` checks pass.  The relevant settings, exposed on the rollout/scan/outer
-optimizer CLIs as matching dashed flags, are `sonic_mode`, `sonic_mach_tol`,
-`sonic_det_abs_tol`, `sonic_compatibility_tol`, and `sonic_residual_tol`.
+`T_p` checks pass.  The old standalone sonic-delta profile CLI has been
+removed; sonic handling now lives in the main policy path.  The relevant
+settings, exposed on the rollout/scan/outer optimizer CLIs as matching dashed
+flags, are `sonic_mode`, `sonic_mach_tol`, `sonic_det_abs_tol`,
+`sonic_compatibility_tol`, and `sonic_residual_tol`.
+
+## Reverse objective support
+
+For reverse preparation, use `--objective delta_drop`.  Some CLIs still expose
+`power_next` as a visible legacy/diagnostic option, but the main reverse policy
+only supports reverse `delta_drop`; reverse non-`delta_drop` objectives terminate
+with `unsupported_reverse_objective` instead of silently using old scan
+semantics.  Forward diagnostics and benchmark scripts may still use their own
+objective choices where they implement them directly.
 
 ## Anchor-design scan and optimization
 
@@ -143,18 +141,29 @@ For a candidate design, the target anchor is parameterized as:
 log_n = log_n_p_in
 log_Te = log(T_e_in)
 logA = --anchor-logA          default 0
-sigma = --anchor-sigma        default Freidberg profile index 0 when available
+sigma = --anchor-sigma        default None
 ```
+
+When `--anchor-sigma` is omitted, the first rollout step has no slope history,
+so the optional `curvature_max` slew bound is disabled until a real previous
+`sigma` exists.  The design-anchor path does not automatically inherit the
+Freidberg profile's inlet sigma.
 
 The score is a soft-penalty objective:
 
 ```text
 score =
   delta_improvement_weight * (Delta_outlet - Delta_preparation_inlet)
+  + mhd_output_power_weight * mhd_output_power_MW                 optional
+  + enthalpy_extraction_weight * raw_enthalpy_extraction_percent  optional
   - inlet_delta_weight * Delta_preparation_inlet
   - inlet_te_shortfall_weight * max(6000 K - Te_preparation_inlet, 0)^2 / scale^2
   - inlet_tp_shortfall_weight * max(3000 K - Tp_preparation_inlet, 0)^2 / scale^2
 ```
+
+The rollout must also pass its own gates, target-anchor `G/T_p` checks, and any
+profile-metric availability checks required by nonzero optional reward weights;
+otherwise the score is replaced by the configured failure penalty.
 
 Parallel grid scan:
 
@@ -258,6 +267,7 @@ Use `--allow-nonrobust-lbfgsb` only for diagnostics.  That option still requires
 post-run neighborhood certification before a point appears as `best`.
 
 The reward is a soft-penalty objective built from the active-boundary rollout:
-`Delta` improvement, magnetic-field range, `Amax/Amin` range, too-low minimum
-`T_p`, too-high maximum `T_e`, `G` shortfall, choking/Mach excess, and incomplete
-rollout penalties.
+`Delta` improvement, optional MHD output power, magnetic-field range,
+`Amax/Amin` range, too-low minimum `T_p`, too-high maximum `T_e`, `G` shortfall,
+choking/Mach excess, incomplete rollout penalties, and a failure penalty for
+unsuccessful rollouts.

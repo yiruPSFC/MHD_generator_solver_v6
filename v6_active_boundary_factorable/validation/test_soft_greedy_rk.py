@@ -18,28 +18,24 @@ from v6_active_boundary_factorable.soft_greedy_rk import (
     soft_greedy_step,
     sonic_sigma_chart,
 )
-from v6_active_boundary_reduced.core.policy import State
-from v6_active_boundary_reduced.core.sonic_delta_profile import (
-    SonicDeltaSettings,
-    build_sonic_delta_profile,
-    primitive_sonic_compatibility,
-)
+from v6_active_boundary_reduced.core.policy import State, _primitive_sonic_compatibility
 from v6_firedrake_reduced.design import load_case_config
+from v6_firedrake_reduced.sonic_compatibility import solve_local_sonic_match
 from v6_maingo_casadi.numerics import _ops_for_numeric
 
 
 def _sonic_state_and_reference():
     config = load_case_config(case="freidberg_reference")
-    payload = build_sonic_delta_profile(
-        config=config,
-        settings=SonicDeltaSettings(dx=1.0e-4, n_steps_each_side=0, scan_points=5),
+    match = solve_local_sonic_match(design=config.design, config=config)
+    sonic = dict(match.get("sonic_point") or {})
+    assert sonic, "solve_local_sonic_match did not return a sonic_point"
+    policy_state = State(
+        log_n=float(np.log(max(float(sonic["n_p"]), 1.0e-300))),
+        log_Te=float(np.log(max(float(sonic["T_e"]), 1.0))),
+        logA=float(sonic["logA"]),
     )
-    node = dict(payload["nodes"][0])
-    state = FactorableState(log_n=float(node["log_n"]), log_Te=float(node["log_Te"]), logA=float(node["logA"]))
-    reference = primitive_sonic_compatibility(
-        State(log_n=float(node["log_n"]), log_Te=float(node["log_Te"]), logA=float(node["logA"])),
-        config=config,
-    )
+    state = FactorableState(log_n=policy_state.log_n, log_Te=policy_state.log_Te, logA=policy_state.logA)
+    reference = _primitive_sonic_compatibility(policy_state, config=config)
     return config, state, reference
 
 

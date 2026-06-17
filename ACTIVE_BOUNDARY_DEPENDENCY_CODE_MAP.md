@@ -12,7 +12,7 @@ This map covers the active-boundary code currently present in the workspace.
 
 - Main route: `v6_active_boundary_reduced/`
 - Separate prototype: `v6_active_boundary_factorable/`
-- Shared upstream stacks: `v6_firedrake_reduced/`, `v6_maingo_casadi/`, and selected `v6_casadi/` helpers
+- Shared upstream stacks: `v6_firedrake_reduced/` and `v6_maingo_casadi/`
 - Generated outputs, `__pycache__/`, and large `outputs/` artifacts are intentionally excluded.
 
 Workspace note: this map reflects the functionality-oriented layout with
@@ -66,14 +66,12 @@ flowchart TD
   prescreen --> objective_eval
   lbfgsb_cli --> reward["outer_solvers/reward.py"]
   yamasaki_cli["run_yamasaki_power_benchmark.py"] --> anchor_rollout["policy.rollout_policy_from_anchor"]
-  forward_cli["run_forward_phi_greedy.py"] --> affine_fn["local_affine.compute_forward_affine_coefficients"]
-  forward_cli --> eval_sigma["policy._evaluate_sigma"]
-  sonic_cli["run_sonic_delta_profile.py"] --> sonic_build["sonic_delta_profile.build_sonic_delta_profile"]
   policy_mod["policy.py"] --> affine_mod["local_affine.py"]
   policy_mod --> reverse_mod["reverse_sign_policy.py"]
+  policy_mod --> sonic_mod["sonic.py"]
   policy_mod --> numba_mod["numba_physics.py"]
   affine_mod --> numba_mod
-  sonic_mod["sonic_delta_profile.py"] --> numba_mod
+  sonic_mod --> numba_mod
   plot_prep["plot_preparation_recovery.py"] --> fd_forward["v6_firedrake_reduced.forward"]
   policy_mod --> fd_design["v6_firedrake_reduced.design"]
   policy_mod --> fd_geometry["v6_firedrake_reduced.geometry"]
@@ -135,13 +133,13 @@ flowchart TD
 | Path | Role | Primary consumers |
 | --- | --- | --- |
 | `v6_active_boundary_reduced/core/policy.py` | Main policy engine, state dataclasses, reverse rollout, local step solvers, closure metrics, node/segment summaries. | Almost every CLI and optimizer. |
-| `v6_active_boundary_reduced/core/numba_physics.py` | Hot closure and primitive dynamic terms compiled with Numba. | `policy.py`, `local_affine.py`, `sonic_delta_profile.py`. |
-| `v6_active_boundary_reduced/core/local_affine.py` | Computes local physical-forward affine coefficients for Delta and G response to area slope. | `policy.py`, `run_forward_phi_greedy.py`, benchmark script. |
+| `v6_active_boundary_reduced/core/numba_physics.py` | Hot closure and primitive dynamic terms compiled with Numba. | `policy.py`, `local_affine.py`, `sonic.py`. |
+| `v6_active_boundary_reduced/core/local_affine.py` | Computes local physical-forward affine coefficients for Delta and G response to area slope. | `policy.py`, validation tests. |
 | `v6_active_boundary_reduced/core/reverse_sign_policy.py` | Pure sign-aware reverse interval algebra and endpoint classification. | `policy.py`, validation tests. |
+| `v6_active_boundary_reduced/core/sonic.py` | Shared sonic compatibility, sigma choice, and sonic finite-step residual helpers. | `policy.py`, validation tests. |
 | `v6_active_boundary_reduced/core/objective.py` | Design override handling, design anchor construction, rollout scoring, CSV flattening. | `run_anchor_scan.py`, `run_anchor_optimize.py`, `outer_solvers/`. |
 | `v6_active_boundary_reduced/core/scoring.py` | Shared scalar scoring helpers with no policy or optimizer ownership. | `objective.py`, `outer_solvers/reward.py`. |
 | `v6_active_boundary_reduced/outer_solvers/` | Low-dimensional prescreen + robust L-BFGS-B outer optimization. | CLI `python -m v6_active_boundary_reduced.outer_solvers.lbfgsb`. |
-| `v6_active_boundary_reduced/core/sonic_delta_profile.py` | Local profile through M=1 using primitive left-null compatibility. | `run_sonic_delta_profile.py`, validation tests, conceptual source for sonic branch in `policy.py`. |
 | `v6_active_boundary_reduced/runners/common.py` | Shared JSON/CSV/NPZ IO, anchor conversion, profile loading. | Reachability CLIs and benchmark script. |
 | `v6_active_boundary_reduced/diagnostics/preparation_recovery.py` | Diagnostic plots and H/L residual postprocessing. | `run_preparation_recovery.py`, `run_anchor_optimize.py`, short-channel runs. |
 | `v6_active_boundary_factorable/soft_greedy_rk.py` | Separate MAiNGO-style factorable soft-greedy prototype. | Its own validation test only. |
@@ -166,9 +164,7 @@ core/reverse_sign_policy.py
 core/scoring.py
 core/sigma_interval.py
 core/sonic.py
-core/sonic_delta_profile.py
 diagnostics/__init__.py
-diagnostics/plot_reachability_profiles.py
 diagnostics/preparation_recovery.py
 diagnostics/summary.py
 outer_solvers/__init__.py
@@ -180,17 +176,14 @@ runners/common.py
 runners/select_profile_anchor.py
 runners/run_anchor_optimize.py
 runners/run_anchor_scan.py
-runners/run_forward_phi_greedy.py
-runners/run_ipopt_endpoint_reachability.py
 runners/run_preparation_recovery.py
 runners/run_short_channel_reachability.py
-runners/run_sonic_delta_profile.py
 runners/run_yamasaki_power_benchmark.py
 validation/__init__.py
 validation/test_freidberg_sign_aware_smoke.py
 validation/test_outer_solver.py
 validation/test_policy_behavior_guards.py
-validation/test_sonic_delta_profile.py
+validation/test_sonic_policy.py
 ```
 
 Source files in `v6_active_boundary_factorable/`:
@@ -397,28 +390,25 @@ Important outputs:
 - `best_segments.csv`
 - `best_profile.npz`
 
-### `v6_active_boundary_reduced/core/sonic_delta_profile.py`
+### `v6_active_boundary_reduced/core/sonic.py`
 
 Purpose:
 
-- Builds a local profile through `M=1` without dividing through a singular primitive matrix.
-- Uses a left-null compatibility condition at the sonic node:
+- Provides shared sonic compatibility and finite-step helpers used by the main policy.
+- Computes the left-null compatibility condition without dividing through the singular primitive matrix:
 
 ```text
 ell^T (f0 + A * sigma * f1) = 0
 sigma_sonic = - ell^T f0 / (A * ell^T f1)
 ```
 
-Dependencies:
+Main helpers:
 
-- `v6_firedrake_reduced.sonic_compatibility.solve_local_sonic_match`
-- `numba_physics.dynamic_terms_numba`
-- `policy.State`, `policy._closure_metrics`, `policy._physics_params`
-- `scipy.optimize.least_squares`
-
-Primary CLI:
-
-- `run_sonic_delta_profile.py`
+- `primitive_sonic_compatibility(...)`
+- `choose_sonic_sigma(...)`
+- `solve_sonic_finite_step(...)`
+- `apply_sonic_residual_gate(...)`
+- `sonic_initial_guesses(...)`
 
 ### `v6_active_boundary_reduced/runners/common.py`
 
@@ -481,11 +471,6 @@ Dependencies:
 - Converts profile/node payloads into reusable anchor JSON files.
 - Depends on `runners/common.py` and `v6_firedrake_reduced.design.load_case_config`.
 
-`v6_active_boundary_reduced/diagnostics/plot_reachability_profiles.py`
-
-- Loads baseline/IPOPT/profile cases and plots reachability profile comparisons.
-- Depends on `matplotlib` and `numpy`; it does not call the main policy engine.
-
 `v6_active_boundary_reduced/outer_solvers/__init__.py`
 
 - Provides lazy access to outer-solver submodules through `__getattr__`.
@@ -499,9 +484,6 @@ Dependencies:
 | `python -m v6_active_boundary_reduced.runners.run_anchor_optimize` | `objective.evaluate_preparation_design` via differential evolution | bounds/fixed design vars, rollout settings, weights | `evaluations.jsonl/csv`, `optimization_summary.json`, best profile outputs |
 | `python -m v6_active_boundary_reduced.outer_solvers.lbfgsb` | `outer_solvers.lbfgsb.run_outer_lbfgsb` | normalized control bounds, prescreen/certification settings | prescreen/evaluation logs, robust `best_*` outputs |
 | `python -m v6_active_boundary_reduced.runners.run_short_channel_reachability` | `policy.recover_preparation_profile` | target anchor and channel lengths | per-length recovery outputs plus `reachability_baseline_summary.csv/json` |
-| `python -m v6_active_boundary_reduced.runners.run_sonic_delta_profile` | `sonic_delta_profile.build_sonic_delta_profile` | case, sonic-local settings | sonic profile summary, nodes/segments/profile, plot |
-| `python -m v6_active_boundary_reduced.runners.run_forward_phi_greedy` | `local_affine` + `policy._evaluate_sigma` | source anchor, length, forward settings | forward greedy profile and diagnostics |
-| `python -m v6_active_boundary_reduced.runners.run_ipopt_endpoint_reachability` | CasADi endpoint reachability model | source/target anchors, length, warm start | IPOPT/CasADi reachability outputs, not the main reduced-policy rollout |
 | `python -m v6_active_boundary_reduced.runners.run_yamasaki_power_benchmark` | `policy.rollout_policy_from_anchor` | Yamasaki case/transport/objective settings | Yamasaki benchmark rows, policy summaries, nodes/segments/profile |
 
 ## Static Import Adjacency
@@ -577,18 +559,16 @@ v6_active_boundary_reduced/outer_solvers/reward.py
   -> v6_active_boundary_reduced.core.scoring
   -> numpy
 
+v6_active_boundary_reduced/core/sonic.py
+  -> v6_active_boundary_reduced.core.numba_physics
+  -> v6_firedrake_reduced.design
+  -> scipy.optimize.least_squares
+  -> numpy
+
 v6_active_boundary_reduced/runners/common.py
   -> v6_active_boundary_reduced.core.policy
   -> v6_firedrake_reduced.cases.freidberg_reference
   -> v6_firedrake_reduced.design
-  -> numpy
-
-v6_active_boundary_reduced/core/sonic_delta_profile.py
-  -> v6_active_boundary_reduced.core.numba_physics
-  -> v6_active_boundary_reduced.core.policy
-  -> v6_firedrake_reduced.design
-  -> v6_firedrake_reduced.sonic_compatibility
-  -> scipy.optimize.least_squares
   -> numpy
 
 v6_active_boundary_reduced/diagnostics/preparation_recovery.py
@@ -596,10 +576,6 @@ v6_active_boundary_reduced/diagnostics/preparation_recovery.py
   -> v6_firedrake_reduced.forward
   -> v6_firedrake_reduced.legacy_physics
   -> v6_firedrake_reduced.transport
-  -> matplotlib
-  -> numpy
-
-v6_active_boundary_reduced/diagnostics/plot_reachability_profiles.py
   -> matplotlib
   -> numpy
 
@@ -625,26 +601,6 @@ v6_active_boundary_reduced/runners/run_short_channel_reachability.py
   -> v6_active_boundary_reduced.runners.common
   -> v6_active_boundary_reduced.diagnostics.preparation_recovery
   -> v6_firedrake_reduced.design
-
-v6_active_boundary_reduced/runners/run_sonic_delta_profile.py
-  -> v6_active_boundary_reduced.core.sonic_delta_profile
-  -> v6_firedrake_reduced.design
-  -> matplotlib
-
-v6_active_boundary_reduced/runners/run_forward_phi_greedy.py
-  -> v6_active_boundary_reduced.core.local_affine
-  -> v6_active_boundary_reduced.core.policy
-  -> v6_active_boundary_reduced.runners.common
-  -> v6_firedrake_reduced.design
-  -> v6_firedrake_reduced.geometry
-
-v6_active_boundary_reduced/runners/run_ipopt_endpoint_reachability.py
-  -> v6_active_boundary_reduced.core.policy
-  -> v6_active_boundary_reduced.runners.common
-  -> v6_casadi.optimize_area_profile_casadi_v6
-  -> v6_firedrake_reduced.design
-  -> v6_firedrake_reduced.geometry
-  -> casadi
 
 v6_active_boundary_reduced/runners/run_yamasaki_power_benchmark.py
   -> v6_active_boundary_reduced.core.policy
@@ -688,30 +644,17 @@ Important imported APIs:
 - `v6_maingo_casadi.physics`
 - `v6_maingo_casadi.profiles.WorkingFluidProfile`
 
-### `v6_casadi`
-
-Used only by `run_ipopt_endpoint_reachability.py` for a CasADi/IPOPT endpoint reachability comparison path.
-
-Important imported APIs:
-
-- `v6_casadi.optimize_area_profile_casadi_v6.FeasibilityThresholds`
-- `v6_casadi.optimize_area_profile_casadi_v6.InletConstants`
-- `v6_casadi.optimize_area_profile_casadi_v6._make_stage_function`
-- `v6_casadi.optimize_area_profile_casadi_v6._compute_feasibility_diagnostics`
-- `v6_casadi.optimize_area_profile_casadi_v6._evaluate_profile_numeric`
-
 ### Third-party libraries
 
 | Library | Where used | Role |
 | --- | --- | --- |
 | `numpy` | almost all modules | arrays, linear algebra, scoring, serialization conversions |
-| `scipy.optimize.least_squares` | `policy.py`, `sonic_delta_profile.py` | sonic-local finite-step solves |
+| `scipy.optimize.least_squares` | `sonic.py` | sonic-local finite-step solves |
 | `scipy.optimize.brentq` | `policy.py` | G-boundary refinement/fallback |
 | `scipy.optimize.differential_evolution` | `run_anchor_optimize.py` | early outer design optimization |
 | `scipy.optimize.minimize` | `outer_solvers/lbfgsb.py` | robust L-BFGS-B outer optimization |
 | `numba.njit` | `core/numba_physics.py` | cached hot physics kernels |
 | `matplotlib` | plotting CLIs | diagnostic plots |
-| `casadi` | `run_ipopt_endpoint_reachability.py` | endpoint reachability comparison |
 
 ## Artifact Map
 
@@ -806,9 +749,9 @@ v6_active_boundary_reduced/validation/test_freidberg_sign_aware_smoke.py
   -> reverse_sign_policy.reverse_coefficients_from_forward
   -> policy.recover_preparation_profile
 
-v6_active_boundary_reduced/validation/test_sonic_delta_profile.py
-  -> sonic_delta_profile.build_sonic_delta_profile
-  -> sonic_delta_profile.primitive_sonic_compatibility
+v6_active_boundary_reduced/validation/test_sonic_policy.py
+  -> policy._primitive_sonic_compatibility
+  -> policy._choose_sonic_sigma
   -> main policy explicit sonic branch behavior
 
 v6_active_boundary_reduced/validation/test_outer_solvers.py
@@ -817,7 +760,7 @@ v6_active_boundary_reduced/validation/test_outer_solvers.py
 
 v6_active_boundary_factorable/validation/test_soft_greedy_rk.py
   -> factorable soft-greedy prototype
-  -> reduced sonic_delta_profile reference helpers
+  -> reduced policy sonic reference helpers
 ```
 
 Known working interpreter convention for this code family:
@@ -857,8 +800,8 @@ v6_active_boundary_factorable/soft_greedy_rk.py
 v6_active_boundary_factorable/validation/test_soft_greedy_rk.py
   -> v6_active_boundary_factorable.soft_greedy_rk
   -> v6_active_boundary_reduced.core.policy
-  -> v6_active_boundary_reduced.core.sonic_delta_profile
   -> v6_firedrake_reduced.design
+  -> v6_firedrake_reduced.sonic_compatibility
   -> v6_maingo_casadi.numerics
 ```
 
@@ -884,7 +827,6 @@ Known limitations from its README:
 ## Boundary Notes And Caveats
 
 - `policy.py` exposes several underscored helpers that are imported by scripts. Treat them as semi-internal, not stable public API.
-- `run_ipopt_endpoint_reachability.py` is a comparison/reachability route using CasADi/IPOPT helpers; it is not the direct active-boundary reduced rollout.
 - `run_yamasaki_power_benchmark.py` was present in the working tree but untracked during map generation.
 - `outputs/` contains many generated profiles and diagnostics. They are data artifacts, not source dependencies.
 - `__pycache__/` contains compiled Python and Numba cache files. These are runtime artifacts and should not be used as dependency sources.
