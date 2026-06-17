@@ -18,8 +18,8 @@ from v6_active_boundary_factorable.soft_greedy_rk import (
     soft_greedy_step,
     sonic_sigma_chart,
 )
-from v6_active_boundary_reduced.policy import State
-from v6_active_boundary_reduced.sonic_delta_profile import (
+from v6_active_boundary_reduced.core.policy import State
+from v6_active_boundary_reduced.core.sonic_delta_profile import (
     SonicDeltaSettings,
     build_sonic_delta_profile,
     primitive_sonic_compatibility,

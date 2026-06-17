@@ -16,6 +16,7 @@ from v6_firedrake_reduced.design import (
 from .numba_physics import closure_state_numba, inlet_design_numba
 from .physics_constants import K_B
 from .policy import AnchorState, PreparationSettings, State, _physics_params, recover_preparation_profile
+from .scoring import soft_square
 
 
 AREA_DESIGN_VARIABLE_NAMES = ("a1", "a2", "a3")
@@ -210,12 +211,12 @@ def _score_rollout(
     delta_improvement = float(outlet["Delta"]) - float(inlet["Delta"])
     inlet_delta_penalty = float(weights.inlet_delta) * max(float(inlet["Delta"]), 0.0)
     temperature_scale = max(float(weights.temperature_scale_K), 1e-300)
-    te_shortfall_penalty = float(weights.inlet_te_shortfall) * (
-        max(float(weights.inlet_te_floor_K) - float(inlet["T_e"]), 0.0) / temperature_scale
-    ) ** 2
-    tp_shortfall_penalty = float(weights.inlet_tp_shortfall) * (
-        max(float(weights.inlet_tp_floor_K) - float(inlet["T_p"]), 0.0) / temperature_scale
-    ) ** 2
+    te_shortfall_penalty = float(weights.inlet_te_shortfall) * soft_square(
+        float(weights.inlet_te_floor_K) - float(inlet["T_e"]), temperature_scale
+    )
+    tp_shortfall_penalty = float(weights.inlet_tp_shortfall) * soft_square(
+        float(weights.inlet_tp_floor_K) - float(inlet["T_p"]), temperature_scale
+    )
     target_g_margin = float(outlet["G"]) - g_floor
     target_tp_margin = float(outlet["T_p"]) - tp_floor
     profile_metrics = _profile_metric_terms(payload=payload, design=design, config=config)

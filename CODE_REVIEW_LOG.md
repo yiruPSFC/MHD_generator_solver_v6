@@ -335,3 +335,211 @@ Existing scripts that expected diagnostic plots from every `run_preparation_reco
 
 Verification:
 See command results from the current review turn.
+
+## 2026-06-17 - Runner Common Anchor IO Review Notes
+
+Scope:
+`v6_active_boundary_reduced/runners/common.py`, with call-site checks in `select_profile_anchor.py`, `run_short_channel_reachability.py`, `run_forward_phi_greedy.py`, `run_ipopt_endpoint_reachability.py`, and local duplicate profile-array code in `outer_solvers/lbfgsb.py`.
+
+Question:
+During the file-by-file active-boundary review, two notes came up from reading `common.py` and searching its call sites: whether JSON serialization is strict-JSON safe for non-finite array elements, and whether common profile/node helpers are actually used consistently across runner and outer-solver outputs.
+
+Before:
+These notes existed only in the chat review summary. `common.json_default` converted numpy arrays with `tolist()` immediately while converting numpy scalar floats and Python floats through a finite check. `common.node_payload_to_state` and `common.profile_arrays_from_nodes` had no package call sites, while `outer_solvers/lbfgsb.py` kept a separate `_profile_arrays_from_nodes` implementation.
+
+Change:
+No code change. Logged the review notes so they are preserved for the later `lbfgsb.py` and output-format review.
+
+Current Behavior:
+`write_json` uses `json.dumps(..., default=json_default)` with Python's default `allow_nan=True`. Scalar non-finite floats handled by `json_default` become `null`, but non-finite values inside arrays can pass through the array `tolist()` path and may be emitted as `NaN` or `Infinity`, which Python can read back but strict JSON parsers may reject. The shared common helpers are used by reachability, forward-greedy, IPOPT reachability, and Yamasaki benchmark runners for anchor/profile IO, but not all scripts have converged on them yet.
+
+Rationale:
+This is not an immediate solver correctness bug because current internal readers are Python-based and the unused helpers do not affect active execution paths. It is still worth tracking because these files define artifact formats used across scripts, and duplicated profile-array writers can drift as output fields expand.
+
+Open Risks:
+Strict external JSON consumers may reject runner summaries containing non-finite values nested inside arrays. Profile NPZ schemas may diverge between `common.profile_arrays_from_nodes`, rollout payloads, and `outer_solvers/lbfgsb.py` unless the later outer-solver review either accepts the duplication intentionally or consolidates it.
+
+Verification:
+Read `common.py` with line numbers; searched package call sites for `json_default`, `write_json`, `write_csv`, `load_profile`, `anchor_payload`, `anchor_from_node_payload`, `load_anchor_json`, `load_profile_anchor`, `node_payload_to_state`, `profile_arrays_from_nodes`, and `save_profile_npz`; inspected the duplicate `_profile_arrays_from_nodes` in `outer_solvers/lbfgsb.py`. Tests not run because this was a review-log-only marker.
+
+## 2026-06-17 - Select Profile Anchor Rename
+
+Scope:
+`v6_active_boundary_reduced/runners/select_profile_anchor.py`, renamed from `v6_active_boundary_reduced/runners/extract_reachability_anchor.py`.
+
+Question:
+During review, the script name looked misleading because the file is a small CLI adapter/helper rather than a reachability solver or reachability-analysis implementation.
+
+Before:
+The old script name emphasized the downstream consumer (`reachability`) and the artifact (`anchor`), but the script actually selects one node from a built-in/reference profile, profile NPZ, or preparation summary and exports the standard anchor JSON payload.
+
+Change:
+Renamed `extract_reachability_anchor.py` to `select_profile_anchor.py` and updated repository references in the dependency map and review log.
+
+Current Behavior:
+The script remains a helper CLI under the clearer module name `v6_active_boundary_reduced.runners.select_profile_anchor`. It accepts either `--summary-json` or `--profile-npz`/built-in profile input, selects one node by index, computes the common `anchor_payload`, optionally writes `--out-json`, and prints the payload.
+
+Rationale:
+The old name was not technically wrong because the generated artifact is used by reachability scripts as a fixed endpoint. It was still misleading when read in isolation because it sounded like it extracted anchors from a reachability result or participated in reachability computation. `select_profile_anchor.py` names the actual action more directly.
+
+Open Risks:
+No compatibility alias was added. Existing commands that invoke `v6_active_boundary_reduced.runners.extract_reachability_anchor` must switch to `v6_active_boundary_reduced.runners.select_profile_anchor`.
+
+Verification:
+Read `select_profile_anchor.py` and searched for downstream `source_anchor_json`, `target_anchor_json`, and `load_anchor_json` usage in reachability and forward-greedy runners. Ran a repository search for the old module name after the rename; remaining occurrences are historical review-log notes. Verified `PYTHONPATH=. ./.venv_jit/bin/python -m v6_active_boundary_reduced.runners.select_profile_anchor --help` and `PYTHONPATH=. ./.venv_jit/bin/python -m compileall -q v6_active_boundary_reduced/runners/select_profile_anchor.py`.
+
+## 2026-06-17 - Objective And Outer Reward Layering
+
+Scope:
+`v6_active_boundary_reduced/core/objective.py`, `v6_active_boundary_reduced/outer_solvers/reward.py`, and new shared helper module `v6_active_boundary_reduced/core/scoring.py`.
+
+Question:
+During review, the distinction between `core/objective.py` and `outer_solvers/reward.py` was unclear because both expose weights, scores, reward terms, and failure penalties.
+
+Before:
+`core/objective.py` was easy to misread as the greedy policy objective. In current code, the per-step greedy objective is actually in `core/policy.py`; `core/objective.py` evaluates a full preparation design rollout and produces `objective_terms`, while `outer_solvers/reward.py` re-scores that result for prescreening and L-BFGS-B.
+
+Change:
+Kept the two score layers separate, but extracted repeated scalar helper logic into `core/scoring.py`. `core/objective.py` now imports `soft_square` for inlet temperature shortfall penalties. `outer_solvers/reward.py` imports `finite_float`, `profile_stat`, `area_ratio_from_nodes`, and `soft_square` instead of carrying local copies.
+
+Current Behavior:
+`core/objective.evaluate_preparation_design` applies design overrides, builds an anchor from the design, runs `recover_preparation_profile`, and scores the whole rollout with preparation-level terms such as delta improvement, optional MHD power/enthalpy rewards, inlet Delta penalty, inlet `T_e`/`T_p` floors, target-anchor feasibility, and profile-metric availability. `outer_solvers.reward.score_outer_result` consumes that result, prefers `objective_terms` where available, and adds outer-solver-specific scoring for profile min/max temperature, area ratio, magnetic-field bounds, `G` floor, Mach ceiling, incomplete rollout, and failure handling. Shared numeric helpers live in `core/scoring.py` and do not own either layer's semantics.
+
+Rationale:
+The overlap in `delta_improvement`, optional MHD power, temperature scaling, and failure penalty is intentional because both layers need comparable scalar diagnostics. The outer reward is not the reduced-model greedy policy objective; it is the optimizer-facing scalarization of an already evaluated rollout.
+
+Open Risks:
+Because the layers still intentionally duplicate some scalar names and weight concepts, defaults can drift or users can confuse `PreparationObjectiveWeights` with `OuterRewardWeights`. Later review of `lbfgsb.py` should verify which score is actually optimized and whether CSV/output names make the distinction visible enough.
+
+Verification:
+Inspected function lists and call sites for `evaluate_preparation_design`, `_score_rollout`, `evaluate_profile_metrics`, `score_outer_result`, `PreparationObjectiveWeights`, and `OuterRewardWeights`; inspected `lbfgsb.py` where `evaluate_preparation_design` is followed by `score_outer_result`. Ran `PYTHONPATH=. ./.venv_jit/bin/python -m compileall -q v6_active_boundary_reduced/core/scoring.py v6_active_boundary_reduced/core/objective.py v6_active_boundary_reduced/outer_solvers/reward.py v6_active_boundary_reduced/outer_solvers/prescreen.py v6_active_boundary_reduced/validation/test_outer_solver.py`; `git diff --check -- v6_active_boundary_reduced/core/scoring.py v6_active_boundary_reduced/core/objective.py v6_active_boundary_reduced/outer_solvers/reward.py ACTIVE_BOUNDARY_DEPENDENCY_CODE_MAP.md CODE_REVIEW_LOG.md`; direct invocation of all four `test_outer_solver.py` test functions in `.venv_jit`. `pytest` was not available in `.venv_jit`.
+
+## 2026-06-17 - Prescreen Direction-Specific Heuristic Marker
+
+Scope:
+`v6_active_boundary_reduced/outer_solvers/prescreen.py`.
+
+Question:
+During review, the current prescreen logic was compared with the intended future idea of a cheaper local derivative prescreen. The current code samples complete candidate designs, solves full preparation profiles, and filters the resulting nodes; it does not yet implement a one-dx local `partial_x(T_e/T_p)` screening model.
+
+Before:
+`passes_prescreen` looked like a generic physical admissibility gate, but its current hard gates are tuned to the reverse-preparation workflow where the design anchor is an inlet-like condition and low anchor `T_e/T_p` plus positive local `d(T_e/T_p)/dx` are desirable. That interpretation may not transfer unchanged to a future formalized forward workflow.
+
+Change:
+Added a short `REVIEW` marker above `passes_prescreen` noting that these gates are reverse-preparation seed heuristics and future forward-self-consistent prescreening needs direction-specific metrics.
+
+Current Behavior:
+`prescreen_candidates` evaluates the center point and random uniform samples over the selected control bounds. Each candidate is converted into design overrides, passed through `evaluate_preparation_design` with `return_payload=True`, re-scored by `score_outer_result`, and then filtered by `passes_prescreen`. Accepted candidates are ranked by `te_over_tp_gradient - ratio_penalty - g_penalty + 0.001 * outer_score`, with optional fallback to rejected rows if allowed.
+
+Rationale:
+The current implementation is a multistart seed finder for the robust L-BFGS-B outer prototype, not a cheap local-derivative prescreen. Preserving this distinction matters because a forward approach may want opposite or different `T_e/T_p` trend semantics depending on the anchored endpoint and integration direction.
+
+Open Risks:
+If the same `prescreen.py` gates are reused for a forward formalization without revisiting direction semantics, good forward candidates may be filtered out or ranked incorrectly. A future implementation may need a separate local derivative prescreen that evaluates only a single dx or analytic local quantities before full-profile solves.
+
+Verification:
+Ran `PYTHONPATH=. ./.venv_jit/bin/python -m compileall -q v6_active_boundary_reduced/outer_solvers/prescreen.py v6_active_boundary_reduced/validation/test_outer_solver.py`; direct invocation of all four `test_outer_solver.py` test functions in `.venv_jit`; `git diff --check -- v6_active_boundary_reduced/outer_solvers/prescreen.py CODE_REVIEW_LOG.md`.
+
+## 2026-06-17 - Prescreen Multistart Rationale Question
+
+Scope:
+`v6_active_boundary_reduced/outer_solvers/prescreen.py` and `v6_active_boundary_reduced/outer_solvers/lbfgsb.py`.
+
+Question:
+During review, the value of multistart seeding before a gradient-based outer optimizer was questioned. If the outer shell is already using L-BFGS-B, it is not obvious why random multistart seeds should be needed.
+
+Before:
+The code treated prescreening as center-point plus random-candidate sampling, full-profile evaluation, hard-gate filtering, ranking, and robust-neighborhood certification before L-BFGS-B. The rationale was implicit in the implementation rather than stated: the outer objective is a black-box rollout score with failure boundaries, active-set switches, and finite-difference optimizer gradients, not a clean smooth objective.
+
+Change:
+No code change. Logged the design question for the later `lbfgsb.py` review.
+
+Current Behavior:
+Every prescreen seed currently pays the cost of a full `evaluate_preparation_design(..., return_payload=True)` call. L-BFGS-B then starts only from ranked prescreen seeds that pass robust-neighborhood certification unless explicitly configured otherwise.
+
+Rationale:
+Multistart can be justified only if the outer objective has multiple feasible basins or hard failure regions where a single local start is unreliable. It is not a substitute for a cheaper physics-informed local derivative prescreen, and it may be wasteful if most candidate profiles are expensive and the objective landscape is not actually multi-basin.
+
+Open Risks:
+Current prescreening may be more expensive than necessary and may obscure the intended local-derivative screening idea. During `lbfgsb.py` review, verify whether multistart is still needed, whether a deterministic center/known-good seed is enough, or whether a cheap one-dx derivative screen should replace random full-profile sampling.
+
+Verification:
+Review-log-only entry. No tests run.
+
+## 2026-06-17 - Outer L-BFGS-B Main Flow Review
+
+Scope:
+`v6_active_boundary_reduced/outer_solvers/lbfgsb.py`.
+
+Question:
+During review, the role of `lbfgsb.py` needed to be separated from `prescreen.py`, `core/objective.py`, and `outer_solvers/reward.py`.
+
+Before:
+The file looked like "the L-BFGS-B optimizer," but it actually owns more of the outer-shell prototype: prescreen invocation, normalized-space objective evaluation, full rollout evaluation, outer reward scoring, local neighborhood certification, SciPy run orchestration, post-run best certification, and artifact writing.
+
+Change:
+Added a `REVIEW` marker above the CLI `--objective` option noting that `PreparationSettings` is converted to reverse rollout; `delta_drop` is the supported production objective, while `power_next` remains diagnostic. No algorithmic behavior changed.
+
+Current Behavior:
+`run_outer_lbfgsb` first calls `prescreen_candidates` to produce ranked seeds. It then evaluates normalized candidates through `evaluate_preparation_design(..., return_payload=True)` and re-scores with `score_outer_result`. Seeds must pass neighborhood certification before L-BFGS-B unless the robust gate is disabled or nonrobust fallback is explicitly allowed. SciPy minimizes `-outer_score` over normalized `[0, 1]` bounds. The final `best` is selected only from feasible evaluations that pass post-run neighborhood certification; `best_seen_uncertified` records the highest feasible raw evaluation separately.
+
+Rationale:
+The robust-neighborhood gate is a guardrail around finite-difference gradients on a black-box rollout objective with failure boundaries. Keeping `best` reserved for locally certified profiles prevents boundary probes from becoming the reported optimizer result.
+
+Open Risks:
+The file still contains local JSON/CSV/profile-output helpers instead of importing a shared output layer. `certify_top_k=0` would prevent any certified `best` from being selected. The multistart/full-profile prescreen remains expensive and should be revisited when a cheaper local derivative prescreen is formalized.
+
+Verification:
+Ran `PYTHONPATH=. ./.venv_jit/bin/python -m compileall -q v6_active_boundary_reduced/outer_solvers/lbfgsb.py`; `PYTHONPATH=. ./.venv_jit/bin/python -m v6_active_boundary_reduced.outer_solvers.lbfgsb --help`; `git diff --check -- v6_active_boundary_reduced/outer_solvers/lbfgsb.py CODE_REVIEW_LOG.md`.
+
+## 2026-06-17 - Outer Shell Robustness Workaround Assessment
+
+Scope:
+`v6_active_boundary_reduced/outer_solvers/lbfgsb.py`, `prescreen.py`, and their dependency on the reduced active-boundary rollout.
+
+Question:
+During review, the file's control flow looked simple but the algorithmic treatment looked heavy: full-profile multistart prescreening, normalized-space finite-difference L-BFGS-B, and full-rollout neighborhood certification around seeds and candidate best points.
+
+Before:
+The code treated local feasibility certification and multistart as necessary outer-shell guardrails, but it did not explicitly state that much of this machinery compensates for inner rollout fragility rather than solving the underlying numerical robustness problem.
+
+Change:
+No code change. Logged the architectural assessment.
+
+Current Behavior:
+The outer shell discards failed rollout evaluations, uses multistart to find feasible basins, and certifies local neighborhoods by re-running complete profiles under small normalized perturbations. This can be computationally acceptable after recent forward-solver speedups, but it remains expensive and indirect.
+
+Rationale:
+The heavy outer-shell mechanics are best understood as defensive wrappers around a non-robust or discontinuous inner forward/reverse rollout. They can make experiments run and avoid reporting boundary probes as final optima, but they are not a first-principles solution to solver failure, active-set discontinuity, or poor local model continuity.
+
+Open Risks:
+If effort continues to accumulate in outer-shell tricks, the project may optimize around inner solver failures instead of fixing them. Future work should prioritize forward solver robustness, local continuity, sonic/active-boundary handling, and a cheaper local derivative prescreen before treating the outer L-BFGS-B shell as a production optimizer.
+
+Verification:
+Review-log-only assessment. No tests run.
+
+## 2026-06-17 - Sonic Delta Profile Review
+
+Scope:
+`v6_active_boundary_reduced/core/sonic_delta_profile.py`, with call-site checks in `v6_active_boundary_reduced/runners/run_sonic_delta_profile.py`, `v6_active_boundary_reduced/validation/test_sonic_delta_profile.py`, shared sonic helpers in `v6_active_boundary_reduced/core/sonic.py`, and the README sonic-profile example.
+
+Question:
+The file was reviewed as a standalone local profile builder through `M=1`, now relocated under `core/`, to check whether its branch selection, Delta objective semantics, and sonic helper usage still match the current active-boundary design.
+
+Before:
+The module documentation says each step selects the admissible root with the steepest requested `Delta` change while preserving `G >= g_floor`. The default settings are `branch_mode="fixed"` and `selection_mode="continuation"`, while the README example uses `--selection-mode steepest` but leaves `branch_mode` at its default.
+
+Change:
+No algorithmic code change. Logged the review findings so the semantic mismatch is visible before deciding whether to change defaults, gates, or documentation.
+
+Current Behavior:
+`build_sonic_delta_profile` builds a seed from `v6_firedrake_reduced.solve_local_sonic_match`, computes the primitive left-null sonic `sigma`, marches left and right with trapezoidal `sigma`, solves primitive finite-step residuals by least squares, and emits nodes, segments, arrays, and an active summary. In fixed branch mode, the left side is forced to `supersonic` and the right side to `subsonic`; candidate selection first filters by that Mach branch before applying the objective. As a result, even `objective="pedal"` with `selection_mode="steepest"` can return `ok=True` with nonzero direction-violation counts. With the README-scale `dx=1e-5`, fixed/steepest produced one reverse direction violation; agnostic/steepest produced no direction violations in the same smoke check.
+
+Rationale:
+This is not a crash-path bug because residual, `G`, `T_p`, and Mach-crossing checks still pass in the tested Freidberg local profile. It is a semantic risk: "sonic-compatible profile exists", "fixed Mach branch profile exists", and "pedal objective direction was obeyed" are currently separate facts, but the public `ok` flag and docstring can be read as if all three were satisfied together.
+
+Open Risks:
+The `ok` flag does not gate on `reverse_direction_violation_count` or `forward_direction_violation_count`, so callers may treat a profile as objective-consistent when it is only physically/admissibly solved. `support_type="sonic_compatible_steepest_delta"` is emitted even in continuation mode, where the selected candidate is continuity-ranked rather than the steepest-Delta candidate. `sonic_delta_profile.primitive_sonic_compatibility` duplicates the shared `core.sonic.primitive_sonic_compatibility` logic and lacks the shared helper's explicit `ok`/error handling and scalar singular-value schema, so future sonic-helper fixes can drift unless this module reuses the shared implementation.
+
+Verification:
+Read `sonic_delta_profile.py` with line numbers and traced callers/tests. Ran `PYTHONPATH=. ./.venv_jit/bin/python v6_active_boundary_reduced/validation/test_sonic_delta_profile.py`; `PYTHONPATH=. ./.venv_jit/bin/python -m compileall -q v6_active_boundary_reduced/core/sonic_delta_profile.py v6_active_boundary_reduced/runners/run_sonic_delta_profile.py v6_active_boundary_reduced/validation/test_sonic_delta_profile.py`; and `PYTHONPATH=. ./.venv_jit/bin/python -m v6_active_boundary_reduced.runners.run_sonic_delta_profile --case freidberg_reference --out-dir outputs/tmp_sonic_delta_profile_review --n-steps-each-side 1 --scan-points 15 --no-plot`. The temporary output directory was removed after inspection.

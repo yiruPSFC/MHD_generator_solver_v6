@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import numpy as np
 
-from v6_active_boundary_reduced.outer_solver.prescreen import (
+from v6_active_boundary_reduced.outer_solvers.prescreen import (
     PrescreenSettings,
     from_normalized,
     passes_prescreen,
     prescreen_metrics,
     to_normalized,
 )
-from v6_active_boundary_reduced.outer_solver.reward import OuterRewardWeights, score_outer_result
+from v6_active_boundary_reduced.outer_solvers.reward import OuterRewardWeights, score_outer_result
 
 
 def _sample_result(*, ok: bool = True) -> dict:

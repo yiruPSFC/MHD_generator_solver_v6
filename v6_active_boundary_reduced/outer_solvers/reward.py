@@ -5,6 +5,8 @@ from typing import Any
 
 import numpy as np
 
+from ..core.scoring import area_ratio_from_nodes, finite_float, profile_stat, soft_square
+
 
 @dataclass(frozen=True)
 class OuterRewardWeights:
@@ -30,14 +32,6 @@ class OuterRewardWeights:
     failure_penalty: float = 1.0e6
 
 
-def _finite(value: Any, default: float = float("nan")) -> float:
-    try:
-        out = float(value)
-    except (TypeError, ValueError):
-        return float(default)
-    return out if np.isfinite(out) else float(default)
-
-
 def _nodes_from_result(result: dict[str, Any]) -> list[dict[str, Any]]:
     payload = dict(result.get("payload", {}) or {})
     nodes = payload.get("nodes", [])
@@ -49,27 +43,6 @@ def _nodes_from_result(result: dict[str, Any]) -> list[dict[str, Any]]:
         if node:
             fallback.append(node)
     return fallback
-
-
-def _profile_stat(nodes: list[dict[str, Any]], name: str, reducer, default: float = float("nan")) -> float:
-    values = [_finite(node.get(name)) for node in nodes]
-    finite = [value for value in values if np.isfinite(value)]
-    if not finite:
-        return float(default)
-    return float(reducer(finite))
-
-
-def _area_ratio(nodes: list[dict[str, Any]]) -> float:
-    a_min = _profile_stat(nodes, "A", min)
-    a_max = _profile_stat(nodes, "A", max)
-    if not np.isfinite(a_min) or not np.isfinite(a_max) or a_min <= 0.0:
-        return float("nan")
-    return float(a_max / a_min)
-
-
-def _soft_square(shortfall: float, scale: float) -> float:
-    denom = max(float(scale), 1e-300)
-    return float(max(float(shortfall), 0.0) / denom) ** 2
 
 
 def score_outer_result(result: dict[str, Any], *, weights: OuterRewardWeights) -> dict[str, Any]:
@@ -84,49 +57,49 @@ def score_outer_result(result: dict[str, Any], *, weights: OuterRewardWeights) -
     objective_terms = dict(result.get("objective_terms", {}) or {})
     design = dict(result.get("design", {}) or {})
 
-    delta_improvement = _finite(
+    delta_improvement = finite_float(
         objective_terms.get("delta_improvement"),
-        _finite(active_summary.get("Delta_start")) - _finite(active_summary.get("Delta_end")),
+        finite_float(active_summary.get("Delta_start")) - finite_float(active_summary.get("Delta_end")),
     )
     if not np.isfinite(delta_improvement):
         delta_improvement = 0.0
-    mhd_output_power_MW = _finite(
+    mhd_output_power_MW = finite_float(
         active_summary.get("mhd_output_power_MW"),
-        _finite(objective_terms.get("mhd_output_power_MW"), 0.0),
+        finite_float(objective_terms.get("mhd_output_power_MW"), 0.0),
     )
     if not np.isfinite(mhd_output_power_MW):
         mhd_output_power_MW = 0.0
-    min_tp = _finite(
+    min_tp = finite_float(
         active_summary.get("Tp_min_K"),
-        _finite(_profile_stat(nodes, "T_p", min), float(weights.min_tp_floor_K)),
+        finite_float(profile_stat(nodes, "T_p", min), float(weights.min_tp_floor_K)),
     )
-    max_te = _finite(
+    max_te = finite_float(
         active_summary.get("Te_max_K"),
-        _finite(_profile_stat(nodes, "T_e", max), float(weights.max_te_ceiling_K)),
+        finite_float(profile_stat(nodes, "T_e", max), float(weights.max_te_ceiling_K)),
     )
-    min_g = _finite(
+    min_g = finite_float(
         active_summary.get("G_min_excluding_anchor"),
-        _finite(_profile_stat(nodes, "G", min), float(weights.g_floor)),
+        finite_float(profile_stat(nodes, "G", min), float(weights.g_floor)),
     )
-    mach_max = _finite(
+    mach_max = finite_float(
         active_summary.get("mach_max"),
-        _finite(_profile_stat(nodes, "mach", max), 0.0),
+        finite_float(profile_stat(nodes, "mach", max), 0.0),
     )
-    area_ratio = _area_ratio(nodes)
-    b_t = _finite(design.get("B_T"))
+    area_ratio = area_ratio_from_nodes(nodes)
+    b_t = finite_float(design.get("B_T"))
     n_requested = max(int(active_summary.get("n_steps_requested", result.get("n_steps_completed", 0)) or 0), 0)
     n_completed = max(int(active_summary.get("n_steps_completed", result.get("n_steps_completed", 0)) or 0), 0)
 
     temperature_scale = max(float(weights.temperature_scale_K), 1e-300)
-    tp_penalty = float(weights.min_tp_shortfall) * _soft_square(float(weights.min_tp_floor_K) - min_tp, temperature_scale)
-    te_penalty = float(weights.max_te_excess) * _soft_square(max_te - float(weights.max_te_ceiling_K), temperature_scale)
-    g_penalty = float(weights.g_shortfall) * _soft_square(float(weights.g_floor) - min_g, float(weights.g_scale))
-    mach_penalty = float(weights.mach_excess) * _soft_square(mach_max - float(weights.mach_ceiling), 1.0)
+    tp_penalty = float(weights.min_tp_shortfall) * soft_square(float(weights.min_tp_floor_K) - min_tp, temperature_scale)
+    te_penalty = float(weights.max_te_excess) * soft_square(max_te - float(weights.max_te_ceiling_K), temperature_scale)
+    g_penalty = float(weights.g_shortfall) * soft_square(float(weights.g_floor) - min_g, float(weights.g_scale))
+    mach_penalty = float(weights.mach_excess) * soft_square(mach_max - float(weights.mach_ceiling), 1.0)
 
     area_penalty = 0.0
     if np.isfinite(area_ratio):
-        area_penalty += _soft_square(float(weights.area_ratio_min) - area_ratio, max(float(weights.area_ratio_min), 1e-12))
-        area_penalty += _soft_square(area_ratio - float(weights.area_ratio_max), max(float(weights.area_ratio_max), 1e-12))
+        area_penalty += soft_square(float(weights.area_ratio_min) - area_ratio, max(float(weights.area_ratio_min), 1e-12))
+        area_penalty += soft_square(area_ratio - float(weights.area_ratio_max), max(float(weights.area_ratio_max), 1e-12))
         area_penalty *= float(weights.area_ratio_penalty)
     else:
         area_penalty = float(weights.area_ratio_penalty)
@@ -134,8 +107,8 @@ def score_outer_result(result: dict[str, Any], *, weights: OuterRewardWeights) -
     magnetic_penalty = 0.0
     if np.isfinite(b_t):
         b_scale = max(float(weights.magnetic_field_max_T) - float(weights.magnetic_field_min_T), 1e-12)
-        magnetic_penalty += _soft_square(float(weights.magnetic_field_min_T) - b_t, b_scale)
-        magnetic_penalty += _soft_square(b_t - float(weights.magnetic_field_max_T), b_scale)
+        magnetic_penalty += soft_square(float(weights.magnetic_field_min_T) - b_t, b_scale)
+        magnetic_penalty += soft_square(b_t - float(weights.magnetic_field_max_T), b_scale)
         magnetic_penalty *= float(weights.magnetic_field_penalty)
 
     incomplete_penalty = 0.0

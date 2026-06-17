@@ -16,8 +16,8 @@ import sys
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-import v6_active_boundary_reduced.policy as policy
-from v6_active_boundary_reduced.policy import PolicySettings
+import v6_active_boundary_reduced.core.policy as policy
+from v6_active_boundary_reduced.core.policy import PolicySettings
 
 
 def _fake_eval_for_g_boundary(*, sigma: float, **_kwargs):

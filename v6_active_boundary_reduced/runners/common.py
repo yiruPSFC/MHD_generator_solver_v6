@@ -10,7 +10,7 @@ import numpy as np
 from v6_firedrake_reduced.cases.freidberg_reference import load_reference_profile
 from v6_firedrake_reduced.design import CaseConfig
 
-from .policy import AnchorState, State, _closure_metrics, anchor_from_dict, anchor_from_profile
+from ..core.policy import AnchorState, State, _closure_metrics, anchor_from_dict, anchor_from_profile
 
 
 def json_default(value: Any):

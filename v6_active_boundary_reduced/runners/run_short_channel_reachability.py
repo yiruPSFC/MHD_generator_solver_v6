@@ -9,9 +9,9 @@ import numpy as np
 
 from v6_firedrake_reduced.design import load_case_config
 
-from .preparation_recovery_diagnostics import write_preparation_diagnostics
-from .policy import PreparationSettings, anchor_from_dict, recover_preparation_profile
-from .reachability_common import (
+from ..diagnostics.preparation_recovery import write_preparation_diagnostics
+from ..core.policy import PreparationSettings, anchor_from_dict, recover_preparation_profile
+from .common import (
     anchor_from_node_payload,
     anchor_payload,
     json_default,

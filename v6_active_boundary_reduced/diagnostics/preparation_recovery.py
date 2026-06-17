@@ -13,7 +13,7 @@ import numpy as np
 from v6_firedrake_reduced.design import CaseConfig, DesignBounds, DesignVector
 from v6_firedrake_reduced.transport import working_fluid_for_config
 
-from .numba_physics import closure_state_numba, freidberg_balance_terms_numba, inlet_design_numba
+from ..core.numba_physics import closure_state_numba, freidberg_balance_terms_numba, inlet_design_numba
 
 
 def _json_default(value: Any):

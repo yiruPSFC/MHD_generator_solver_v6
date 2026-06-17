@@ -11,14 +11,14 @@ from typing import Any
 import numpy as np
 from scipy.optimize import minimize
 
-from ..objective import (
+from ..core.objective import (
     AnchorOptions,
     PreparationObjectiveWeights,
     evaluate_preparation_design,
     flatten_result_for_csv,
     load_base_config,
 )
-from ..policy import PreparationSettings
+from ..core.policy import PreparationSettings
 from .prescreen import (
     CONTROL_VARIABLE_NAMES,
     PrescreenSettings,
@@ -588,6 +588,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--accept-failed-rollout-seeds", action="store_true")
     parser.add_argument("--dx", type=float, required=True)
     parser.add_argument("--n-steps", type=int, default=60)
+    # REVIEW: PreparationSettings is converted to reverse rollout; delta_drop is
+    # the supported production objective, while power_next remains diagnostic.
     parser.add_argument(
         "--objective",
         choices=("delta_drop", "power_next"),

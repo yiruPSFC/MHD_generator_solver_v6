@@ -10,7 +10,7 @@ if __package__ in {None, ""}:
 
 from v6_firedrake_reduced.design import load_case_config
 
-from v6_active_boundary_reduced.sonic_delta_profile import (
+from v6_active_boundary_reduced.core.sonic_delta_profile import (
     SonicDeltaSettings,
     build_sonic_delta_profile,
     primitive_sonic_compatibility,
@@ -54,7 +54,7 @@ def test_primitive_sonic_compatibility_uses_primitive_left_null_condition() -> N
     state = payload["sonic_seed"]
     assert state["source"] == "v6_firedrake_reduced.solve_local_sonic_match"
 
-    from v6_active_boundary_reduced.policy import State
+    from v6_active_boundary_reduced.core.policy import State
 
     check = primitive_sonic_compatibility(
         State(log_n=float(node["log_n"]), log_Te=float(node["log_Te"]), logA=float(node["logA"])),
@@ -77,7 +77,7 @@ def test_main_policy_uses_explicit_sonic_branch_near_choking() -> None:
     node = dict(payload["nodes"][0])
     sonic = dict(payload["sonic_primitive_compatibility"])
 
-    from v6_active_boundary_reduced.policy import AnchorState, PolicySettings, State, rollout_policy_from_anchor
+    from v6_active_boundary_reduced.core.policy import AnchorState, PolicySettings, State, rollout_policy_from_anchor
 
     anchor_state = State(
         log_n=float(node["log_n"]),
@@ -118,7 +118,7 @@ def test_main_policy_uses_explicit_sonic_branch_near_choking() -> None:
 
 
 def test_sonic_compatibility_choice_classifies_degenerate_cases() -> None:
-    from v6_active_boundary_reduced.policy import PolicySettings, _choose_sonic_sigma
+    from v6_active_boundary_reduced.core.policy import PolicySettings, _choose_sonic_sigma
 
     settings = PolicySettings(sonic_compatibility_tol=1.0e-6, active_tol=1.0e-9)
     root = _choose_sonic_sigma(

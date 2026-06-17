@@ -11,7 +11,7 @@ import numpy as np
 
 from v6_firedrake_reduced.design import load_case_config
 
-from .sonic_delta_profile import SonicDeltaSettings, build_sonic_delta_profile
+from ..core.sonic_delta_profile import SonicDeltaSettings, build_sonic_delta_profile
 
 
 def _json_default(value: Any):

@@ -10,7 +10,7 @@ from v6_firedrake_reduced.design import CaseConfig
 from v6_firedrake_reduced.geometry import LogAreaSplineControl
 from v6_firedrake_reduced.transport import working_fluid_for_config
 
-from .diagnostics import (
+from ..diagnostics.summary import (
     active_summary as _active_summary,
     eval_public as _eval_public,
     scan_diagnostics as _scan_diagnostics,

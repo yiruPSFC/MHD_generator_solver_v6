@@ -17,7 +17,7 @@ from typing import Any
 import numpy as np
 from scipy.optimize import differential_evolution
 
-from .objective import (
+from ..core.objective import (
     SEARCH_DESIGN_VARIABLE_NAMES,
     AnchorOptions,
     PreparationObjectiveWeights,
@@ -25,8 +25,8 @@ from .objective import (
     flatten_result_for_csv,
     load_base_config,
 )
-from .preparation_recovery_diagnostics import write_preparation_diagnostics
-from .policy import PreparationSettings
+from ..diagnostics.preparation_recovery import write_preparation_diagnostics
+from ..core.policy import PreparationSettings
 
 
 def _json_default(value: Any):

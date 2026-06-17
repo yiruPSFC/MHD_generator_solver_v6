@@ -2,6 +2,22 @@
 
 Prototype for a reverse-only active-boundary preparation solver.
 
+## Code organization
+
+The package is organized by functionality:
+
+```text
+core/          stable-ish solver logic, physics kernels, policy, objectives
+diagnostics/   rollout summaries, diagnostic plots, postprocessing assets
+runners/       command-line entrypoints and file-oriented workflow glue
+outer_solvers/ early-stage outer optimization prototypes
+validation/    smoke and behavior-regression tests
+```
+
+`outer_solvers/` is intentionally separated from `core/`: the current
+low-dimensional outer optimization path is useful for experiments, but its
+results are not yet stable or easy to interpret as solver behavior.
+
 The only intended workflow in this folder is:
 
 ```text
@@ -33,7 +49,7 @@ accept:  RK4 error estimate, G_next, and Tp_next satisfy local gates
 ```
 
 The hot physical closure and dynamic-term formulas are implemented in
-`numba_physics.py` with `numba.njit(cache=True)`.  The scan-and-refine policy is
+`core/numba_physics.py` with `numba.njit(cache=True)`.  The scan-and-refine policy is
 kept as a fallback for endpoint validation failures, but there is no longer an
 implicit backward-Euler step backend or separate nonlinear `G`-boundary solve.
 
@@ -55,7 +71,7 @@ are clear.
 Example Freidberg-inlet preparation recovery:
 
 ```bash
-./.venv_jit/bin/python -m v6_active_boundary_reduced.run_preparation_recovery \
+./.venv_jit/bin/python -m v6_active_boundary_reduced.runners.run_preparation_recovery \
   --case freidberg_reference \
   --anchor-profile-index 0 \
   --dx 0.01 \
@@ -81,7 +97,7 @@ change while preserving `G >= G_floor`.
 Example:
 
 ```bash
-./.venv_jit/bin/python -m v6_active_boundary_reduced.run_sonic_delta_profile \
+./.venv_jit/bin/python -m v6_active_boundary_reduced.runners.run_sonic_delta_profile \
   --case freidberg_reference \
   --dx 1e-5 \
   --n-steps-each-side 60 \
@@ -143,7 +159,7 @@ score =
 Parallel grid scan:
 
 ```bash
-./.venv_jit/bin/python -m v6_active_boundary_reduced.run_anchor_scan \
+./.venv_jit/bin/python -m v6_active_boundary_reduced.runners.run_anchor_scan \
   --case freidberg_reference \
   --dx 0.01 \
   --n-steps 60 \
@@ -158,7 +174,7 @@ then re-evaluates only the top 20 coarse candidates with a finer mesh over the
 same physical preparation length:
 
 ```bash
-./.venv_jit/bin/python -m v6_active_boundary_reduced.run_anchor_scan \
+./.venv_jit/bin/python -m v6_active_boundary_reduced.runners.run_anchor_scan \
   --case freidberg_reference \
   --dx 0.02 \
   --n-steps 270 \
@@ -178,7 +194,7 @@ the coarse ranking under the `coarse` key.
 Early-stage SciPy optimization:
 
 ```bash
-./.venv_jit/bin/python -m v6_active_boundary_reduced.run_anchor_optimize \
+./.venv_jit/bin/python -m v6_active_boundary_reduced.runners.run_anchor_optimize \
   --case freidberg_reference \
   --dx 0.01 \
   --n-steps 60 \
@@ -192,7 +208,7 @@ Early-stage SciPy optimization:
 
 ## Outer L-BFGS-B reduced-model optimizer
 
-The outer reduced-model optimizer lives under `outer_solver/`.  It optimizes
+The outer reduced-model optimizer lives under `outer_solvers/`.  It optimizes
 the five primary inlet/anchor controls
 
 ```text
@@ -220,7 +236,7 @@ profile.  If no robust seed exists, the run writes diagnostics and skips
 Example:
 
 ```bash
-./.venv_jit/bin/python -m v6_active_boundary_reduced.outer_solver.lbfgsb \
+./.venv_jit/bin/python -m v6_active_boundary_reduced.outer_solvers.lbfgsb \
   --case yamasaki2004 \
   --dx 0.01 \
   --n-steps 60 \

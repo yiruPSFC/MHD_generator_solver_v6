@@ -6,7 +6,7 @@ from pathlib import Path
 
 from v6_firedrake_reduced.design import load_case_config
 
-from .reachability_common import (
+from .common import (
     anchor_from_node_payload,
     anchor_payload,
     load_profile_anchor,
@@ -17,8 +17,8 @@ from .reachability_common import (
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
-            "Extract one fixed-endpoint reachability anchor from the Freidberg "
-            "reference profile, another profile NPZ, or a preparation summary."
+            "Select one node from the Freidberg reference profile, another "
+            "profile NPZ, or a preparation summary and export anchor JSON."
         )
     )
     parser.add_argument("--case", default="freidberg_reference")

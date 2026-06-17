@@ -12,8 +12,8 @@ import numpy as np
 from v6_firedrake_reduced.design import load_case_config
 from v6_firedrake_reduced.geometry import LogAreaSplineControl
 
-from .local_affine import ForwardAffineCoefficients, compute_forward_affine_coefficients
-from .policy import (
+from ..core.local_affine import ForwardAffineCoefficients, compute_forward_affine_coefficients
+from ..core.policy import (
     AnchorState,
     PolicySettings,
     State,
@@ -21,7 +21,7 @@ from .policy import (
     _evaluate_sigma,
     _physics_params,
 )
-from .reachability_common import json_default, load_anchor_json, save_profile_npz, write_csv, write_json
+from .common import json_default, load_anchor_json, save_profile_npz, write_csv, write_json
 
 
 def _finite_or_none(value: float) -> float | None:

@@ -11,8 +11,8 @@ import numpy as np
 from v6_firedrake_reduced.cases.freidberg_reference import load_reference_profile
 from v6_firedrake_reduced.design import load_case_config
 
-from .policy import PreparationSettings, anchor_from_dict, anchor_from_profile, recover_preparation_profile
-from .preparation_recovery_diagnostics import write_preparation_diagnostics
+from ..core.policy import PreparationSettings, anchor_from_dict, anchor_from_profile, recover_preparation_profile
+from ..diagnostics.preparation_recovery import write_preparation_diagnostics
 
 
 def _json_default(value: Any):

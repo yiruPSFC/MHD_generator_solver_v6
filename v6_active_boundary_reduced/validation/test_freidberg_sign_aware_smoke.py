@@ -20,14 +20,14 @@ if __package__ in {None, ""}:
 from v6_firedrake_reduced.cases.freidberg_reference import load_reference_profile
 from v6_firedrake_reduced.design import load_case_config
 
-from v6_active_boundary_reduced.local_affine import compute_forward_affine_coefficients
-from v6_active_boundary_reduced.policy import (
+from v6_active_boundary_reduced.core.local_affine import compute_forward_affine_coefficients
+from v6_active_boundary_reduced.core.policy import (
     PreparationSettings,
     _physics_params,
     anchor_from_profile,
     recover_preparation_profile,
 )
-from v6_active_boundary_reduced.reverse_sign_policy import reverse_coefficients_from_forward
+from v6_active_boundary_reduced.core.reverse_sign_policy import reverse_coefficients_from_forward
 
 
 def _freidberg_anchor_near_x(x_target: float = 0.01):

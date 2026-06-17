@@ -26,8 +26,8 @@ from v6_casadi.optimize_area_profile_casadi_v6 import (
 from v6_firedrake_reduced.design import load_case_config
 from v6_firedrake_reduced.geometry import LogAreaSplineControl
 
-from .policy import AnchorState, _physics_params
-from .reachability_common import (
+from ..core.policy import AnchorState, _physics_params
+from .common import (
     anchor_payload,
     json_default,
     load_anchor_json,

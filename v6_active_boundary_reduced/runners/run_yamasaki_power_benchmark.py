@@ -13,10 +13,10 @@ from v6_firedrake_reduced.cases.yamasaki2004 import YAMASAKI2004, YAMASAKI2004_M
 from v6_firedrake_reduced.design import GEOMETRY_LENGTH_MODES, load_case_config
 from v6_firedrake_reduced.transport import ELECTRON_TRANSPORT_MODELS, working_fluid_for_config
 
-from .numba_physics import inlet_design_numba
-from .objective import evaluate_profile_metrics
-from .policy import AnchorState, PolicySettings, State, _closure_metrics, _evaluate_sigma, rollout_policy_from_anchor
-from .reachability_common import json_default, save_profile_npz, write_csv, write_json
+from ..core.numba_physics import inlet_design_numba
+from ..core.objective import evaluate_profile_metrics
+from ..core.policy import AnchorState, PolicySettings, State, _closure_metrics, _evaluate_sigma, rollout_policy_from_anchor
+from .common import json_default, save_profile_npz, write_csv, write_json
 
 
 def _paper_sigma_profile(*, n_intervals: int) -> dict[str, np.ndarray | float]:

@@ -7,8 +7,8 @@ import numpy as np
 
 from v6_firedrake_reduced.design import CaseConfig
 
-from ..objective import AnchorOptions, PreparationObjectiveWeights, evaluate_preparation_design
-from ..policy import PreparationSettings
+from ..core.objective import AnchorOptions, PreparationObjectiveWeights, evaluate_preparation_design
+from ..core.policy import PreparationSettings
 from .reward import OuterRewardWeights, score_outer_result
 
 
@@ -122,6 +122,8 @@ def prescreen_metrics(result: dict[str, Any]) -> dict[str, Any]:
 def passes_prescreen(metrics: dict[str, Any], *, settings: PrescreenSettings) -> bool:
     if not bool(metrics.get("has_profile", False)):
         return False
+    # REVIEW: These gates are reverse-preparation seed heuristics; a future
+    # forward-self-consistent prescreen will need direction-specific metrics.
     return bool(
         float(metrics.get("anchor_G", float("nan"))) >= float(settings.g_floor)
         and float(metrics.get("anchor_te_over_tp", float("nan"))) <= float(settings.te_over_tp_ceiling)
